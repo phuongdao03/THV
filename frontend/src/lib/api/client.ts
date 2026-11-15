@@ -93,6 +93,8 @@ import type {
   CommunityPostWriteResult,
   CommunityVisibilityResult,
   Certificate,
+  CertificateArchiveContentInput,
+  CertificateArchiveManagerData,
   CertificateContent,
   CertificateContentDraft,
   CertificateIssuedContent,
@@ -223,6 +225,30 @@ import type {
   CmsPost,
   CmsPostInput,
 } from "@/lib/api/cms-types";
+import type {
+  HistoricalAward,
+  HistoricalAwardInput,
+  HistoricalAwardLibraryItem,
+  HistoricalImportPreview,
+  HistoricalImportResult,
+  HistoricalImportUpload,
+  HistoricalMediaKind,
+  HistoricalMediaLibraryItem,
+  HistoricalMediaLink,
+  HistoricalNomination,
+  HistoricalNominationInput,
+  HistoricalNominationStatus,
+  HistoricalPublication,
+  HistoricalRecordActivity,
+  HistoricalPublicContentVersion,
+  HistoricalPublicContentApproval,
+  HistoricalPublicContentApprovalInput,
+  HistoricalPublicContentDraft,
+  HistoricalPublicContentDraftInput,
+  HistoricalRelatedPerson,
+  HistoricalRelatedPersonInput,
+  HistoricalWorkspaceSummary,
+} from "./historical-nomination-types";
 
 const API_ROOT = "/api/v1";
 const CSRF_COOKIE_NAME = "cns_csrf";
@@ -1717,6 +1743,315 @@ export const profileApi = {
   },
 };
 
+async function uploadHistoricalImportFile(
+  file: File,
+  idempotencyKey: string,
+  allowRefresh = true,
+): Promise<HistoricalImportUpload> {
+  const headers = new Headers({
+    "Content-Type": "application/octet-stream",
+    "Idempotency-Key": idempotencyKey,
+    "X-Filename": encodeURIComponent(file.name),
+  });
+  const csrfToken = readCookie(CSRF_COOKIE_NAME);
+  if (csrfToken) headers.set("X-CSRF-Token", csrfToken);
+  const response = await fetch(
+    `${API_ROOT}/historical-nominations/imports/upload`,
+    {
+      method: "POST",
+      credentials: "include",
+      headers,
+      body: file,
+      signal: AbortSignal.timeout(60_000),
+    },
+  );
+  if (
+    response.status === 401 &&
+    allowRefresh &&
+    Boolean(readCookie(CSRF_COOKIE_NAME))
+  ) {
+    try {
+      await refreshSession();
+      return uploadHistoricalImportFile(file, idempotencyKey, false);
+    } catch {
+      // Parse and report the original upload response.
+    }
+  }
+  return (await parseResponse<HistoricalImportUpload>(response)).data;
+}
+
+export const historicalNominationApi = {
+  dashboardSummary() {
+    return request<HistoricalWorkspaceSummary>(
+      "/historical-nominations/dashboard-summary",
+    );
+  },
+  list(
+    filters: {
+      page?: number;
+      pageSize?: number;
+      query?: string;
+      status?: HistoricalNominationStatus;
+      publicationStatus?: string;
+      year?: number;
+      categoryId?: string;
+      dossierTypeId?: string;
+    } = {},
+  ) {
+    const params = new URLSearchParams();
+    if (filters.page) params.set("page", String(filters.page));
+    if (filters.pageSize) params.set("page_size", String(filters.pageSize));
+    if (filters.query?.trim()) params.set("query", filters.query.trim());
+    if (filters.status) params.set("status", filters.status);
+    if (filters.publicationStatus) {
+      params.set("publication_status", filters.publicationStatus);
+    }
+    if (filters.year) params.set("year", String(filters.year));
+    if (filters.categoryId) params.set("category_id", filters.categoryId);
+    if (filters.dossierTypeId) {
+      params.set("dossier_type_id", filters.dossierTypeId);
+    }
+    return request<HistoricalNomination[]>(
+      `/historical-nominations${params.size ? `?${params}` : ""}`,
+    );
+  },
+  mediaLibrary(
+    filters: {
+      page?: number;
+      pageSize?: number;
+      query?: string;
+      kind?: HistoricalMediaKind;
+    } = {},
+  ) {
+    const params = new URLSearchParams();
+    if (filters.page) params.set("page", String(filters.page));
+    if (filters.pageSize) params.set("page_size", String(filters.pageSize));
+    if (filters.query?.trim()) params.set("query", filters.query.trim());
+    if (filters.kind) params.set("media_kind", filters.kind);
+    return requestPaginated<HistoricalMediaLibraryItem[]>(
+      `/historical-nominations/media-library${params.size ? `?${params}` : ""}`,
+    );
+  },
+  awardsLibrary(
+    filters: {
+      page?: number;
+      pageSize?: number;
+      query?: string;
+    } = {},
+  ) {
+    const params = new URLSearchParams();
+    if (filters.page) params.set("page", String(filters.page));
+    if (filters.pageSize) params.set("page_size", String(filters.pageSize));
+    if (filters.query?.trim()) params.set("query", filters.query.trim());
+    return requestPaginated<HistoricalAwardLibraryItem[]>(
+      `/historical-nominations/awards-library${params.size ? `?${params}` : ""}`,
+    );
+  },
+  reviewQueue(page = 1, pageSize = 25) {
+    return request<HistoricalNomination[]>(
+      `/historical-nominations/review-queue?page=${page}&page_size=${pageSize}`,
+    );
+  },
+  get(id: string) {
+    return request<HistoricalNomination>(
+      `/historical-nominations/${encodeURIComponent(id)}`,
+    );
+  },
+  create(input: HistoricalNominationInput) {
+    return request<HistoricalNomination>("/historical-nominations", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  },
+  update(id: string, input: Partial<HistoricalNominationInput>) {
+    return request<HistoricalNomination>(
+      `/historical-nominations/${encodeURIComponent(id)}`,
+      { method: "PATCH", body: JSON.stringify(input) },
+    );
+  },
+  submit(id: string) {
+    return request<HistoricalNomination>(
+      `/historical-nominations/${encodeURIComponent(id)}/submit`,
+      { method: "POST" },
+    );
+  },
+  review(
+    id: string,
+    action: "VERIFY" | "REQUEST_CORRECTION" | "HOLD" | "REJECT",
+    expectedUpdatedAt: string,
+    reason?: string,
+  ) {
+    return request<HistoricalNomination>(
+      `/historical-nominations/${encodeURIComponent(id)}/review`,
+      {
+        method: "POST",
+        body: JSON.stringify({ action, expectedUpdatedAt, reason }),
+      },
+    );
+  },
+  approvePublicContent(
+    id: string,
+    input: HistoricalPublicContentApprovalInput,
+  ) {
+    return request<HistoricalPublicContentApproval>(
+      `/historical-nominations/${encodeURIComponent(id)}/public-content`,
+      { method: "POST", body: JSON.stringify(input) },
+    );
+  },
+  publicContentDraft(id: string) {
+    return request<HistoricalPublicContentDraft | null>(
+      `/historical-nominations/${encodeURIComponent(id)}/public-content-draft`,
+    );
+  },
+  publish(
+    id: string,
+    expectedDraftUpdatedAt: string,
+    expectedWorkVersion?: number | null,
+  ) {
+    return request<HistoricalPublication>(
+      `/historical-nominations/${encodeURIComponent(id)}/publish`,
+      {
+        method: "POST",
+        body: JSON.stringify({ expectedDraftUpdatedAt, expectedWorkVersion }),
+      },
+    );
+  },
+  hide(id: string, expectedWorkVersion: number) {
+    return request<HistoricalPublication>(
+      `/historical-nominations/${encodeURIComponent(id)}/hide`,
+      {
+        method: "POST",
+        body: JSON.stringify({ expectedWorkVersion }),
+      },
+    );
+  },
+  publicContentVersions(id: string) {
+    return request<HistoricalPublicContentVersion[]>(
+      `/historical-nominations/${encodeURIComponent(id)}/public-content-versions`,
+    );
+  },
+  publication(id: string) {
+    return request<HistoricalPublication | null>(
+      `/historical-nominations/${encodeURIComponent(id)}/publication`,
+    );
+  },
+  recordActivity(id: string) {
+    return request<HistoricalRecordActivity[]>(
+      `/historical-nominations/${encodeURIComponent(id)}/activity`,
+    );
+  },
+  restorePublicContentVersion(
+    id: string,
+    versionId: string,
+    expectedDraftUpdatedAt?: string | null,
+  ) {
+    return request<HistoricalPublicContentDraft>(
+      `/historical-nominations/${encodeURIComponent(id)}/public-content-versions/${encodeURIComponent(versionId)}/restore`,
+      {
+        method: "POST",
+        body: JSON.stringify({ expectedDraftUpdatedAt }),
+      },
+    );
+  },
+  savePublicContentDraft(id: string, input: HistoricalPublicContentDraftInput) {
+    return request<HistoricalPublicContentDraft>(
+      `/historical-nominations/${encodeURIComponent(id)}/public-content-draft`,
+      { method: "PUT", body: JSON.stringify(input) },
+    );
+  },
+  submitPublicContentDraft(id: string, expectedUpdatedAt: string) {
+    return request<HistoricalPublicContentDraft>(
+      `/historical-nominations/${encodeURIComponent(id)}/public-content-draft/submit`,
+      {
+        method: "POST",
+        body: JSON.stringify({ expectedUpdatedAt }),
+      },
+    );
+  },
+  archive(id: string, reason: string, expectedUpdatedAt: string) {
+    return request<HistoricalNomination>(
+      `/historical-nominations/${encodeURIComponent(id)}/archive`,
+      {
+        method: "POST",
+        body: JSON.stringify({ reason, expectedUpdatedAt }),
+      },
+    );
+  },
+  listPeople(id: string) {
+    return request<HistoricalRelatedPerson[]>(
+      `/historical-nominations/${encodeURIComponent(id)}/people`,
+    );
+  },
+  addPerson(id: string, input: HistoricalRelatedPersonInput) {
+    return request<HistoricalRelatedPerson>(
+      `/historical-nominations/${encodeURIComponent(id)}/people`,
+      { method: "POST", body: JSON.stringify(input) },
+    );
+  },
+  listAwards(id: string) {
+    return request<HistoricalAward[]>(
+      `/historical-nominations/${encodeURIComponent(id)}/awards`,
+    );
+  },
+  addAward(id: string, input: HistoricalAwardInput) {
+    return request<HistoricalAward>(
+      `/historical-nominations/${encodeURIComponent(id)}/awards`,
+      { method: "POST", body: JSON.stringify(input) },
+    );
+  },
+  reviewAward(
+    recordId: string,
+    awardId: string,
+    action: "VERIFY" | "REQUEST_EVIDENCE" | "MARK_UNVERIFIABLE",
+    reason?: string,
+  ) {
+    return request<HistoricalAward>(
+      `/historical-nominations/${encodeURIComponent(recordId)}/awards/${encodeURIComponent(awardId)}/verification`,
+      { method: "POST", body: JSON.stringify({ action, reason }) },
+    );
+  },
+  listMedia(id: string) {
+    return request<HistoricalMediaLink[]>(
+      `/historical-nominations/${encodeURIComponent(id)}/media`,
+    );
+  },
+  linkMedia(
+    id: string,
+    input: {
+      mediaId: string;
+      mediaKind: HistoricalMediaKind;
+      awardId?: string | null;
+      displayOrder?: number;
+    },
+  ) {
+    return request<HistoricalMediaLink>(
+      `/historical-nominations/${encodeURIComponent(id)}/media`,
+      { method: "POST", body: JSON.stringify(input) },
+    );
+  },
+  unlinkMedia(id: string, linkId: string) {
+    return request<{ unlinked: boolean }>(
+      `/historical-nominations/${encodeURIComponent(id)}/media/${encodeURIComponent(linkId)}`,
+      { method: "DELETE" },
+    );
+  },
+  uploadImport(file: File, idempotencyKey: string) {
+    return uploadHistoricalImportFile(file, idempotencyKey);
+  },
+  previewImport(batchId: string, columnMapping: Record<string, string>) {
+    return request<HistoricalImportPreview>(
+      `/historical-nominations/imports/${encodeURIComponent(batchId)}/preview`,
+      { method: "POST", body: JSON.stringify({ columnMapping }) },
+    );
+  },
+  confirmImport(batchId: string) {
+    return request<HistoricalImportResult>(
+      `/historical-nominations/imports/${encodeURIComponent(batchId)}/confirm`,
+      { method: "POST" },
+    );
+  },
+};
+
 export const mediaApi = {
   createUploadSignature(intent: MediaUploadIntent) {
     return request<MediaUploadAuthorization>("/media/upload-signature", {
@@ -2620,6 +2955,66 @@ export const adminCertificateApi = {
       parameters.set("publicationStatus", filters.publicationStatus);
     return requestPaginated<AdminCertificate[]>(
       `/admin/certificates?${parameters.toString()}`,
+    );
+  },
+};
+
+export const certificateArchiveApi = {
+  list(publicWorkId?: string) {
+    const query = publicWorkId
+      ? `?publicWorkId=${encodeURIComponent(publicWorkId)}`
+      : "";
+    return request<CertificateArchiveManagerData[]>(
+      `/admin/certificate-archives${query}`,
+    );
+  },
+  create(publicWorkId: string, content: CertificateArchiveContentInput) {
+    return request<CertificateArchiveManagerData>(
+      "/admin/certificate-archives",
+      {
+        method: "POST",
+        body: JSON.stringify({ publicWorkId, content }),
+      },
+    );
+  },
+  update(
+    archiveId: string,
+    expectedVersion: number,
+    content: CertificateArchiveContentInput,
+  ) {
+    return request<CertificateArchiveManagerData>(
+      `/admin/certificate-archives/${encodeURIComponent(archiveId)}`,
+      {
+        method: "PUT",
+        body: JSON.stringify({ expectedVersion, content }),
+      },
+    );
+  },
+  publish(archiveId: string, expectedVersion: number) {
+    return request<CertificateArchiveManagerData>(
+      `/admin/certificate-archives/${encodeURIComponent(archiveId)}/publish`,
+      { method: "POST", body: JSON.stringify({ expectedVersion }) },
+    );
+  },
+  hide(archiveId: string, expectedVersion: number) {
+    return request<CertificateArchiveManagerData>(
+      `/admin/certificate-archives/${encodeURIComponent(archiveId)}/hide`,
+      { method: "POST", body: JSON.stringify({ expectedVersion }) },
+    );
+  },
+  archive(archiveId: string, expectedVersion: number, reason: string) {
+    return request<CertificateArchiveManagerData>(
+      `/admin/certificate-archives/${encodeURIComponent(archiveId)}/archive`,
+      {
+        method: "POST",
+        body: JSON.stringify({ expectedVersion, reason }),
+      },
+    );
+  },
+  restore(archiveId: string, expectedVersion: number) {
+    return request<CertificateArchiveManagerData>(
+      `/admin/certificate-archives/${encodeURIComponent(archiveId)}/restore`,
+      { method: "POST", body: JSON.stringify({ expectedVersion }) },
     );
   },
 };

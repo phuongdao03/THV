@@ -128,6 +128,16 @@ export const mediaPolicies: Record<MediaPurpose, MediaPolicy> = {
       "image/webp": [".webp"],
     },
   },
+  CERTIFICATE_ARCHIVE_SCAN: {
+    accept: "image/jpeg,image/png,image/webp",
+    maxBytes: 5_242_880,
+    maxMegabytes: 5,
+    formats: {
+      "image/jpeg": [".jpg", ".jpeg"],
+      "image/png": [".png"],
+      "image/webp": [".webp"],
+    },
+  },
   AVATAR: {
     accept: "image/jpeg,image/png,image/webp",
     maxBytes: 5_242_880,
@@ -139,6 +149,33 @@ export const mediaPolicies: Record<MediaPurpose, MediaPolicy> = {
     },
   },
   DOSSIER_EVIDENCE: {
+    accept:
+      "image/jpeg,image/png,image/webp,application/pdf,audio/mpeg,audio/mp4,audio/ogg,audio/wav,audio/x-wav,video/mp4,video/webm,application/msword,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/zip",
+    maxBytes: 314_572_800,
+    maxMegabytes: 300,
+    formats: {
+      "application/pdf": [".pdf"],
+      "application/msword": [".doc"],
+      "application/vnd.ms-excel": [".xls"],
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+        [".docx"],
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [
+        ".xlsx",
+      ],
+      "application/zip": [".zip"],
+      "audio/mpeg": [".mp3"],
+      "audio/mp4": [".m4a", ".mp4"],
+      "audio/ogg": [".ogg"],
+      "audio/wav": [".wav"],
+      "audio/x-wav": [".wav"],
+      "image/jpeg": [".jpg", ".jpeg"],
+      "image/png": [".png"],
+      "image/webp": [".webp"],
+      "video/mp4": [".mp4"],
+      "video/webm": [".webm"],
+    },
+  },
+  HISTORICAL_NOMINATION: {
     accept:
       "image/jpeg,image/png,image/webp,application/pdf,audio/mpeg,audio/mp4,audio/ogg,audio/wav,audio/x-wav,video/mp4,video/webm,application/msword,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/zip",
     maxBytes: 314_572_800,
