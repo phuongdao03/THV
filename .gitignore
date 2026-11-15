@@ -74,12 +74,14 @@ docs/handoffs/*
 !docs/handoffs/home-refinements-2026-10-31.md
 !docs/handoffs/community-forum-v1.md
 !docs/handoffs/dynamic-dossier-fee-management.md
+!docs/handoffs/historical-nomination-data-manager.md
 docs/decisions/
 docs/release/
 docs/security/
 docs/specs/
 !docs/specs/
 docs/specs/*
+!docs/specs/historical-nomination-data-manager.md
 !docs/specs/structured-dossier-review-2026.md
 !docs/specs/structured-supplements.md
 !docs/specs/dossier-applicant-claims.md
