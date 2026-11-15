@@ -12,6 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.audit.service import AuditService
+from app.modules.auth.authorization import AuthorizationPolicy, PolicyRequirement
 from app.modules.auth.session_service import AuthPrincipal
 from app.modules.media.encryption import (
     DocumentEncryptionConfigurationError,
@@ -139,6 +140,10 @@ _PURPOSE_MIME_TYPES = {
     MediaPurpose.AVATAR: frozenset({"image/jpeg", "image/png", "image/webp"}),
     MediaPurpose.COMMUNITY_POST: COMMUNITY_POST_IMAGE_MIME_TYPES,
     MediaPurpose.DOSSIER_EVIDENCE: frozenset(_FORMATS),
+    MediaPurpose.HISTORICAL_NOMINATION: frozenset(_FORMATS),
+    MediaPurpose.CERTIFICATE_ARCHIVE_SCAN: frozenset(
+        {"image/jpeg", "image/png", "image/webp"}
+    ),
 }
 _DANGEROUS_INNER_EXTENSIONS = frozenset(
     {
@@ -188,6 +193,8 @@ class MediaService:
             MediaPurpose.AVATAR: avatar_max_bytes,
             MediaPurpose.DOSSIER_EVIDENCE: evidence_max_bytes,
             MediaPurpose.COMMUNITY_POST: community_post_max_bytes,
+            MediaPurpose.HISTORICAL_NOMINATION: evidence_max_bytes,
+            MediaPurpose.CERTIFICATE_ARCHIVE_SCAN: 5_242_880,
         }
         self._delivery_access_policy = delivery_access_policy
         self._enqueue_inspection = enqueue_inspection or (lambda _media_id: None)
@@ -200,6 +207,24 @@ class MediaService:
         principal: AuthPrincipal,
         intent: UploadIntent,
     ) -> UploadSignatureView:
+        if intent.purpose is MediaPurpose.HISTORICAL_NOMINATION:
+            AuthorizationPolicy.require_capability(
+                principal,
+                PolicyRequirement(
+                    permission="historical.documents.manage",
+                    compatible_roles=frozenset(),
+                ),
+                MediaForbiddenError,
+            )
+        if intent.purpose is MediaPurpose.CERTIFICATE_ARCHIVE_SCAN:
+            AuthorizationPolicy.require_capability(
+                principal,
+                PolicyRequirement(
+                    permission="certificate_archives.manage",
+                    compatible_roles=frozenset({"DATA_MANAGER"}),
+                ),
+                MediaForbiddenError,
+            )
         if (
             intent.purpose is MediaPurpose.PUBLIC_COVER
             and "SUPER_ADMIN" not in principal.roles

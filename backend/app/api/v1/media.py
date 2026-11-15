@@ -142,16 +142,23 @@ async def download_content(
     media_id: UUID,
     principal: CurrentPrincipalDependency,
     service: MediaServiceDependency,
+    inline: bool = False,
 ) -> StreamingResponse:
     delivery = await service.download_content(principal, media_id)
     filename = quote(delivery.filename, safe="")
+    previewable = delivery.mime_type.startswith(("image/", "video/", "audio/")) or (
+        delivery.mime_type == "application/pdf"
+    )
+    disposition = "inline" if inline and previewable else "attachment"
     return StreamingResponse(
         iter((delivery.content,)),
         media_type=delivery.mime_type,
         headers={
-            "Content-Disposition": f"attachment; filename*=UTF-8''{filename}",
+            "Content-Disposition": f"{disposition}; filename*=UTF-8''{filename}",
             "Content-Length": str(len(delivery.content)),
             "Cache-Control": "private, no-store",
+            "X-Content-Type-Options": "nosniff",
+            "Cross-Origin-Resource-Policy": "same-origin",
         },
     )
 

@@ -347,7 +347,20 @@ class DossierService:
         self,
         principal: AuthPrincipal,
     ) -> tuple[DossierTypeView, ...]:
-        self._require_mutation_role(principal)
+        if "SUPER_ADMIN" in principal.roles:
+            pass
+        elif "DATA_MANAGER" in principal.roles:
+            AuthorizationPolicy.require_capability(
+                principal,
+                PolicyRequirement(
+                    permission="historical.records.read",
+                    compatible_roles=frozenset({"DATA_MANAGER"}),
+                    allow_super_admin=False,
+                ),
+                DossierForbiddenError,
+            )
+        else:
+            self._require_mutation_role(principal)
         async with self._session.begin():
             rows = await self._repository.list_active_dossier_types()
             return tuple(

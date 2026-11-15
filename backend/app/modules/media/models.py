@@ -51,7 +51,8 @@ class MediaAsset(UtcTimestampMixin, Base):
         CheckConstraint(
             "purpose IS NULL OR purpose IN "
             "('AVATAR', 'DOSSIER_EVIDENCE', 'PUBLIC_WORK', 'PUBLIC_COVER', "
-            "'COMMUNITY_POST')",
+            "'COMMUNITY_POST', 'HISTORICAL_NOMINATION', "
+            "'CERTIFICATE_ARCHIVE_SCAN')",
             name="purpose_valid",
         ),
         CheckConstraint("bytes >= 0", name="bytes_non_negative"),
