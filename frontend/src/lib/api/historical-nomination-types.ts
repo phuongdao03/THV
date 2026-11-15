@@ -174,7 +174,7 @@ export interface HistoricalAwardLibraryItem {
   id: string;
   recordId: string;
   recordCode: string;
-  subjectName: string;
+  subjectName: string | null;
   awardName: string;
   certificateNumber: string | null;
   issuedAt: string | null;

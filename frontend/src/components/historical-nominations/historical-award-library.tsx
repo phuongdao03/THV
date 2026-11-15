@@ -95,7 +95,9 @@ export function HistoricalAwardLibrary({
                   </span>
                 </td>
                 <td className="px-4 py-3">{award.certificateNumber ?? "—"}</td>
-                <td className="px-4 py-3">{award.subjectName}</td>
+                <td className="px-4 py-3">
+                  {award.subjectName ?? "Chưa có đối tượng ghi nhận"}
+                </td>
                 <td className="px-4 py-3">
                   {award.issuedAt
                     ? new Intl.DateTimeFormat("vi-VN", {

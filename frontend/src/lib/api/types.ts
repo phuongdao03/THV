@@ -1625,7 +1625,7 @@ export interface PublicationChecklistItem {
 
 export interface PublicWorkAdmin {
   id: string;
-  dossierId: string;
+  dossierId: string | null;
   dossierCode?: string | null;
   certificateId: string | null;
   slug: string;

@@ -322,7 +322,7 @@ class HistoricalAwardLibraryItemData(HistoricalSchema):
     id: UUID
     record_id: UUID
     record_code: str
-    subject_name: str
+    subject_name: str | None
     award_name: str
     certificate_number: str | None
     issued_at: date | None

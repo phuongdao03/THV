@@ -2,6 +2,7 @@ import logging
 from collections.abc import Callable
 from datetime import UTC, datetime
 from enum import StrEnum
+from typing import cast
 from uuid import UUID, uuid4
 
 from sqlalchemy import func, select
@@ -525,10 +526,13 @@ class PublicationService:
             )
             if record is None:
                 raise PublicWorkNotFoundError()
-            return await self._session.scalar(
-                select(PublicWork).where(
-                    PublicWork.historical_nomination_id == record.id
-                )
+            return cast(
+                PublicWork | None,
+                await self._session.scalar(
+                    select(PublicWork).where(
+                        PublicWork.historical_nomination_id == record.id
+                    )
+                ),
             )
 
     async def schedule(

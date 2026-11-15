@@ -121,8 +121,9 @@ def _source_fields(
             return 1, ()
         fields = [
             SourceField("title", "Tiêu đề hồ sơ lịch sử", record.title),
-            SourceField("subject", "Đối tượng", record.subject_name),
         ]
+        if record.subject_name:
+            fields.append(SourceField("subject", "Đối tượng", record.subject_name))
         if record.summary:
             fields.append(SourceField("summary", "Tóm tắt", record.summary))
         if record.historical_result:

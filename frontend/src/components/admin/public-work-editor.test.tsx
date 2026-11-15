@@ -884,7 +884,9 @@ describe("PublicWorkEditor", () => {
         .getByRole("link", { name: /Xem và kiểm tra bằng xác lập/ })
         .getAttribute("href"),
     ).toBe("/verify/CNS-2026-0001");
-    expect(screen.queryByText(work.dossierId)).toBeNull();
+    expect(
+      screen.queryByText("25e0f889-e4af-499b-ab13-a51ba398375a"),
+    ).toBeNull();
     expect(screen.getByRole("button", { name: "Xem bản mobile" })).toBeTruthy();
   });
 

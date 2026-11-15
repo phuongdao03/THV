@@ -1,5 +1,6 @@
 from collections.abc import Callable
 from datetime import UTC, datetime
+from typing import Protocol, cast
 from uuid import UUID, uuid4
 
 from sqlalchemy import func, select
@@ -49,7 +50,7 @@ ARCHIVE_SCAN_MIME_TYPES = frozenset({"image/jpeg", "image/png", "image/webp"})
 MAX_ARCHIVE_PAGES = 20
 
 
-class ArchiveMediaDispatcher:
+class ArchiveMediaDispatcher(Protocol):
     def enqueue(self, relation_id: UUID) -> None: ...
 
 
@@ -213,7 +214,9 @@ class CertificateArchiveService:
                         for order, page in enumerate(content.pages)
                     ]
                 )
-                before = {"draft_version_no": archive.draft_version_no}
+                before: dict[str, object] = {
+                    "draft_version_no": archive.draft_version_no
+                }
                 archive.draft_version_no = next_version
                 archive.version += 1
                 archive.updated_by_user_id = principal.user_id
@@ -434,7 +437,7 @@ class CertificateArchiveService:
                     "Restore this archived certificate before changing its visibility."
                 )
             work = await self._work(archive.public_work_id, for_update=True)
-            before = {"status": archive.status.value}
+            before: dict[str, object] = {"status": archive.status.value}
             if target is CertificateArchiveStatus.ARCHIVED:
                 archive.archived_at = self._clock()
                 archive.archived_by_user_id = principal.user_id
@@ -553,11 +556,14 @@ class CertificateArchiveService:
     async def _revision(
         self, archive_id: UUID, version_no: int
     ) -> CertificateArchiveRevision | None:
-        return await self._session.scalar(
-            select(CertificateArchiveRevision).where(
-                CertificateArchiveRevision.archive_id == archive_id,
-                CertificateArchiveRevision.version_no == version_no,
-            )
+        return cast(
+            CertificateArchiveRevision | None,
+            await self._session.scalar(
+                select(CertificateArchiveRevision).where(
+                    CertificateArchiveRevision.archive_id == archive_id,
+                    CertificateArchiveRevision.version_no == version_no,
+                )
+            ),
         )
 
     async def _pages(self, revision_id: UUID) -> tuple[CertificateArchivePage, ...]:
