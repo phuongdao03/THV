@@ -6,6 +6,7 @@ import {
   FilePlus2,
   Bell,
   ClipboardCheck,
+  Database,
   House,
   LogIn,
   Menu,
@@ -39,6 +40,7 @@ import { MembershipAccountAvatar } from "@/components/membership/membership-acco
 import { profileApi } from "@/lib/api/client";
 import {
   isCustomerAccount,
+  resolveDefaultWorkspace,
   resolveAdminEntryPoint,
 } from "@/lib/auth/role-workspaces";
 import { safeLocalDestination } from "@/lib/auth/safe-destination";
@@ -71,6 +73,7 @@ function isWorkspacePath(pathname: string) {
     "/blockchain",
     "/certificates",
     "/dossiers",
+    "/data-manager",
     "/help",
     "/leave",
     "/notifications",
@@ -90,54 +93,78 @@ function SiteMobileNavigation({
   personalHref,
   canSubmit,
   reviewer = false,
+  dataManager = false,
 }: {
   pathname: string;
   personalHref: string;
   canSubmit: boolean;
   reviewer?: boolean;
+  dataManager?: boolean;
 }) {
   const submission = pathname === "/dossiers/new";
   const items = (
-    reviewer
+    dataManager
       ? [
-          { href: "/reviews", label: "Thẩm định", icon: ClipboardCheck },
-          { href: "/work-allocations", label: "Công việc", icon: BookOpen },
+          { href: "/data-manager", label: "Dữ liệu", icon: Database },
           { href: "/notifications", label: "Thông báo", icon: Bell },
           { href: "/account", label: "Tài khoản", icon: UserRound },
+          { href: "/works", label: "Thư viện", icon: BookOpen },
         ]
-      : [
-          { href: "/", label: "Trang chủ", icon: House },
-          { href: "/works", label: "Khám phá", icon: BookOpen },
-          ...(canSubmit && !isPreviewRelease()
-            ? [{ href: "/dossiers/new", label: "Gửi hồ sơ", icon: FilePlus2 }]
-            : []),
-          { href: "/community", label: "Cộng đồng", icon: UsersRound },
-          { href: personalHref, label: "Cá nhân", icon: UserRound },
-        ]
+      : reviewer
+        ? [
+            { href: "/reviews", label: "Thẩm định", icon: ClipboardCheck },
+            { href: "/work-allocations", label: "Công việc", icon: BookOpen },
+            { href: "/works", label: "Thư viện", icon: BookOpen },
+            { href: "/notifications", label: "Thông báo", icon: Bell },
+            { href: "/account", label: "Tài khoản", icon: UserRound },
+          ]
+        : [
+            { href: "/", label: "Trang chủ", icon: House },
+            { href: "/works", label: "Khám phá", icon: BookOpen },
+            ...(canSubmit && !isPreviewRelease()
+              ? [
+                  {
+                    href: "/dossiers/new",
+                    label: "Gửi hồ sơ",
+                    icon: FilePlus2,
+                  },
+                ]
+              : []),
+            { href: "/community", label: "Cộng đồng", icon: UsersRound },
+            { href: personalHref, label: "Cá nhân", icon: UserRound },
+          ]
   ).filter(
     (item) => !isPreviewRelease() || !isPreviewRestrictedPath(item.href),
   );
-  const activeHref = reviewer
-    ? activeNavigationHref(
-        pathname,
-        items.map((item) => item.href),
-      )
-    : undefined;
+  const activeHref =
+    reviewer || dataManager
+      ? activeNavigationHref(
+          pathname,
+          items.map((item) => item.href),
+        )
+      : undefined;
   return (
     <nav
-      aria-label={reviewer ? "Điều hướng công việc" : "Điều hướng di động"}
+      aria-label={
+        dataManager
+          ? "Điều hướng dữ liệu"
+          : reviewer
+            ? "Điều hướng công việc"
+            : "Điều hướng di động"
+      }
       className="site-mobile-navigation"
       style={{ gridTemplateColumns: `repeat(${items.length}, minmax(0, 1fr))` }}
     >
       {items.map(({ href, label, icon: Icon }) => {
-        const active = reviewer
-          ? href === activeHref
-          : label === "Cá nhân"
-            ? isWorkspacePath(pathname) &&
-              !(submission && canSubmit && !isPreviewRelease())
-            : href === "/"
-              ? pathname === "/"
-              : pathname === href || pathname.startsWith(`${href}/`);
+        const active =
+          reviewer || dataManager
+            ? href === activeHref
+            : label === "Cá nhân"
+              ? isWorkspacePath(pathname) &&
+                !(submission && canSubmit && !isPreviewRelease())
+              : href === "/"
+                ? pathname === "/"
+                : pathname === href || pathname.startsWith(`${href}/`);
         return (
           <Link
             aria-current={active ? "page" : undefined}
@@ -185,6 +212,10 @@ export function PublicShell({ children }: PropsWithChildren) {
   const adminEntryPoint = activeUser
     ? resolveAdminEntryPoint(activeUser.roles, activeUser.permissions ?? [])
     : null;
+  const isDataManager = Boolean(activeUser?.roles.includes("DATA_MANAGER"));
+  const workspaceHref = activeUser
+    ? resolveDefaultWorkspace(activeUser.roles, activeUser.permissions ?? [])
+    : "/workspace";
   const [menuOpen, setMenuOpen] = useState(false);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const menuReturnFocusRef = useRef<HTMLButtonElement | null>(null);
@@ -193,7 +224,7 @@ export function PublicShell({ children }: PropsWithChildren) {
   const headerRef = useRef<HTMLElement>(null);
   const canSubmit =
     authStatus === "unauthenticated" ||
-    Boolean(activeUser?.roles.includes("USER"));
+    Boolean(activeUser?.roles.includes("USER") && !isDataManager);
   const visibleGroups = navigationGroups.map((group) => ({
     ...group,
     label: group.label === "Khám phá" ? "Tra cứu" : group.label,
@@ -330,11 +361,16 @@ export function PublicShell({ children }: PropsWithChildren) {
                 aria-label="Điều hướng tài khoản"
                 className="public-user-menu__panel"
               >
-                <Link href="/workspace">Không gian cá nhân</Link>
-                {activeUser.roles.includes("USER") && !isPreviewRelease() && (
-                  <Link href="/dossiers">Hồ sơ của tôi</Link>
-                )}
+                <Link href={workspaceHref}>
+                  {isDataManager ? "Không gian dữ liệu" : "Không gian cá nhân"}
+                </Link>
+                {activeUser.roles.includes("USER") &&
+                  !isDataManager &&
+                  !isPreviewRelease() && (
+                    <Link href="/dossiers">Hồ sơ của tôi</Link>
+                  )}
                 {activeUser.roles.includes("MODERATOR") &&
+                  !isDataManager &&
                   !isPreviewRelease() && (
                     <Link href="/reviews">Không gian thẩm định</Link>
                   )}
@@ -450,20 +486,23 @@ export function PublicShell({ children }: PropsWithChildren) {
             </div>
             {activeUser ? (
               <div className="public-mobile-nav__account-links">
-                {activeUser.roles.includes("USER") && !isPreviewRelease() && (
-                  <Link
-                    className="public-mobile-nav__link"
-                    href="/dossiers"
-                    onClick={() => closeMenu(false)}
-                  >
-                    <BookOpen
-                      aria-hidden="true"
-                      className="public-mobile-nav__icon"
-                    />
-                    <span>Hồ sơ của tôi</span>
-                  </Link>
-                )}
+                {activeUser.roles.includes("USER") &&
+                  !isDataManager &&
+                  !isPreviewRelease() && (
+                    <Link
+                      className="public-mobile-nav__link"
+                      href="/dossiers"
+                      onClick={() => closeMenu(false)}
+                    >
+                      <BookOpen
+                        aria-hidden="true"
+                        className="public-mobile-nav__icon"
+                      />
+                      <span>Hồ sơ của tôi</span>
+                    </Link>
+                  )}
                 {activeUser.roles.includes("MODERATOR") &&
+                  !isDataManager &&
                   !isPreviewRelease() && (
                     <Link
                       className="public-mobile-nav__link"
@@ -479,14 +518,18 @@ export function PublicShell({ children }: PropsWithChildren) {
                   )}
                 <Link
                   className="public-mobile-nav__link"
-                  href="/workspace"
+                  href={workspaceHref}
                   onClick={() => closeMenu(false)}
                 >
                   <UserRound
                     aria-hidden="true"
                     className="public-mobile-nav__icon"
                   />
-                  <span>Không gian cá nhân</span>
+                  <span>
+                    {isDataManager
+                      ? "Không gian dữ liệu"
+                      : "Không gian cá nhân"}
+                  </span>
                 </Link>
                 <Link
                   className="public-mobile-nav__link"
@@ -578,8 +621,12 @@ export function PublicShell({ children }: PropsWithChildren) {
       </main>
       <SiteMobileNavigation
         pathname={pathname}
-        personalHref={activeUser ? "/workspace" : "/login?next=%2Fworkspace"}
+        personalHref={activeUser ? workspaceHref : "/login?next=%2Fworkspace"}
         canSubmit={canSubmit}
+        reviewer={Boolean(
+          activeUser?.roles.includes("MODERATOR") && !isDataManager,
+        )}
+        dataManager={isDataManager}
       />
       <footer id="lien-he" className="public-footer public-footer--legal">
         <div className="public-footer__inner">
@@ -836,9 +883,12 @@ export function DashboardShell({ children }: PropsWithChildren) {
       {!adminArea ? (
         <SiteMobileNavigation
           pathname={pathname}
-          personalHref="/workspace"
-          canSubmit={roles.includes("USER")}
-          reviewer={roles.includes("MODERATOR")}
+          personalHref={resolveDefaultWorkspace(roles, user?.permissions ?? [])}
+          canSubmit={roles.includes("USER") && !roles.includes("DATA_MANAGER")}
+          reviewer={
+            roles.includes("MODERATOR") && !roles.includes("DATA_MANAGER")
+          }
+          dataManager={roles.includes("DATA_MANAGER")}
         />
       ) : null}
       {navigationOpen ? (

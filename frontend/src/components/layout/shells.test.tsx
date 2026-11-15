@@ -812,7 +812,7 @@ describe("layout shells", () => {
     ).toBeNull();
     expect(
       screen
-        .getByRole("navigation", { name: "Điều hướng di động" })
+        .getByRole("navigation", { name: "Điều hướng công việc" })
         .querySelector('a[href="/works"]'),
     ).not.toBeNull();
   });

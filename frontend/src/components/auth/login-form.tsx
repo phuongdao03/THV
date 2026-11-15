@@ -17,6 +17,7 @@ import { ApiError, authApi } from "@/lib/api/client";
 import type { AccountType, AuthUser } from "@/lib/api/types";
 import { loginSchema, type LoginValues } from "@/lib/auth/schemas";
 import { safeLocalDestination } from "@/lib/auth/safe-destination";
+import { resolveDefaultWorkspace } from "@/lib/auth/role-workspaces";
 import { broadcastAuthSessionChange } from "@/lib/auth/session-sync";
 import { deliverVerificationEmail } from "@/lib/auth/verification-email";
 import { firebaseConfigured, getFirebaseAuth } from "@/lib/firebase/client";
@@ -57,13 +58,14 @@ export function LoginForm({
           }
         : undefined,
     );
-    enterWorkspace(result.user, destination);
+    enterWorkspace(result.user);
   }
 
-  function enterWorkspace(
-    user: AuthUser,
-    destination = safeLocalDestination(next, "/workspace"),
-  ) {
+  function enterWorkspace(user: AuthUser) {
+    const destination = safeLocalDestination(
+      next,
+      resolveDefaultWorkspace(user.roles, user.permissions ?? []),
+    );
     queryClient.setQueryData(["auth", "me"], user);
     broadcastAuthSessionChange();
     setNavigating(true);

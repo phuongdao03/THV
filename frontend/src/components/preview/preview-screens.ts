@@ -29,6 +29,16 @@ const screens: Record<string, PreviewScreen> = {
       ["THV-2026-012", "Hành trình nghề Việt", "Có hiệu lực"],
     ],
   },
+  "/data-manager": {
+    title: "Quản lý dữ liệu lịch sử",
+    eyebrow: "Không gian dữ liệu",
+    description: "Tiếp nhận, chuẩn hóa và gửi hồ sơ lịch sử để Admin xác minh.",
+    columns: ["Hồ sơ", "Nguồn dữ liệu", "Trạng thái"],
+    rows: [
+      ["Hồ sơ di sản mẫu", "Tư liệu lưu trữ", "Bản nháp"],
+      ["Bằng xác lập cũ", "Hồ sơ giấy", "Chờ xác minh"],
+    ],
+  },
   "/notifications": {
     title: "Thông báo",
     eyebrow: "Cá nhân",
@@ -343,6 +353,7 @@ const permittedPaths: Record<WorkspacePersona, readonly string[]> = {
     "/blockchain",
     ...Object.keys(screens).filter((path) => path.startsWith("/admin/")),
   ],
+  DATA_MANAGER: ["/data-manager", ...common],
 };
 
 export function previewScreenFor(

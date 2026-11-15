@@ -20,6 +20,7 @@ const screens = {
     persona: "reviewer",
     path: "/reviews?status=IN_PROGRESS",
   },
+  "data-manager": { persona: "data-manager", path: "/data-manager" },
   "admin-portal": { persona: "super-admin", path: "/admin" },
   "admin-promotions": { persona: "super-admin", path: "/admin/promotions" },
   "admin-home": { persona: "super-admin", path: "/admin/dashboard" },

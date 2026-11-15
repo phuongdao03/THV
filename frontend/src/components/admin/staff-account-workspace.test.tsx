@@ -225,4 +225,54 @@ describe("StaffAccountWorkspace", () => {
       await screen.findByText(/Người đó sẽ nhận thông báo và bấm Chấp nhận/),
     ).toBeDefined();
   });
+
+  it("lets the administrator invite a data manager using staff invitations", async () => {
+    const user = userEvent.setup();
+    render(<StaffAccountWorkspace />, { wrapper });
+    await screen.findByText("reviewer@cnsgroup.vn");
+
+    await user.selectOptions(
+      screen.getByRole("combobox", { name: "Vai trò được cấp" }),
+      "DATA_MANAGER",
+    );
+    await user.click(
+      screen.getByRole("button", {
+        name: "Chọn làm chuyên viên quản lý dữ liệu",
+      }),
+    );
+    await user.click(
+      screen.getAllByRole("button", { name: "Gửi lời mời" }).at(-1)!,
+    );
+
+    await waitFor(() =>
+      expect(staffInvitationsApi.create).toHaveBeenCalledWith({
+        email: "member@example.com",
+        role: "DATA_MANAGER",
+      }),
+    );
+  });
+
+  it("labels data-manager invitations in the recent invitation list", async () => {
+    vi.mocked(staffInvitationsApi.list).mockResolvedValue({
+      success: true,
+      data: [
+        {
+          id: "invite-data-manager",
+          email: "archive@cnsgroup.vn",
+          role: "DATA_MANAGER",
+          organizationId: null,
+          status: "PENDING",
+          expiresAt: "2026-08-09T00:00:00Z",
+          createdAt: "2026-08-08T00:00:00Z",
+        },
+      ],
+      meta: { request_id: "invite-list", page: 1, pageSize: 20, total: 1 },
+    });
+    render(<StaffAccountWorkspace />, { wrapper });
+
+    const invitationEmail = await screen.findByText("archive@cnsgroup.vn");
+    expect(invitationEmail.closest("article")?.textContent).toContain(
+      "Chuyên viên quản lý dữ liệu",
+    );
+  });
 });

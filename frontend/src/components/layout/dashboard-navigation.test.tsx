@@ -34,6 +34,28 @@ describe("DashboardNavigation work-allocation migration", () => {
     expect(screen.queryByRole("button", { name: "Nhân sự" })).toBeNull();
     expect(screen.getByRole("link", { name: "Duyệt tăng ca" })).toBeDefined();
   });
+
+  it("keeps data-manager navigation limited to its own workspace", () => {
+    const view = render(
+      <DashboardNavigation
+        area="admin"
+        roles={["DATA_MANAGER", "USER", "MODERATOR", "SUPER_ADMIN"]}
+        showQuickNavigation={false}
+      />,
+    );
+
+    expect(
+      screen
+        .getByRole("link", { name: "Quản lý dữ liệu" })
+        .getAttribute("href"),
+    ).toBe("/data-manager");
+    expect(view.container.querySelector('a[href="/admin"]')).toBeNull();
+    expect(
+      view.container.querySelector('a[href="/admin/payments"]'),
+    ).toBeNull();
+    expect(view.container.querySelector('a[href="/reviews"]')).toBeNull();
+    expect(view.container.querySelector('a[href="/affiliate"]')).toBeNull();
+  });
   it("keeps inactive admin group links visible and marks the active page", () => {
     render(
       <DashboardNavigation

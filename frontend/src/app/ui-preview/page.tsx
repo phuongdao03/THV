@@ -9,6 +9,7 @@ const roles = new Set<WorkspacePersona>([
   "USER",
   "MODERATOR",
   "SUPER_ADMIN",
+  "DATA_MANAGER",
 ]);
 
 const roleLabels: Record<WorkspacePersona, string> = {
@@ -16,6 +17,7 @@ const roleLabels: Record<WorkspacePersona, string> = {
   USER: "Người dùng",
   MODERATOR: "Người kiểm duyệt",
   SUPER_ADMIN: "Quản trị viên cấp cao",
+  DATA_MANAGER: "Chuyên viên quản lý dữ liệu",
 };
 
 function resolveRole(requestedRole: string | string[] | undefined) {

@@ -19,10 +19,14 @@ import {
   staffAccountsApi,
   staffInvitationsApi,
 } from "@/lib/api/client";
-import type { StaffAccountRole, StaffAccountStatus } from "@/lib/api/types";
+import type {
+  StaffAccountRole,
+  StaffAccountStatus,
+  StaffInvitation,
+} from "@/lib/api/types";
 import { ConfirmationDialog } from "@/components/ui/confirmation-dialog";
 import { SelectControl } from "@/components/ui/form-controls";
-import { STAFF_ACCOUNT_ROLES } from "./staff-account-roles";
+import { STAFF_ACCOUNT_ROLES, staffRoleLabel } from "./staff-account-roles";
 
 const inputClass =
   "mt-2 min-h-11 w-full rounded-xl border border-neutral-300 bg-white px-3 text-sm text-neutral-950 outline-none transition focus:border-primary-500 focus:ring-2 focus:ring-primary-100";
@@ -38,6 +42,10 @@ function invitationErrorMessage(cause: unknown): string {
   return "Không thể gửi lời mời lúc này. Vui lòng thử lại hoặc kiểm tra cấu hình gửi email.";
 }
 
+function invitationRoleLabel(role: StaffInvitation["role"]): string {
+  return role === "USER" ? "Người dùng" : staffRoleLabel(role);
+}
+
 export function StaffAccountWorkspace({
   embedded = false,
   isOpeningEmployee = false,
@@ -51,7 +59,7 @@ export function StaffAccountWorkspace({
   const [email, setEmail] = useState("");
   const [testApplicantEmail, setTestApplicantEmail] = useState("");
   const [candidateSearch, setCandidateSearch] = useState("");
-  const role: StaffAccountRole = "MODERATOR";
+  const [role, setRole] = useState<StaffAccountRole>("MODERATOR");
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<StaffAccountStatus | "ALL">("ALL");
   const [roleFilter, setRoleFilter] = useState<StaffAccountRole | "ALL">("ALL");
@@ -98,7 +106,7 @@ export function StaffAccountWorkspace({
       setEmail("");
       setConfirmInvite(false);
       setFeedback(
-        "Đã gửi lời mời cho tài khoản đã chọn. Người đó sẽ nhận thông báo và bấm Chấp nhận để có quyền kiểm duyệt.",
+        `Đã gửi lời mời cho nhiệm vụ ${STAFF_ACCOUNT_ROLES.find((item) => item.value === role)?.label ?? "nhân sự"}. Người đó sẽ nhận thông báo và bấm Chấp nhận để kích hoạt nhiệm vụ.`,
       );
       setError(null);
       void queryClient.invalidateQueries({
@@ -195,7 +203,9 @@ export function StaffAccountWorkspace({
   );
   const eligibleUsers = (candidates.data?.data ?? []).filter(
     (user) =>
-      !user.roles.includes("SUPER_ADMIN") && !user.roles.includes("MODERATOR"),
+      !user.roles.includes("SUPER_ADMIN") &&
+      !user.roles.includes("MODERATOR") &&
+      !user.roles.includes("DATA_MANAGER"),
   );
 
   return (
@@ -267,16 +277,40 @@ export function StaffAccountWorkspace({
             </span>
             <div>
               <h2 className="text-lg font-bold text-neutral-950">
-                Chọn người kiểm duyệt
+                Chọn tài khoản nhân sự
               </h2>
               <p className="mt-1 text-sm leading-6 text-neutral-600">
-                Chọn tài khoản đang hoạt động trên hệ thống. Người đó sẽ nhận
-                thông báo và tự chấp nhận lời mời để có quyền kiểm duyệt.
+                Chọn loại nhiệm vụ, sau đó chọn tài khoản đang hoạt động. Người
+                đó cần tự chấp nhận lời mời trước khi quyền được kích hoạt.
               </p>
             </div>
           </div>
           <label
-            className="mt-6 block text-sm font-semibold"
+            className="mt-6 block max-w-md text-sm font-semibold"
+            htmlFor="staff-invitation-role"
+          >
+            Vai trò được cấp
+            <SelectControl
+              aria-label="Vai trò được cấp"
+              className={inputClass}
+              id="staff-invitation-role"
+              onChange={(event) =>
+                setRole(event.target.value as StaffAccountRole)
+              }
+              value={role}
+            >
+              {STAFF_ACCOUNT_ROLES.map((item) => (
+                <option key={item.value} value={item.value}>
+                  {item.label}
+                </option>
+              ))}
+            </SelectControl>
+            <span className="mt-2 block text-xs font-normal leading-5 text-neutral-500">
+              {selectedRole?.description}
+            </span>
+          </label>
+          <label
+            className="mt-5 block text-sm font-semibold"
             htmlFor="reviewer-search"
           >
             Tìm tài khoản
@@ -326,7 +360,7 @@ export function StaffAccountWorkspace({
                   >
                     {pending
                       ? "Đang chờ xác nhận"
-                      : "Chọn làm người kiểm duyệt"}
+                      : `Chọn làm ${selectedRole?.label.toLowerCase() ?? "nhân sự"}`}
                   </button>
                 </article>
               );
@@ -355,6 +389,9 @@ export function StaffAccountWorkspace({
                   <p className="truncate text-sm font-semibold text-neutral-900">
                     {invitation.email}
                     {invitation.isTestAccount ? " · TEST" : ""}
+                  </p>
+                  <p className="mt-1 text-xs font-semibold text-neutral-600">
+                    {invitationRoleLabel(invitation.role)}
                   </p>
                   <p className="mt-1 text-xs text-neutral-500">
                     {invitation.status === "PENDING"
@@ -665,7 +702,7 @@ export function StaffAccountWorkspace({
         </section>
         <ConfirmationDialog
           confirmLabel="Gửi lời mời"
-          description={`Lời mời sẽ được gửi tới ${email || "email đã nhập"} cho nhiệm vụ ${selectedRole?.label ?? "đã chọn"}. Người nhận cần bấm Chấp nhận trong thông báo để có quyền kiểm duyệt.`}
+          description={`Lời mời sẽ được gửi tới ${email || "email đã nhập"} cho nhiệm vụ ${selectedRole?.label ?? "đã chọn"}. Người nhận cần bấm Chấp nhận trong thông báo để kích hoạt nhiệm vụ.`}
           isPending={create.isPending}
           onCancel={() => setConfirmInvite(false)}
           onConfirm={() => create.mutate()}

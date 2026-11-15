@@ -1,6 +1,11 @@
 export const SUBMISSION_ROLES = ["USER"] as const;
 
-export type WorkspacePersona = "VIEWER" | "USER" | "MODERATOR" | "SUPER_ADMIN";
+export type WorkspacePersona =
+  | "VIEWER"
+  | "USER"
+  | "MODERATOR"
+  | "SUPER_ADMIN"
+  | "DATA_MANAGER";
 
 export function hasAnyRole(
   roles: readonly string[],
@@ -65,10 +70,10 @@ const ADMIN_ENTRY_POINTS: readonly AdminEntryPoint[] = [
 ];
 
 export function resolveDefaultWorkspace(
-  _roles: readonly string[],
+  roles: readonly string[],
   _permissions: readonly string[] = [],
 ): string {
-  void _roles;
+  if (roles.includes("DATA_MANAGER")) return "/data-manager";
   void _permissions;
   return "/workspace";
 }
@@ -76,6 +81,7 @@ export function resolveDefaultWorkspace(
 export function resolveWorkspacePersona(
   roles: readonly string[],
 ): WorkspacePersona {
+  if (roles.includes("DATA_MANAGER")) return "DATA_MANAGER";
   if (roles.includes("SUPER_ADMIN")) return "SUPER_ADMIN";
   if (roles.includes("MODERATOR")) return "MODERATOR";
   if (hasAnyRole(roles, SUBMISSION_ROLES)) return "USER";
@@ -86,6 +92,7 @@ export function resolveAdminEntryPoint(
   roles: readonly string[],
   permissions: readonly string[] = [],
 ): { href: string; label: string } | null {
+  if (roles.includes("DATA_MANAGER")) return null;
   if (roles.includes("SUPER_ADMIN")) {
     return { href: "/admin", label: "Khu vực quản trị" };
   }

@@ -234,10 +234,16 @@ function NotificationInbox() {
               adminDossierLinks: user?.roles.includes("SUPER_ADMIN") ?? false,
             });
             const invitationId =
-              item.type === "staff.reviewer_invited" &&
+              ["staff.reviewer_invited", "staff.data_manager_invited"].includes(
+                item.type,
+              ) &&
               typeof item.data.invitationId === "string"
                 ? item.data.invitationId
                 : null;
+            const invitedRoleLabel =
+              item.data.role === "DATA_MANAGER"
+                ? "Chuyên viên quản lý dữ liệu"
+                : "Người kiểm duyệt";
             if (invitationId) {
               const decision =
                 item.data.decision === "ACCEPTED" ||
@@ -290,7 +296,7 @@ function NotificationInbox() {
                           }
                           type="button"
                         >
-                          Chấp nhận và trở thành Người kiểm duyệt
+                          Chấp nhận và trở thành {invitedRoleLabel}
                         </button>
                         <button
                           className="min-h-10 rounded-lg border border-neutral-300 px-4 text-sm font-bold disabled:opacity-50"

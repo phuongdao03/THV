@@ -7,6 +7,7 @@ export type * from "./wallet-types";
 export type * from "./affiliate-types";
 export type * from "./payment-types";
 export type * from "./billing-types";
+export type * from "./historical-nomination-types";
 
 export type DepartmentStatus = "ACTIVE" | "INACTIVE";
 
@@ -484,7 +485,7 @@ export interface AdminUserListFilters {
   sortOrder?: "asc" | "desc";
 }
 
-export type StaffAccountRole = "MODERATOR";
+export type StaffAccountRole = "MODERATOR" | "DATA_MANAGER";
 export type StaffAccountStatus = "ACTIVE" | "SUSPENDED" | "DISABLED";
 
 export interface StaffAccount {
@@ -689,7 +690,9 @@ export type MediaPurpose =
   | "AVATAR"
   | "COMMUNITY_POST"
   | "DOSSIER_EVIDENCE"
-  | "PUBLIC_COVER";
+  | "PUBLIC_COVER"
+  | "HISTORICAL_NOMINATION"
+  | "CERTIFICATE_ARCHIVE_SCAN";
 export type MediaConfidentiality = "PRIVATE" | "PUBLIC";
 export type MediaStatus =
   | "PENDING"
@@ -1504,6 +1507,7 @@ export interface CertificateVersion {
 
 export interface PublicCategory {
   id: string;
+  parentId: string | null;
   code: string;
   name: string;
   slug: string | null;
@@ -1789,6 +1793,8 @@ export interface PublicCatalogWork {
   isFeatured: boolean;
   thumbnailUrl: string | null;
   thumbnailAltText: string | null;
+  isHistorical?: boolean;
+  historicalYear?: number | null;
 }
 
 export interface PublicCatalogFilters {
@@ -1961,6 +1967,79 @@ export interface PublicWorkDetailMedia {
   muted: boolean;
 }
 
+export interface CertificateArchivePage {
+  mediaAssetId: string;
+  sortOrder: number;
+  caption: string | null;
+  altText: string;
+  url: string | null;
+  mimeType: string | null;
+  width: number | null;
+  height: number | null;
+}
+
+export interface CertificateArchiveContent {
+  title: string;
+  awardName: string | null;
+  certificateNumber: string | null;
+  recipientDisplayName: string | null;
+  issuerName: string | null;
+  awardClass: string | null;
+  issuedAt: string | null;
+  issuedYear: number | null;
+  publicNote: string | null;
+  rightsConfirmed: boolean;
+  privacyReviewed: boolean;
+  pages: CertificateArchivePage[];
+}
+
+export type CertificateArchiveContentInput = Omit<
+  CertificateArchiveContent,
+  "pages"
+> & {
+  pages: Array<
+    Pick<CertificateArchivePage, "mediaAssetId" | "caption" | "altText">
+  >;
+};
+
+export interface CertificateArchiveManagerData {
+  id: string;
+  publicWorkId: string;
+  publicWorkTitle: string;
+  status: "DRAFT" | "PUBLISHED" | "HIDDEN" | "ARCHIVED";
+  version: number;
+  draftVersionNo: number;
+  publishedVersionNo: number | null;
+  draft: CertificateArchiveContent;
+  published: CertificateArchiveContent | null;
+  updatedAt: string;
+}
+
+export interface PublicCertificateArchivePage {
+  id: string;
+  sortOrder: number;
+  caption: string | null;
+  altText: string;
+  url: string;
+  mimeType: string;
+  width: number | null;
+  height: number | null;
+}
+
+export interface PublicCertificateArchive {
+  id: string;
+  title: string;
+  awardName: string | null;
+  certificateNumber: string | null;
+  recipientDisplayName: string | null;
+  issuerName: string | null;
+  awardClass: string | null;
+  issuedAt: string | null;
+  issuedYear: number | null;
+  publicNote: string | null;
+  pages: PublicCertificateArchivePage[];
+}
+
 export interface PublicWorkDetail {
   id: string;
   slug: string;
@@ -1976,10 +2055,13 @@ export interface PublicWorkDetail {
   visibility: PublicWorkVisibility;
   certificate: PublicCertificateSummary | null;
   proof: PublicProofSummary | null;
+  certificateArchives?: PublicCertificateArchive[];
   media: PublicWorkDetailMedia[];
   relatedWorks: PublicCatalogWork[];
   canonicalSlug: string;
   redirected: boolean;
+  isHistorical?: boolean;
+  historicalYear?: number | null;
 }
 
 export type ContentReportReason =

@@ -186,6 +186,27 @@ describe("LoginForm", () => {
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/workspace"));
   });
 
+  it("routes a data manager to the dedicated workspace after direct login", async () => {
+    vi.spyOn(authApi, "loginWithUsername").mockResolvedValue({
+      user: {
+        id: "data-manager-user",
+        email: "archive@cnsgroup.vn",
+        roles: ["DATA_MANAGER"],
+        accountType: null,
+      },
+    });
+    render(<LoginForm />, { wrapper: Wrapper });
+
+    await userEvent.type(
+      screen.getByRole("textbox", { name: /^Email/ }),
+      "archive",
+    );
+    await userEvent.type(screen.getByLabelText("Mật khẩu"), "valid password");
+    await userEvent.click(screen.getByRole("button", { name: "Đăng nhập" }));
+
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/data-manager"));
+  });
+
   it("sends a verification email instead of exchanging an unverified Firebase identity", async () => {
     const firebaseUser = {
       emailVerified: false,

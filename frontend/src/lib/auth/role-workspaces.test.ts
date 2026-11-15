@@ -8,7 +8,7 @@ import {
 } from "@/lib/auth/role-workspaces";
 
 describe("role workspaces", () => {
-  it("opens every role in the personal workspace by default", () => {
+  it("opens each role in its default workspace", () => {
     for (const roles of [
       ["VIEWER"],
       ["USER"],
@@ -24,6 +24,7 @@ describe("role workspaces", () => {
     expect(resolveDefaultWorkspace(["USER"], ["users.read"])).toBe(
       "/workspace",
     );
+    expect(resolveDefaultWorkspace(["DATA_MANAGER"])).toBe("/data-manager");
   });
 
   it("exposes an explicit permitted admin entry point", () => {
@@ -58,10 +59,24 @@ describe("role workspaces", () => {
     expect(hasAnyRole(["VIEWER"], ["USER"])).toBe(false);
   });
 
-  it("exposes only the four product personas", () => {
+  it("resolves each supported product persona", () => {
     expect(resolveWorkspacePersona(["VIEWER"])).toBe("VIEWER");
     expect(resolveWorkspacePersona(["USER"])).toBe("USER");
     expect(resolveWorkspacePersona(["MODERATOR"])).toBe("MODERATOR");
     expect(resolveWorkspacePersona(["SUPER_ADMIN"])).toBe("SUPER_ADMIN");
+    expect(resolveWorkspacePersona(["DATA_MANAGER"])).toBe("DATA_MANAGER");
+  });
+
+  it("keeps data managers in their dedicated workspace", () => {
+    expect(resolveDefaultWorkspace(["DATA_MANAGER"])).toBe("/data-manager");
+    expect(resolveWorkspacePersona(["DATA_MANAGER"])).toBe("DATA_MANAGER");
+    expect(resolveAdminEntryPoint(["DATA_MANAGER"])).toBeNull();
+    expect(
+      resolveWorkspacePersona(["DATA_MANAGER", "MODERATOR", "SUPER_ADMIN"]),
+    ).toBe("DATA_MANAGER");
+    expect(resolveDefaultWorkspace(["DATA_MANAGER", "SUPER_ADMIN"])).toBe(
+      "/data-manager",
+    );
+    expect(resolveAdminEntryPoint(["DATA_MANAGER", "SUPER_ADMIN"])).toBeNull();
   });
 });

@@ -93,6 +93,11 @@ const EVENT_PRESENTATION: Record<
     groupLabel: "Quyền kiểm duyệt",
     tone: "action",
   },
+  "staff.data_manager_invited": {
+    actionLabel: "Xem lời mời",
+    groupLabel: "Quyền quản lý dữ liệu",
+    tone: "action",
+  },
   PAYMENT_REQUEST_ISSUED: {
     actionLabel: "Thanh toán ngay",
     groupLabel: "Thanh toán",

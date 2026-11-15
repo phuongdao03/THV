@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import ReviewsLayout from "@/app/(dashboard)/reviews/layout";
+import DataManagerLayout from "@/app/(dashboard)/data-manager/layout";
 import { AuthUserProvider } from "@/lib/auth/user-context";
 
 function userWith(roles: string[]) {
@@ -40,5 +41,26 @@ describe("operations route gates", () => {
       </AuthUserProvider>,
     );
     expect(screen.getByText("Review queue")).toBeDefined();
+  });
+
+  it("opens the data-manager workspace only for the data-manager role", () => {
+    const { rerender } = render(
+      <AuthUserProvider user={userWith(["USER"])}>
+        <DataManagerLayout>
+          <p>Historical data workspace</p>
+        </DataManagerLayout>
+      </AuthUserProvider>,
+    );
+
+    expect(screen.queryByText("Historical data workspace")).toBeNull();
+
+    rerender(
+      <AuthUserProvider user={userWith(["DATA_MANAGER"])}>
+        <DataManagerLayout>
+          <p>Historical data workspace</p>
+        </DataManagerLayout>
+      </AuthUserProvider>,
+    );
+    expect(screen.getByText("Historical data workspace")).toBeDefined();
   });
 });

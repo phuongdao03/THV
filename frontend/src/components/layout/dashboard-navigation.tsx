@@ -23,6 +23,7 @@ import {
   MapPinned,
   Wallet,
   CreditCard,
+  Database,
   Megaphone,
   Ticket,
 } from "lucide-react";
@@ -262,6 +263,12 @@ const adminItems: NavigationItem[] = [
     permission: "public_content.manage",
   },
   {
+    href: "/admin/historical-nominations",
+    label: "Xác minh hồ sơ lịch sử",
+    icon: Database,
+    allowedRoles: ["SUPER_ADMIN"],
+  },
+  {
     href: "/admin/certificates",
     label: "Quản lý bằng xác lập",
     icon: BadgeCheck,
@@ -300,7 +307,12 @@ const adminNavigationGroups = [
   { label: "Tiếp thị & khuyến mại", hrefs: ["/admin/promotions"] },
   {
     label: "Hồ sơ & thẩm định",
-    hrefs: ["/admin/reviews", "/admin/work-allocations", "/admin/certificates"],
+    hrefs: [
+      "/admin/reviews",
+      "/admin/work-allocations",
+      "/admin/certificates",
+      "/admin/historical-nominations",
+    ],
   },
   {
     label: "Cộng đồng & chương trình",
@@ -371,6 +383,21 @@ function sectionsFor(
   isEmployee: boolean,
   area: "workspace" | "admin",
 ): NavigationSection[] {
+  if (roles.includes("DATA_MANAGER")) {
+    return [
+      {
+        label: "Quản lý dữ liệu",
+        items: [
+          {
+            href: "/data-manager",
+            label: "Quản lý dữ liệu",
+            icon: Database,
+          },
+        ],
+      },
+    ];
+  }
+
   const operationalItems = adminItems.filter((item) =>
     canAccess(item, roles, permissions),
   );
@@ -510,6 +537,7 @@ function mobileItemsFor(
     USER: ["/workspace", "/dossiers", "/community", "/wallet"],
     MODERATOR: ["/reviews", "/attendance", "/community", "/work-allocations"],
     SUPER_ADMIN: ["/workspace", "/community", "/works"],
+    DATA_MANAGER: ["/data-manager"],
   };
   const byHref = new globalThis.Map(items.map((item) => [item.href, item]));
   const prioritized = [

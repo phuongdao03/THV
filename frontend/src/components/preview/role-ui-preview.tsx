@@ -31,6 +31,11 @@ const roleOptions: ReadonlyArray<{
   { role: "USER", label: "Người dùng", home: "/dashboard" },
   { role: "MODERATOR", label: "Người kiểm duyệt", home: "/work-allocations" },
   { role: "SUPER_ADMIN", label: "Quản trị viên cấp cao", home: "/admin" },
+  {
+    role: "DATA_MANAGER",
+    label: "Chuyên viên quản lý dữ liệu",
+    home: "/data-manager",
+  },
 ];
 
 const roleTitles: Record<WorkspacePersona, string> = {
@@ -38,6 +43,7 @@ const roleTitles: Record<WorkspacePersona, string> = {
   USER: "Không gian người dùng",
   MODERATOR: "Không gian kiểm duyệt",
   SUPER_ADMIN: "Không gian quản trị",
+  DATA_MANAGER: "Không gian quản lý dữ liệu",
 };
 
 const previewWalletData: WalletSummary = {
@@ -210,6 +216,22 @@ function RoleHome({ role }: { role: WorkspacePersona }) {
         <InfoPanel
           title="Công việc được giao"
           detail="Mẫu xem trước · Hồ sơ đề cử tác phẩm · 3 tài liệu · Hạn xử lý 28/09/2026"
+        />
+      </>
+    );
+  }
+
+  if (role === "DATA_MANAGER") {
+    return (
+      <>
+        <PageHeading
+          eyebrow="Không gian dữ liệu"
+          title="Quản lý dữ liệu lịch sử"
+          description="Bổ sung hồ sơ cũ, người gửi, tài liệu và bằng scan; sau đó biên tập nội dung công bố."
+        />
+        <InfoPanel
+          title="Tiếp nhận hồ sơ lịch sử"
+          detail="Lưu hồ sơ nguồn trực tiếp, không qua bước gửi thẩm định."
         />
       </>
     );

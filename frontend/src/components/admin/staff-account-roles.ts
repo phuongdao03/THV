@@ -10,6 +10,12 @@ export const STAFF_ACCOUNT_ROLES: Array<{
     label: "Người kiểm duyệt",
     description: "Kiểm tra hồ sơ, thẩm định bằng chứng và hoàn tất quyết định.",
   },
+  {
+    value: "DATA_MANAGER",
+    label: "Chuyên viên quản lý dữ liệu",
+    description:
+      "Bổ sung hồ sơ cũ, quản lý tư liệu, biên tập và công bố nội dung công khai.",
+  },
 ];
 
 export function staffRoleLabel(role: string): string {

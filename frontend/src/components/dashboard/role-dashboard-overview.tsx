@@ -60,6 +60,18 @@ const staffWorkspaces: Record<
       icon: ShieldCheck,
     },
   },
+  DATA_MANAGER: {
+    eyebrow: "Không gian quản lý dữ liệu",
+    title: "Quản lý dữ liệu lịch sử",
+    description:
+      "Tiếp nhận, chuẩn hóa và gửi dữ liệu lịch sử để Admin xác minh trước khi công bố.",
+    primaryAction: {
+      href: "/data-manager",
+      label: "Mở không gian quản lý dữ liệu",
+      detail: "Truy cập khu vực dành riêng cho chuyên viên quản lý dữ liệu.",
+      icon: BookOpen,
+    },
+  },
 };
 
 export function RoleDashboardOverview({
@@ -72,7 +84,10 @@ export function RoleDashboardOverview({
   onUpgraded?: (user: AuthUser) => void;
 }) {
   const isViewer = persona === "VIEWER";
-  const isStaff = persona === "MODERATOR" || persona === "SUPER_ADMIN";
+  const isStaff =
+    persona === "MODERATOR" ||
+    persona === "SUPER_ADMIN" ||
+    persona === "DATA_MANAGER";
   const workspace =
     persona === "VIEWER" || persona === "USER"
       ? undefined
@@ -89,11 +104,17 @@ export function RoleDashboardOverview({
           ["Công việc được giao", "/work-allocations"],
           ["Thư viện đề cử", "/works"],
         ] as const)
-      : ([
-          ["Tổng quan vận hành", "/admin/dashboard"],
-          ["Phân công hồ sơ", "/admin/work-allocations"],
-          ["Quản lý bằng xác lập", "/admin/certificates"],
-        ] as const);
+      : persona === "DATA_MANAGER"
+        ? ([
+            ["Không gian quản lý dữ liệu", "/data-manager"],
+            ["Thư viện đề cử", "/works"],
+            ["Tra cứu bằng xác lập", "/verify"],
+          ] as const)
+        : ([
+            ["Tổng quan vận hành", "/admin/dashboard"],
+            ["Phân công hồ sơ", "/admin/work-allocations"],
+            ["Quản lý bằng xác lập", "/admin/certificates"],
+          ] as const);
 
   return (
     <div className="mx-auto max-w-7xl space-y-8">

@@ -45,6 +45,49 @@ const superAdminUser = {
   permissions: ["users.read", "users.suspend"],
   accountType: null,
 };
+const dataManagerUser = {
+  id: "d57912cc-714c-4ab5-9fd9-1c5b38cd902b",
+  email: "data-manager@tinhhoaviet.org.vn",
+  roles: ["DATA_MANAGER"],
+  permissions: [
+    "historical.records.read",
+    "historical.records.manage",
+    "historical.documents.manage",
+    "public_content.works.manage",
+    "certificate_content.edit",
+    "certificate_archives.manage",
+  ],
+  accountType: null,
+};
+const historicalNominationPreview = {
+  id: "e57912cc-714c-4ab5-9fd9-1c5b38cd902b",
+  code: "HSLS-2024-001",
+  subjectType: "PERSON",
+  subjectName: "Nghệ nhân Nguyễn An",
+  title: "Gìn giữ nghề thủ công truyền thống",
+  summary: "Hồ sơ minh họa trong môi trường local.",
+  description: null,
+  categoryId: null,
+  nominationYear: 2020,
+  nominatedAt: null,
+  historicalResult: "Được ghi nhận trong tư liệu lưu trữ",
+  sourceKind: "ARCHIVE",
+  sourceLabel: "Tư liệu lưu trữ",
+  sourceReference: null,
+  sourceRecordedAt: null,
+  provenanceNotes: null,
+  verificationStatus: "DRAFT",
+  archiveStatus: "ACTIVE",
+  archiveReason: null,
+  publicationStatus: "NOT_PUBLISHED",
+  missingFieldsJson: [],
+  submittedAt: null,
+  verifiedAt: null,
+  verificationReason: null,
+  createdAt: "2026-11-14T00:00:00Z",
+  updatedAt: "2026-11-14T00:00:00Z",
+  mediaCount: 0,
+};
 const adminUser = {
   id: "b57912cc-714c-4ab5-9fd9-1c5b38cd902b",
   email: "an@example.com",
@@ -3342,21 +3385,126 @@ const server = createServer(async (request, response) => {
       envelope(
         superAdminAuthenticated
           ? superAdminUser
-          : sessionPersona === "reviewer"
-            ? reviewerUser
-            : sessionPersona === "test-applicant"
-              ? testApplicantUser
-              : sessionPersona === "applicant"
-                ? applicantUser
-                : sessionPersona === "public"
-                  ? {
-                      ...applicantUser,
-                      accountType: "PUBLIC_USER",
-                      roles: ["VIEWER"],
-                    }
-                  : user,
+          : sessionPersona === "data-manager"
+            ? dataManagerUser
+            : sessionPersona === "reviewer"
+              ? reviewerUser
+              : sessionPersona === "test-applicant"
+                ? testApplicantUser
+                : sessionPersona === "applicant"
+                  ? applicantUser
+                  : sessionPersona === "public"
+                    ? {
+                        ...applicantUser,
+                        accountType: "PUBLIC_USER",
+                        roles: ["VIEWER"],
+                      }
+                    : user,
       ),
     );
+    return;
+  }
+  if (
+    request.method === "GET" &&
+    path === "/api/v1/historical-nominations/dashboard-summary" &&
+    sessionPersona === "data-manager" &&
+    authenticated
+  ) {
+    send(
+      response,
+      200,
+      envelope({
+        totalRecords: 1,
+        draftCount: 1,
+        waitingReviewCount: 0,
+        needsCorrectionCount: 0,
+        verifiedCount: 0,
+        publishedCount: 0,
+        recentActivity: [
+          {
+            recordId: historicalNominationPreview.id,
+            recordCode: historicalNominationPreview.code,
+            title: historicalNominationPreview.title,
+            action: "historical_nomination.created",
+            occurredAt: historicalNominationPreview.updatedAt,
+          },
+        ],
+      }),
+    );
+    return;
+  }
+  if (
+    request.method === "GET" &&
+    path === "/api/v1/historical-nominations" &&
+    sessionPersona === "data-manager" &&
+    authenticated
+  ) {
+    send(response, 200, envelope([historicalNominationPreview]));
+    return;
+  }
+  const historicalRecordPath = `/api/v1/historical-nominations/${historicalNominationPreview.id}`;
+  if (
+    request.method === "GET" &&
+    path === historicalRecordPath &&
+    sessionPersona === "data-manager" &&
+    authenticated
+  ) {
+    send(response, 200, envelope(historicalNominationPreview));
+    return;
+  }
+  if (
+    request.method === "GET" &&
+    [
+      `${historicalRecordPath}/people`,
+      `${historicalRecordPath}/awards`,
+      `${historicalRecordPath}/media`,
+    ].includes(path) &&
+    sessionPersona === "data-manager" &&
+    authenticated
+  ) {
+    send(response, 200, envelope([]));
+    return;
+  }
+  if (
+    request.method === "GET" &&
+    path === `${historicalRecordPath}/activity` &&
+    sessionPersona === "data-manager" &&
+    authenticated
+  ) {
+    send(
+      response,
+      200,
+      envelope([
+        {
+          id: "historical-activity-preview",
+          actorUserId: dataManagerUser.id,
+          action: "historical_nomination.created",
+          changedFields: [],
+          occurredAt: historicalNominationPreview.updatedAt,
+        },
+      ]),
+    );
+    return;
+  }
+  if (
+    request.method === "GET" &&
+    path === `${historicalRecordPath}/public-content-draft` &&
+    sessionPersona === "data-manager" &&
+    authenticated
+  ) {
+    send(response, 200, envelope(null));
+    return;
+  }
+  if (
+    request.method === "GET" &&
+    [
+      "/api/v1/historical-nominations/media-library",
+      "/api/v1/historical-nominations/awards-library",
+    ].includes(path) &&
+    sessionPersona === "data-manager" &&
+    authenticated
+  ) {
+    send(response, 200, paginatedEnvelope([]));
     return;
   }
   if (
