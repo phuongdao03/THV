@@ -13,33 +13,25 @@ depends_on: Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        "historical_nominations",
-        sa.Column("dossier_type_id", sa.Uuid(), nullable=True),
-    )
-    op.create_foreign_key(
-        "fk_historical_nominations_dossier_type_id_dossier_types",
-        "historical_nominations",
-        "dossier_types",
-        ["dossier_type_id"],
-        ["id"],
-        ondelete="RESTRICT",
-    )
-    op.create_index(
-        "ix_historical_nominations_dossier_type_id",
-        "historical_nominations",
-        ["dossier_type_id"],
-    )
+    with op.batch_alter_table("historical_nominations") as batch:
+        batch.add_column(sa.Column("dossier_type_id", sa.Uuid(), nullable=True))
+        batch.create_foreign_key(
+            "fk_historical_nominations_dossier_type_id_dossier_types",
+            "dossier_types",
+            ["dossier_type_id"],
+            ["id"],
+            ondelete="RESTRICT",
+        )
+        batch.create_index(
+            "ix_historical_nominations_dossier_type_id", ["dossier_type_id"]
+        )
 
 
 def downgrade() -> None:
-    op.drop_index(
-        "ix_historical_nominations_dossier_type_id",
-        table_name="historical_nominations",
-    )
-    op.drop_constraint(
-        "fk_historical_nominations_dossier_type_id_dossier_types",
-        "historical_nominations",
-        type_="foreignkey",
-    )
-    op.drop_column("historical_nominations", "dossier_type_id")
+    with op.batch_alter_table("historical_nominations") as batch:
+        batch.drop_index("ix_historical_nominations_dossier_type_id")
+        batch.drop_constraint(
+            "fk_historical_nominations_dossier_type_id_dossier_types",
+            type_="foreignkey",
+        )
+        batch.drop_column("dossier_type_id")

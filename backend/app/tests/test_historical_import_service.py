@@ -36,8 +36,8 @@ def test_import_preview_does_not_deduplicate_after_invalid_row() -> None:
         principal = AuthPrincipal(
             user_id=user_id,
             session_id=uuid4(),
-            email="data.manager@example.test",
-            roles=("DATA_MANAGER",),
+            email="admin@example.test",
+            roles=("SUPER_ADMIN",),
             permissions=("historical.import.manage",),
         )
         content = (

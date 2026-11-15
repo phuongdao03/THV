@@ -3,7 +3,6 @@ import base64
 from sqlite3 import Connection
 from uuid import uuid4
 
-import pytest
 from sqlalchemy import event, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
@@ -21,7 +20,6 @@ from app.modules.historical_nominations.models import (
     HistoricalSourceKind,
     HistoricalSubjectType,
 )
-from app.modules.public.errors import PublicWorkForbiddenError
 from app.modules.public.models import (
     PublicationStatus,
     PublicWorkVisibility,
@@ -29,7 +27,7 @@ from app.modules.public.models import (
 from app.modules.public.publication_service import PublicationService
 
 
-def test_admin_publishes_legacy_work_and_manager_cannot_access_source_api() -> None:
+def test_admin_and_data_manager_can_publish_legacy_work() -> None:
     async def scenario() -> None:
         assert app.title
         engine = create_async_engine("sqlite+aiosqlite://")
@@ -129,21 +127,26 @@ def test_admin_publishes_legacy_work_and_manager_cannot_access_source_api() -> N
             assert updated.title == "Updated historical record"
             assert updated.publication_status is PublicationStatus.PUBLISHED
 
-            denied = AuthPrincipal(
+            manager = AuthPrincipal(
                 user_id=user_id,
                 session_id=uuid4(),
                 email="manager@example.test",
                 roles=("DATA_MANAGER",),
-                permissions=("historical.records.publish",),
+                permissions=(
+                    "historical.records.read",
+                    "historical.records.manage",
+                    "public_content.works.manage",
+                ),
             )
-            with pytest.raises(PublicWorkForbiddenError):
-                await service.publish_historical_record(
-                    denied,
-                    record.id,
-                    expected_draft_updated_at=draft.updated_at,
-                    expected_work_version=work.version,
-                    request_id="request-p0-current-denied",
-                )
+            manager_published = await service.publish_historical_record(
+                manager,
+                record.id,
+                expected_draft_updated_at=draft.updated_at,
+                expected_work_version=updated.version,
+                request_id="request-p0-manager-publish",
+            )
+            assert manager_published.title == updated.title
+            assert manager_published.publication_status is PublicationStatus.PUBLISHED
 
         await engine.dispose()
 

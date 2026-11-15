@@ -19,7 +19,6 @@ DATA_MANAGER_PERMISSIONS = {
 NARROW_DATA_MANAGER_PERMISSIONS = {
     "historical.records.read",
     "historical.records.manage",
-    "historical.records.submit",
     "historical.documents.manage",
     "public_content.works.manage",
     "certificate_content.edit",

@@ -64,7 +64,6 @@ NOW = datetime(2026, 11, 14, 9, tzinfo=UTC)
 DATA_MANAGER_PERMISSIONS = {
     "historical.records.read",
     "historical.records.manage",
-    "historical.records.submit",
     "historical.documents.manage",
     "public_content.works.manage",
     "certificate_content.edit",
@@ -132,7 +131,8 @@ def test_data_manager_can_manage_legacy_source_but_not_review_or_issue() -> None
     PublicationService._require_work_editor(manager)
     require_historical_record_manager(manager, "historical.records.read")
     require_historical_record_manager(manager, "historical.records.manage")
-    require_historical_record_manager(manager, "historical.records.submit")
+    with pytest.raises(DomainError):
+        require_historical_record_manager(manager, "historical.records.submit")
     with pytest.raises(DomainError):
         PublicationService._require_admin(manager)
     with pytest.raises(DomainError):
@@ -147,7 +147,6 @@ def test_data_manager_can_manage_legacy_source_but_not_review_or_issue() -> None
         permissions=(
             "historical.records.read",
             "historical.records.manage",
-            "historical.records.submit",
             "historical.documents.manage",
         ),
     )

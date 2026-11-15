@@ -139,6 +139,14 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.drop_table("historical_public_content_drafts")
     with op.batch_alter_table("historical_awards") as batch:
+        batch.drop_constraint(
+            op.f("ck_historical_awards_historical_award_verification_status"),
+            type_="check",
+        )
+        batch.drop_constraint(
+            op.f("historical_award_verification_status"),
+            type_="check",
+        )
         batch.drop_column("verification_status")
     with op.batch_alter_table("historical_nomination_media") as batch:
         batch.drop_column("public_candidate")

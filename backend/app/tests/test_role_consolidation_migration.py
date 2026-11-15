@@ -97,7 +97,13 @@ def test_role_consolidation_keeps_moderator_review_only_and_super_admin_signing(
             )
         )
 
-    assert role_codes == {"VIEWER", "USER", "MODERATOR", "SUPER_ADMIN"}
+    assert role_codes == {
+        "VIEWER",
+        "USER",
+        "MODERATOR",
+        "SUPER_ADMIN",
+        "DATA_MANAGER",
+    }
     assert blockchain_signers == {"SUPER_ADMIN"}
     assert moderator_permissions == {"review.submit", "similarity.review"}
     assert user_roles == {
