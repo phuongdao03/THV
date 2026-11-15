@@ -10,7 +10,8 @@ import type {
   HistoricalSourceKind,
   HistoricalSubjectType,
 } from "@/lib/api/historical-nomination-types";
-import { formatDateInput, parseDateInput } from "@/lib/dates";
+
+import { HistoricalDateField } from "./historical-date-field";
 
 const sourceKinds: { value: HistoricalSourceKind; label: string }[] = [
   { value: "ARCHIVE", label: "Lưu trữ" },
@@ -26,11 +27,13 @@ const fieldClass =
 export function HistoricalRecordFormComplete({
   record,
   busy,
+  error,
   onSave,
   onCancel,
 }: {
   record?: HistoricalNomination | null;
   busy: boolean;
+  error: string | null;
   onSave: (input: HistoricalNominationInput) => void;
   onCancel: () => void;
 }) {
@@ -40,18 +43,7 @@ export function HistoricalRecordFormComplete({
   });
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = event.currentTarget;
-    const values = new FormData(form);
-    for (const name of ["nominatedAt", "sourceRecordedAt"] as const) {
-      const input = form.elements.namedItem(name);
-      if (!(input instanceof HTMLInputElement)) continue;
-      input.setCustomValidity("");
-      if (input.value && !parseDateInput(input.value)) {
-        input.setCustomValidity("Nhập ngày hợp lệ theo định dạng dd/mm/yyyy.");
-        input.reportValidity();
-        return;
-      }
-    }
+    const values = new FormData(event.currentTarget);
     onSave({
       subjectType: values.get("subjectType") as HistoricalSubjectType,
       subjectName: String(values.get("subjectName") ?? "").trim(),
@@ -64,7 +56,7 @@ export function HistoricalRecordFormComplete({
       nominationYear: values.get("nominationYear")
         ? Number(values.get("nominationYear"))
         : null,
-      nominatedAt: parseDateInput(String(values.get("nominatedAt") ?? "")),
+      nominatedAt: String(values.get("nominatedAt") ?? "") || null,
       summary: String(values.get("summary") ?? "").trim() || null,
       description: String(values.get("description") ?? "").trim() || null,
       historicalResult:
@@ -73,9 +65,7 @@ export function HistoricalRecordFormComplete({
       sourceLabel: String(values.get("sourceLabel") ?? "").trim() || null,
       sourceReference:
         String(values.get("sourceReference") ?? "").trim() || null,
-      sourceRecordedAt: parseDateInput(
-        String(values.get("sourceRecordedAt") ?? ""),
-      ),
+      sourceRecordedAt: String(values.get("sourceRecordedAt") ?? "") || null,
       provenanceNotes:
         String(values.get("provenanceNotes") ?? "").trim() || null,
     });
@@ -94,6 +84,23 @@ export function HistoricalRecordFormComplete({
           Chỉ nhập thông tin đã có căn cứ. Trường chưa rõ có thể để trống khi
           lưu bản nháp.
         </p>
+        {record ? (
+          <p className="mt-2 text-xs text-[var(--theme-muted)]">
+            {record.code} · Lưu gần nhất{" "}
+            {new Intl.DateTimeFormat("vi-VN", {
+              dateStyle: "short",
+              timeStyle: "short",
+            }).format(new Date(record.updatedAt))}
+          </p>
+        ) : null}
+        {error ? (
+          <p
+            className="mt-3 rounded-lg border border-[var(--theme-danger)] bg-[var(--theme-surface)] p-3 text-sm text-[var(--theme-danger)]"
+            role="alert"
+          >
+            {error}
+          </p>
+        ) : null}
       </header>
 
       <section
@@ -164,7 +171,7 @@ export function HistoricalRecordFormComplete({
             />
           </label>
           <label className="space-y-1.5 text-sm">
-            <span>Năm đề cử</span>
+            <span>Năm đề cử (nếu chỉ biết năm)</span>
             <input
               className={fieldClass}
               defaultValue={record?.nominationYear ?? ""}
@@ -174,18 +181,11 @@ export function HistoricalRecordFormComplete({
               type="number"
             />
           </label>
-          <label className="space-y-1.5 text-sm">
-            <span>Ngày đề cử</span>
-            <input
-              className={fieldClass}
-              defaultValue={formatDateInput(record?.nominatedAt)}
-              inputMode="numeric"
-              name="nominatedAt"
-              onInput={(event) => event.currentTarget.setCustomValidity("")}
-              placeholder="dd/mm/yyyy"
-              type="text"
-            />
-          </label>
+          <HistoricalDateField
+            initialDate={record?.nominatedAt}
+            label="Ngày đề cử (nếu biết đầy đủ)"
+            name="nominatedAt"
+          />
           <label className="space-y-1.5 text-sm sm:col-span-2">
             <span>Tóm tắt</span>
             <textarea
@@ -261,18 +261,11 @@ export function HistoricalRecordFormComplete({
               name="sourceReference"
             />
           </label>
-          <label className="space-y-1.5 text-sm">
-            <span>Ngày ghi nhận nguồn</span>
-            <input
-              className={fieldClass}
-              defaultValue={formatDateInput(record?.sourceRecordedAt)}
-              inputMode="numeric"
-              name="sourceRecordedAt"
-              onInput={(event) => event.currentTarget.setCustomValidity("")}
-              placeholder="dd/mm/yyyy"
-              type="text"
-            />
-          </label>
+          <HistoricalDateField
+            initialDate={record?.sourceRecordedAt}
+            label="Ngày ghi nhận nguồn (nếu biết đầy đủ)"
+            name="sourceRecordedAt"
+          />
           <label className="space-y-1.5 text-sm sm:col-span-2">
             <span>Ghi chú nguồn nội bộ</span>
             <textarea
@@ -285,7 +278,7 @@ export function HistoricalRecordFormComplete({
         </div>
       </section>
 
-      <footer className="sticky bottom-0 -mx-4 flex flex-wrap justify-end gap-2 border-t border-[var(--theme-border)] bg-[var(--theme-surface)] px-4 py-3 sm:-mx-5 sm:px-5">
+      <footer className="-mx-4 flex flex-wrap justify-end gap-2 border-t border-[var(--theme-border)] px-4 py-3 sm:-mx-5 sm:px-5">
         <button
           className="min-h-11 rounded-md border border-[var(--theme-border)] px-4 text-sm"
           onClick={onCancel}

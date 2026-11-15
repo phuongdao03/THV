@@ -37,6 +37,7 @@ from app.modules.historical_nominations.models import (
     HistoricalRelatedPersonRole,
 )
 from app.modules.historical_nominations.schemas import (
+    HistoricalAwardPatch,
     HistoricalAwardWrite,
     HistoricalNominationWrite,
     HistoricalPersonWrite,
@@ -116,7 +117,7 @@ def _require_admin(principal: AuthPrincipal) -> None:
 
 
 def _assert_expected_version(
-    record: HistoricalNomination | HistoricalPublicContentDraft,
+    record: HistoricalAward | HistoricalNomination | HistoricalPublicContentDraft,
     expected_updated_at: datetime,
 ) -> None:
     actual = record.updated_at
@@ -369,6 +370,8 @@ class HistoricalNominationService:
         principal: AuthPrincipal,
         record_id: UUID,
         changes: dict[str, object],
+        *,
+        expected_updated_at: datetime | None = None,
     ) -> HistoricalNomination:
         _require_manager(principal, "historical.records.manage")
         if not changes or not set(changes).issubset(EDITORIAL_FIELDS):
@@ -377,6 +380,10 @@ class HistoricalNominationService:
             )
         async with self._session.begin():
             record = await self._active_record(record_id, for_update=True)
+            if expected_updated_at is not None:
+                _assert_expected_version(record, expected_updated_at)
+            if "title" in changes and not str(changes["title"] or "").strip():
+                changes["title"] = "Hồ sơ chưa đặt tên"
             has_dossier_type = (
                 "dossier_type_id" in changes and changes["dossier_type_id"] is not None
             )
@@ -1290,6 +1297,67 @@ class HistoricalNominationService:
             await self._session.flush()
             return award
 
+    async def update_award(
+        self,
+        principal: AuthPrincipal,
+        record_id: UUID,
+        award_id: UUID,
+        payload: HistoricalAwardPatch,
+    ) -> HistoricalAward:
+        _require_manager(principal, "historical.records.manage")
+        changes = payload.model_dump(
+            by_alias=False,
+            exclude_unset=True,
+            exclude={"expected_updated_at"},
+        )
+        if not changes:
+            raise HistoricalNominationValidationError(
+                "No editable award fields were provided."
+            )
+        async with self._session.begin():
+            record = await self._editable_record(record_id)
+            award = await self._session.scalar(
+                select(HistoricalAward)
+                .where(
+                    HistoricalAward.id == award_id,
+                    HistoricalAward.nomination_id == record.id,
+                )
+                .with_for_update()
+            )
+            if award is None:
+                raise HistoricalNominationNotFoundError()
+            _assert_expected_version(award, payload.expected_updated_at)
+            if "award_name" in changes and not str(changes["award_name"] or "").strip():
+                changes["award_name"] = "Bằng xác lập chưa đặt tên"
+            recipient_id = changes.get("recipient_person_id", award.recipient_person_id)
+            if recipient_id is not None:
+                recipient = await self._session.scalar(
+                    select(HistoricalNominationPartyRole.id).where(
+                        HistoricalNominationPartyRole.nomination_id == record.id,
+                        HistoricalNominationPartyRole.person_id == recipient_id,
+                    )
+                )
+                if recipient is None:
+                    raise HistoricalNominationValidationError(
+                        "Award recipient must be linked to this nomination."
+                    )
+            for field, value in changes.items():
+                setattr(award, field, value)
+            award.updated_by_user_id = principal.user_id
+            record.updated_by_user_id = principal.user_id
+            self._audit.record(
+                actor_user_id=principal.user_id,
+                action="historical_nomination.award_updated",
+                resource_type="historical_nomination",
+                resource_id=str(record.id),
+                after={
+                    "award_id": str(award.id),
+                    "changed_fields": sorted(changes),
+                },
+            )
+            await self._session.flush()
+            return award
+
     async def review_award(
         self,
         principal: AuthPrincipal,
@@ -1369,6 +1437,35 @@ class HistoricalNominationService:
                     raise HistoricalNominationValidationError(
                         "Award does not belong to this nomination."
                     )
+            existing_link = await self._session.scalar(
+                select(HistoricalMediaLink)
+                .where(
+                    HistoricalMediaLink.nomination_id == record.id,
+                    HistoricalMediaLink.media_asset_id == media_id,
+                )
+                .with_for_update()
+            )
+            if existing_link is not None:
+                if existing_link.award_id not in {None, award_id}:
+                    raise HistoricalNominationValidationError(
+                        "This file is already linked to another historical award."
+                    )
+                existing_link.award_id = award_id
+                existing_link.media_kind = media_kind
+                existing_link.display_order = display_order
+                record.updated_by_user_id = principal.user_id
+                self._audit.record(
+                    actor_user_id=principal.user_id,
+                    action="historical_nomination.media_reused",
+                    resource_type="historical_nomination",
+                    resource_id=str(record.id),
+                    after={
+                        "media_id": str(media_id),
+                        "award_id": str(award_id) if award_id else None,
+                    },
+                )
+                await self._session.flush()
+                return existing_link
             link = HistoricalMediaLink(
                 id=uuid4(),
                 nomination_id=record.id,

@@ -37,7 +37,10 @@ export function HistoricalNominationsWorkspace() {
     setError(null);
     try {
       const saved = selectedId
-        ? await historicalNominationApi.update(selectedId, input)
+        ? await historicalNominationApi.update(selectedId, {
+            ...input,
+            expectedUpdatedAt: selected.data?.updatedAt,
+          })
         : await historicalNominationApi.create(input);
       setSelectedId(saved.id);
       setEditing(false);

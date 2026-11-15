@@ -14,6 +14,7 @@ from app.modules.auth.models import User, UserStatus
 from app.modules.auth.session_service import AuthPrincipal
 from app.modules.historical_nominations.errors import (
     HistoricalNominationForbiddenError,
+    HistoricalNominationStateError,
 )
 from app.modules.historical_nominations.models import (
     HistoricalArchiveStatus,
@@ -25,9 +26,111 @@ from app.modules.historical_nominations.models import (
     HistoricalSourceKind,
     HistoricalSubjectType,
 )
-from app.modules.historical_nominations.schemas import HistoricalPublicContentDraftWrite
+from app.modules.historical_nominations.schemas import (
+    HistoricalAwardPatch,
+    HistoricalNominationPatch,
+    HistoricalPublicContentDraftWrite,
+)
 from app.modules.historical_nominations.service import HistoricalNominationService
 from app.modules.public.models import PublicWork
+
+
+def test_data_manager_save_persists_canonical_fields_and_updates_old_award() -> None:
+    async def scenario() -> None:
+        engine = create_async_engine("sqlite+aiosqlite://")
+        factory = async_sessionmaker(engine, expire_on_commit=False)
+        async with engine.begin() as connection:
+            await connection.run_sync(Base.metadata.create_all)
+
+        user_id = uuid4()
+        manager = AuthPrincipal(
+            user_id=user_id,
+            session_id=uuid4(),
+            email="manager@example.test",
+            roles=("DATA_MANAGER",),
+            permissions=("historical.records.manage",),
+        )
+        record = HistoricalNomination(
+            id=uuid4(),
+            code="HIST-SAVE-001",
+            subject_type=HistoricalSubjectType.PERSON,
+            subject_name="Nguyễn Văn An",
+            title="Hồ sơ đề cử",
+            source_kind=HistoricalSourceKind.ARCHIVE,
+            created_by_user_id=user_id,
+        )
+        async with factory() as session:
+            session.add_all(
+                [
+                    User(
+                        id=user_id,
+                        email=manager.email,
+                        password_hash="unused",
+                        status=UserStatus.ACTIVE,
+                    ),
+                    record,
+                ]
+            )
+            await session.commit()
+
+            patch = HistoricalNominationPatch(
+                nominationYear=2020,
+                title=" ",
+                expectedUpdatedAt=record.updated_at,
+            )
+            changes = patch.model_dump(exclude_unset=True, by_alias=False)
+            expected_updated_at = changes.pop("expected_updated_at")
+            saved = await HistoricalNominationService(session).patch_record(
+                manager,
+                record.id,
+                changes,
+                expected_updated_at=expected_updated_at,
+            )
+            assert saved.nomination_year == 2020
+            assert saved.nominated_at is None
+            assert saved.title == "Hồ sơ chưa đặt tên"
+            stored_record = await session.get(HistoricalNomination, record.id)
+            assert stored_record is not None
+            assert stored_record.nomination_year == 2020
+            assert stored_record.nominated_at is None
+
+            award = HistoricalAward(
+                id=uuid4(),
+                nomination_id=record.id,
+                award_name="Bằng xác lập",
+                created_by_user_id=user_id,
+            )
+            session.add(award)
+            await session.commit()
+            stale_timestamp = award.updated_at
+            updated_award = await HistoricalNominationService(session).update_award(
+                manager,
+                record.id,
+                award.id,
+                HistoricalAwardPatch(
+                    expected_updated_at=stale_timestamp,
+                    award_name="",
+                ),
+            )
+            assert updated_award.award_name == "Bằng xác lập chưa đặt tên"
+            persisted_award = await session.get(HistoricalAward, award.id)
+            assert persisted_award is not None
+            assert persisted_award.award_name == "Bằng xác lập chưa đặt tên"
+
+            with pytest.raises(HistoricalNominationStateError):
+                await HistoricalNominationService(session).update_award(
+                    manager,
+                    record.id,
+                    award.id,
+                    HistoricalAwardPatch(
+                        expected_updated_at=datetime(2000, 1, 1, tzinfo=UTC),
+                        award_name="Bằng cũ",
+                    ),
+                )
+
+        await engine.dispose()
+
+    asyncio.run(scenario())
 
 
 def test_dashboard_summary_counts_workflow_states_and_recent_activity() -> None:

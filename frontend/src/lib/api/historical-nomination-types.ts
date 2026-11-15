@@ -86,7 +86,7 @@ export type HistoricalNominationInput = Partial<
     | "sourceRecordedAt"
     | "provenanceNotes"
   >
->;
+> & { expectedUpdatedAt?: string };
 
 export interface HistoricalRelatedPerson {
   id: string;
@@ -122,6 +122,7 @@ export interface HistoricalAward {
     | "UNVERIFIABLE";
   recipientPersonId: string | null;
   provenanceNotes: string | null;
+  updatedAt: string;
 }
 
 export interface HistoricalAwardInput {

@@ -3,7 +3,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { historicalNominationApi } from "@/lib/api/client";
 import type { HistoricalNominationInput } from "@/lib/api/historical-nomination-types";
@@ -17,15 +17,34 @@ export function DataManagerRecordWorkspace({ recordId }: { recordId: string }) {
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [savedAt, setSavedAt] = useState<string | null>(null);
+  const saving = useRef(false);
+  const savedNotice = useRef<HTMLParagraphElement>(null);
   const record = useQuery({
     queryKey: ["historical-nomination", recordId],
     queryFn: () => historicalNominationApi.get(recordId),
   });
+  useEffect(() => {
+    if (!savedAt) return;
+    savedNotice.current?.scrollIntoView({
+      block: "center",
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+        ? "auto"
+        : "smooth",
+    });
+  }, [savedAt]);
   async function saveRecord(input: HistoricalNominationInput) {
+    if (saving.current) return;
+    saving.current = true;
     setBusy(true);
     setError(null);
     try {
-      await historicalNominationApi.update(recordId, input);
+      const saved = await historicalNominationApi.update(recordId, {
+        ...input,
+        expectedUpdatedAt: record.data?.updatedAt,
+      });
+      queryClient.setQueryData(["historical-nomination", recordId], saved);
+      setSavedAt(saved.updatedAt);
       setEditing(false);
       await invalidateRecordQueries();
     } catch (cause) {
@@ -33,6 +52,7 @@ export function DataManagerRecordWorkspace({ recordId }: { recordId: string }) {
         cause instanceof Error ? cause.message : "Không lưu được hồ sơ.",
       );
     } finally {
+      saving.current = false;
       setBusy(false);
     }
   }
@@ -105,6 +125,7 @@ export function DataManagerRecordWorkspace({ recordId }: { recordId: string }) {
         <section className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-surface)] p-4 sm:p-6">
           <HistoricalRecordFormComplete
             busy={busy}
+            error={error}
             onCancel={() => setEditing(false)}
             onSave={(input) => void saveRecord(input)}
             record={record.data}
@@ -112,6 +133,19 @@ export function DataManagerRecordWorkspace({ recordId }: { recordId: string }) {
         </section>
       ) : (
         <>
+          {savedAt ? (
+            <p
+              className="rounded-md border border-emerald-700/25 bg-emerald-700/5 px-3 py-2 text-sm text-emerald-800"
+              ref={savedNotice}
+              role="status"
+            >
+              Đã lưu thay đổi lúc{" "}
+              {new Intl.DateTimeFormat("vi-VN", {
+                dateStyle: "short",
+                timeStyle: "short",
+              }).format(new Date(savedAt))}
+            </p>
+          ) : null}
           {error ? (
             <p
               role="alert"

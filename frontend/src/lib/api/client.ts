@@ -1999,6 +1999,20 @@ export const historicalNominationApi = {
       { method: "POST", body: JSON.stringify(input) },
     );
   },
+  updateAward(
+    recordId: string,
+    awardId: string,
+    expectedUpdatedAt: string,
+    input: HistoricalAwardInput,
+  ) {
+    return request<HistoricalAward>(
+      `/historical-nominations/${encodeURIComponent(recordId)}/awards/${encodeURIComponent(awardId)}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({ expectedUpdatedAt, ...input }),
+      },
+    );
+  },
   reviewAward(
     recordId: string,
     awardId: string,

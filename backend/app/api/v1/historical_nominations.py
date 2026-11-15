@@ -35,6 +35,7 @@ from app.modules.historical_nominations.schemas import (
     HistoricalArchiveRequest,
     HistoricalAwardData,
     HistoricalAwardLibraryItemData,
+    HistoricalAwardPatch,
     HistoricalAwardVerificationRequest,
     HistoricalAwardWrite,
     HistoricalImportPreviewData,
@@ -653,10 +654,13 @@ async def patch_historical_nomination(
     principal: CsrfProtectedPrincipalDependency,
     service: HistoricalNominationServiceDependency,
 ) -> SuccessEnvelope[HistoricalNominationData]:
+    changes = payload.model_dump(exclude_unset=True, by_alias=False)
+    expected_updated_at = changes.pop("expected_updated_at", None)
     record = await service.patch_record(
         principal,
         record_id,
-        payload.model_dump(exclude_unset=True),
+        changes,
+        expected_updated_at=expected_updated_at,
     )
     return SuccessEnvelope(
         data=HistoricalNominationData.model_validate(record),
@@ -844,6 +848,25 @@ async def add_historical_award(
     service: HistoricalNominationServiceDependency,
 ) -> SuccessEnvelope[HistoricalAwardData]:
     award = await service.add_award(principal, record_id, payload)
+    return SuccessEnvelope(
+        data=HistoricalAwardData.model_validate(award),
+        meta=ResponseMeta(request_id=request.state.request_id),
+    )
+
+
+@router.patch(
+    "/{record_id}/awards/{award_id}",
+    response_model=SuccessEnvelope[HistoricalAwardData],
+)
+async def update_historical_award(
+    record_id: UUID,
+    award_id: UUID,
+    payload: HistoricalAwardPatch,
+    request: Request,
+    principal: CsrfProtectedPrincipalDependency,
+    service: HistoricalNominationServiceDependency,
+) -> SuccessEnvelope[HistoricalAwardData]:
+    award = await service.update_award(principal, record_id, award_id, payload)
     return SuccessEnvelope(
         data=HistoricalAwardData.model_validate(award),
         meta=ResponseMeta(request_id=request.state.request_id),

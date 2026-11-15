@@ -20,13 +20,17 @@ import {
   publicApi,
 } from "@/lib/api/client";
 import type {
+  HistoricalAward,
   HistoricalMediaKind,
   HistoricalNomination,
   HistoricalPublicContentDraftInput,
   HistoricalRelatedPersonRole,
 } from "@/lib/api/historical-nomination-types";
 import { categoryLabels } from "@/lib/categories";
+import { formatDateInput } from "@/lib/dates";
 import { uploadMedia } from "@/lib/media/upload";
+
+import { HistoricalDateField } from "./historical-date-field";
 
 const sections = [
   "Thông tin",
@@ -82,6 +86,8 @@ export function HistoricalRecordDetailComplete({
   const [section, setSection] = useState<Section>("Thông tin");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [editingAwardId, setEditingAwardId] = useState<string | null>(null);
+  const [awardFormRevision, setAwardFormRevision] = useState(0);
   const people = useQuery({
     queryKey: ["historical-nomination-people", record.id],
     queryFn: () => historicalNominationApi.listPeople(record.id),
@@ -151,30 +157,72 @@ export function HistoricalRecordDetailComplete({
     }
   }
 
-  async function addAward(event: FormEvent<HTMLFormElement>) {
+  async function saveAward(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
     const values = new FormData(form);
+    const input = {
+      awardName:
+        String(values.get("awardName") ?? "").trim() ||
+        "Bằng xác lập chưa đặt tên",
+      certificateNumber:
+        String(values.get("certificateNumber") ?? "").trim() || null,
+      issuedAt: String(values.get("issuedAt") ?? "") || null,
+      issuedBy: String(values.get("issuedBy") ?? "").trim() || null,
+      recipientPersonId: String(values.get("recipientPersonId") ?? "") || null,
+      provenanceNotes: String(values.get("awardNotes") ?? "").trim() || null,
+    };
     setBusy(true);
     setError(null);
     try {
-      await historicalNominationApi.addAward(record.id, {
-        awardName: String(values.get("awardName") ?? "").trim(),
-        certificateNumber:
-          String(values.get("certificateNumber") ?? "").trim() || null,
-        issuedAt: String(values.get("issuedAt") ?? "") || null,
-        issuedBy: String(values.get("issuedBy") ?? "").trim() || null,
-        recipientPersonId:
-          String(values.get("recipientPersonId") ?? "") || null,
-        provenanceNotes: String(values.get("awardNotes") ?? "").trim() || null,
-      });
+      const editingAward = awards.data?.find(
+        (award) => award.id === editingAwardId,
+      );
+      if (editingAward) {
+        await historicalNominationApi.updateAward(
+          record.id,
+          editingAward.id,
+          editingAward.updatedAt,
+          input,
+        );
+      } else {
+        await historicalNominationApi.addAward(record.id, input);
+      }
       form.reset();
+      setEditingAwardId(null);
+      setAwardFormRevision((revision) => revision + 1);
       await queryClient.invalidateQueries({
         queryKey: ["historical-nomination-awards", record.id],
       });
     } catch (cause) {
       setError(
         cause instanceof Error ? cause.message : "Không lưu được bằng xác lập.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function reuseFileForAward(awardId: string, mediaId: string) {
+    const item = mediaLinks.find((link) => link.mediaId === mediaId);
+    if (!item) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await historicalNominationApi.linkMedia(record.id, {
+        mediaId: item.mediaId,
+        mediaKind: "AWARD_SCAN",
+        awardId,
+        displayOrder: item.displayOrder,
+      });
+      await queryClient.invalidateQueries({
+        queryKey: ["historical-nomination-media", record.id],
+      });
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Không gắn được tài liệu đã có vào bằng.",
       );
     } finally {
       setBusy(false);
@@ -354,6 +402,16 @@ export function HistoricalRecordDetailComplete({
 
   const status = publicationStatusLabel(record.publicationStatus);
   const mediaLinks = media.data ?? [];
+  const editingAward = awards.data?.find(
+    (award) => award.id === editingAwardId,
+  );
+  const unassignedAwardScans = mediaLinks.filter((item) => {
+    const mimeType = item.mimeType ?? "";
+    return (
+      item.awardId === null &&
+      (mimeType.startsWith("image/") || mimeType === "application/pdf")
+    );
+  });
 
   return (
     <section
@@ -436,10 +494,10 @@ export function HistoricalRecordDetailComplete({
             label="Ngày đề cử"
             value={
               record.nominatedAt
-                ? new Intl.DateTimeFormat("vi-VN", {
-                    dateStyle: "medium",
-                  }).format(new Date(record.nominatedAt))
-                : "Chưa ghi nhận"
+                ? formatDateInput(record.nominatedAt)
+                : record.nominationYear
+                  ? String(record.nominationYear)
+                  : "Chưa ghi nhận"
             }
           />
           <Info
@@ -639,67 +697,116 @@ export function HistoricalRecordDetailComplete({
           <div>
             <h3 className="font-semibold">Bằng xác lập đã cấp</h3>
             <p className="mt-1 text-sm text-[var(--theme-muted)]">
-              Ghi thông tin in trên bằng cũ và tải ảnh scan hoặc PDF để Admin
-              đối chiếu. Đây là tư liệu lịch sử, không tạo chứng chỉ mới hay
-              giao dịch blockchain.
+              Ghi lại những gì đọc được từ bằng cũ. Có thể lưu thiếu số hiệu
+              hoặc ngày cấp; bản xem trước không phát hành chứng nhận hay giao
+              dịch blockchain.
             </p>
           </div>
           <ul className="divide-y divide-[var(--theme-border)] rounded-lg border border-[var(--theme-border)]">
             {awards.data?.map((award) => (
-              <li
-                className="flex flex-wrap items-center justify-between gap-3 p-4"
-                key={award.id}
-              >
-                <div>
-                  <p className="font-medium">{award.awardName}</p>
-                  <p className="mt-1 text-xs text-[var(--theme-muted)]">
-                    {award.verificationStatus === "VERIFIED"
-                      ? "Đã xác minh"
-                      : award.verificationStatus === "NEEDS_EVIDENCE"
-                        ? "Cần thêm căn cứ"
-                        : award.verificationStatus === "UNVERIFIABLE"
-                          ? "Không xác minh được"
-                          : "Chưa xác minh"}
-                  </p>
-                  <p className="mt-1 text-sm text-[var(--theme-muted)]">
-                    {award.certificateNumber ?? "Chưa có số hiệu"} ·{" "}
-                    {award.issuedBy ?? "Chưa rõ đơn vị cấp"} ·{" "}
-                    {award.issuedAt
-                      ? new Intl.DateTimeFormat("vi-VN", {
-                          dateStyle: "medium",
-                        }).format(new Date(award.issuedAt))
-                      : "Chưa rõ ngày cấp"}
-                  </p>
-                  <p className="mt-1 text-xs text-[var(--theme-muted)]">
-                    Người nhận:{" "}
-                    {people.data?.find(
-                      (person) => person.id === award.recipientPersonId,
-                    )?.displayName ?? "Chưa liên kết"}
-                  </p>
-                </div>
-                {mediaLinks.some((item) => item.awardId === award.id) ? (
-                  <span className="rounded-full border border-[var(--theme-border)] px-2 py-1 text-xs">
-                    Đã có bản scan
-                  </span>
-                ) : null}
-                {canEdit ? (
-                  <label className="inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-md border border-[var(--theme-border)] px-3 text-xs">
-                    Tải scan cho bằng này
-                    <input
-                      accept="image/jpeg,image/png,image/webp,application/pdf"
-                      className="sr-only"
+              <li className="space-y-4 p-4" key={award.id}>
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-semibold">{award.awardName}</p>
+                    <p className="mt-1 break-words text-sm text-[var(--theme-muted)]">
+                      {award.certificateNumber ?? "Chưa có số hiệu"} ·{" "}
+                      {award.issuedBy ?? "Chưa rõ đơn vị cấp"} ·{" "}
+                      {award.issuedAt
+                        ? formatDateInput(award.issuedAt)
+                        : "Chưa rõ ngày cấp"}
+                    </p>
+                    <p className="mt-1 text-xs text-[var(--theme-muted)]">
+                      Người nhận:{" "}
+                      {people.data?.find(
+                        (person) => person.id === award.recipientPersonId,
+                      )?.displayName ?? "Chưa liên kết"}
+                    </p>
+                  </div>
+                  {canEdit ? (
+                    <button
+                      className="min-h-10 rounded-md border border-[var(--theme-border)] px-3 text-sm"
                       disabled={busy}
-                      multiple
-                      onChange={(event) => {
-                        const files = Array.from(
-                          event.currentTarget.files ?? [],
-                        );
-                        event.currentTarget.value = "";
-                        void uploadFiles(files, "AWARD_SCAN", award.id);
-                      }}
-                      type="file"
-                    />
-                  </label>
+                      onClick={() => setEditingAwardId(award.id)}
+                      type="button"
+                    >
+                      Sửa thông tin
+                    </button>
+                  ) : null}
+                </div>
+                <details className="overflow-hidden rounded-xl border border-[var(--theme-border)] bg-[var(--theme-surface)]">
+                  <summary className="cursor-pointer px-4 py-3 text-sm font-medium">
+                    Xem bản trình bày số hóa
+                  </summary>
+                  <HistoricalAwardPresentation
+                    award={award}
+                    media={mediaLinks.filter(
+                      (item) => item.awardId === award.id,
+                    )}
+                    recipientName={
+                      people.data?.find(
+                        (person) => person.id === award.recipientPersonId,
+                      )?.displayName ?? null
+                    }
+                    subjectName={record.subjectName}
+                  />
+                </details>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {mediaLinks
+                    .filter((item) => item.awardId === award.id)
+                    .map((item) => (
+                      <HistoricalMediaEntry
+                        busy={busy}
+                        canEdit={canEdit}
+                        item={item}
+                        key={item.id}
+                        onUnlink={() => void unlink(item.id)}
+                      />
+                    ))}
+                </div>
+                {canEdit ? (
+                  <div className="flex flex-wrap gap-2">
+                    <label className="inline-flex min-h-10 cursor-pointer items-center gap-2 rounded-md border border-[var(--theme-border)] px-3 text-sm">
+                      Tải scan cho bằng này
+                      <input
+                        accept="image/jpeg,image/png,image/webp,application/pdf"
+                        className="sr-only"
+                        disabled={busy}
+                        multiple
+                        onChange={(event) => {
+                          const files = Array.from(
+                            event.currentTarget.files ?? [],
+                          );
+                          event.currentTarget.value = "";
+                          void uploadFiles(files, "AWARD_SCAN", award.id);
+                        }}
+                        type="file"
+                      />
+                    </label>
+                    {unassignedAwardScans.length > 0 ? (
+                      <label className="space-y-1 text-sm">
+                        <span className="sr-only">Tệp đã có trong hồ sơ</span>
+                        <select
+                          aria-label={`Gắn tệp đã có vào ${award.awardName}`}
+                          className={`${fieldClass} min-h-10 py-2`}
+                          disabled={busy}
+                          defaultValue=""
+                          onChange={(event) => {
+                            const mediaId = event.currentTarget.value;
+                            event.currentTarget.value = "";
+                            if (mediaId)
+                              void reuseFileForAward(award.id, mediaId);
+                          }}
+                        >
+                          <option value="">Gắn tệp đã có trong hồ sơ…</option>
+                          {unassignedAwardScans.map((item) => (
+                            <option key={item.mediaId} value={item.mediaId}>
+                              {item.filename ?? "Tài liệu trong hồ sơ"}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    ) : null}
+                  </div>
                 ) : null}
               </li>
             ))}
@@ -712,39 +819,49 @@ export function HistoricalRecordDetailComplete({
           {canEdit ? (
             <form
               className="grid gap-3 rounded-lg bg-[var(--theme-surface-muted)] p-4 sm:grid-cols-2"
-              onSubmit={addAward}
+              key={`${editingAward?.id ?? "new-award"}-${awardFormRevision}`}
+              onSubmit={saveAward}
             >
-              <h3 className="font-semibold sm:col-span-2">Thêm bằng cũ</h3>
+              <h3 className="font-semibold sm:col-span-2">
+                {editingAward ? "Sửa thông tin bằng cũ" : "Thêm bằng cũ"}
+              </h3>
               <label className="space-y-1 text-sm sm:col-span-2">
-                <span>Tên bằng xác lập / giải thưởng *</span>
+                <span>Tên bằng xác lập / giải thưởng</span>
                 <input
                   className={fieldClass}
+                  defaultValue={editingAward?.awardName ?? ""}
                   maxLength={255}
                   name="awardName"
-                  required
                 />
               </label>
               <label className="space-y-1 text-sm">
                 <span>Số hiệu bằng</span>
                 <input
                   className={fieldClass}
+                  defaultValue={editingAward?.certificateNumber ?? ""}
                   maxLength={128}
                   name="certificateNumber"
                 />
               </label>
-              <label className="space-y-1 text-sm">
-                <span>Ngày cấp</span>
-                <input className={fieldClass} name="issuedAt" type="date" />
-              </label>
+              <HistoricalDateField
+                initialDate={editingAward?.issuedAt}
+                label="Ngày cấp (nếu biết đầy đủ)"
+                name="issuedAt"
+              />
               <label className="space-y-1 text-sm">
                 <span>Đơn vị cấp</span>
-                <input className={fieldClass} maxLength={255} name="issuedBy" />
+                <input
+                  className={fieldClass}
+                  defaultValue={editingAward?.issuedBy ?? ""}
+                  maxLength={255}
+                  name="issuedBy"
+                />
               </label>
               <label className="space-y-1 text-sm">
                 <span>Người được cấp</span>
                 <select
                   className={fieldClass}
-                  defaultValue=""
+                  defaultValue={editingAward?.recipientPersonId ?? ""}
                   name="recipientPersonId"
                 >
                   <option value="">Chưa liên kết</option>
@@ -759,15 +876,30 @@ export function HistoricalRecordDetailComplete({
                 <span>Nguồn đối chiếu / ghi chú</span>
                 <textarea
                   className={`${fieldClass} min-h-16`}
+                  defaultValue={editingAward?.provenanceNotes ?? ""}
                   maxLength={10_000}
                   name="awardNotes"
                 />
               </label>
+              {editingAward ? (
+                <button
+                  className="min-h-10 rounded-md border border-[var(--theme-border)] px-3 text-sm"
+                  onClick={() => setEditingAwardId(null)}
+                  type="button"
+                >
+                  Hủy sửa
+                </button>
+              ) : null}
               <button
                 className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-[var(--theme-border)] px-3 text-sm font-medium disabled:opacity-60 sm:col-span-2 sm:justify-self-end"
                 disabled={busy}
               >
-                <Plus aria-hidden className="h-4 w-4" /> Lưu bằng cũ
+                <Plus aria-hidden className="h-4 w-4" />
+                {busy
+                  ? "Đang lưu…"
+                  : editingAward
+                    ? "Lưu thay đổi"
+                    : "Lưu bằng cũ"}
               </button>
             </form>
           ) : null}
@@ -1051,8 +1183,8 @@ function PublicContentDraftEditor({
   onSave,
 }: Omit<Parameters<typeof PublicContentSection>[0], "draftLoading">) {
   const categoryNames = categoryLabels(categories);
-  const availableMedia = media.filter(
-    (item) => item.mediaKind !== "AWARD_SCAN",
+  const availableMedia = media.filter((item) =>
+    ["PHOTO", "VIDEO", "AWARD_SCAN"].includes(item.mediaKind),
   );
   const [selectedMediaIds, setSelectedMediaIds] = useState<string[]>(() => {
     const availableIds = new Set(availableMedia.map((item) => item.mediaId));
@@ -1204,7 +1336,8 @@ function PublicContentDraftEditor({
             </legend>
             <p className="text-xs text-[var(--theme-muted)]">
               Chọn tệp phù hợp và sắp xếp thứ tự gallery. Tệp gốc vẫn riêng tư;
-              chỉ tệp được chọn mới xuất hiện khi bạn xuất bản.
+              bản scan bằng chỉ hiển thị công khai nếu bạn chủ động chọn và xuất
+              bản nội dung này.
             </p>
             <div className="grid gap-2 sm:grid-cols-2">
               {selectedMediaIds.map((mediaId) => (
@@ -1239,7 +1372,9 @@ function PublicContentDraftEditor({
                             ? "Ảnh"
                             : item.mediaKind === "VIDEO"
                               ? "Video"
-                              : "Tài liệu"}
+                              : item.mediaKind === "AWARD_SCAN"
+                                ? "Bản scan bằng cũ · công khai nếu chọn và xuất bản"
+                                : "Tài liệu"}
                         </span>
                       </span>
                     </label>
@@ -1443,6 +1578,93 @@ function Info({ label, value }: { label: string; value: string }) {
     <div className="rounded-md border border-[var(--theme-border)] p-3">
       <p className="text-xs text-[var(--theme-muted)]">{label}</p>
       <p className="mt-1 break-words text-sm">{value}</p>
+    </div>
+  );
+}
+
+function HistoricalAwardPresentation({
+  award,
+  media,
+  recipientName,
+  subjectName,
+}: {
+  award: HistoricalAward;
+  media: NonNullable<
+    Awaited<ReturnType<typeof historicalNominationApi.listMedia>>
+  >;
+  recipientName: string | null;
+  subjectName: string | null;
+}) {
+  const valueOrUnknown = (value: string | null | undefined) =>
+    value?.trim() || "Chưa ghi nhận";
+
+  return (
+    <div className="space-y-5 border-t border-[var(--theme-border)] p-4 sm:p-6">
+      <div className="rounded-lg border border-amber-700/25 bg-amber-700/5 p-4">
+        <p className="text-xs font-semibold uppercase tracking-wide text-amber-900">
+          Bản trình bày số hóa · tư liệu lịch sử
+        </p>
+        <p className="mt-2 text-sm text-[var(--theme-muted)]">
+          Hiển thị thông tin đã lưu và bản scan được gắn với hồ sơ. Đây không
+          phải chứng nhận điện tử hoặc bằng mới; không có chữ ký hay xác nhận
+          blockchain.
+        </p>
+      </div>
+      <dl className="grid gap-3 sm:grid-cols-2">
+        <div className="sm:col-span-2">
+          <dt className="text-xs text-[var(--theme-muted)]">Tên bằng</dt>
+          <dd className="mt-1 text-lg font-semibold">
+            {valueOrUnknown(award.awardName)}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-xs text-[var(--theme-muted)]">Đối tượng</dt>
+          <dd className="mt-1 text-sm">{valueOrUnknown(subjectName)}</dd>
+        </div>
+        <div>
+          <dt className="text-xs text-[var(--theme-muted)]">Người được cấp</dt>
+          <dd className="mt-1 text-sm">{valueOrUnknown(recipientName)}</dd>
+        </div>
+        <div>
+          <dt className="text-xs text-[var(--theme-muted)]">Số hiệu</dt>
+          <dd className="mt-1 break-words text-sm">
+            {valueOrUnknown(award.certificateNumber)}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-xs text-[var(--theme-muted)]">Ngày cấp</dt>
+          <dd className="mt-1 text-sm">
+            {award.issuedAt ? formatDateInput(award.issuedAt) : "Chưa ghi nhận"}
+          </dd>
+        </div>
+        <div className="sm:col-span-2">
+          <dt className="text-xs text-[var(--theme-muted)]">Đơn vị cấp</dt>
+          <dd className="mt-1 break-words text-sm">
+            {valueOrUnknown(award.issuedBy)}
+          </dd>
+        </div>
+      </dl>
+      <div className="space-y-2">
+        <h4 className="text-sm font-semibold">Bản scan gắn với bằng</h4>
+        {media.length ? (
+          <div className="grid gap-3 sm:grid-cols-2">
+            {media.map((item) => (
+              <HistoricalMediaEntry
+                busy={false}
+                canEdit={false}
+                item={item}
+                key={item.id}
+                onUnlink={() => undefined}
+              />
+            ))}
+          </div>
+        ) : (
+          <p className="rounded-md bg-[var(--theme-surface-muted)] p-3 text-sm text-[var(--theme-muted)]">
+            Chưa có bản scan được liên kết. Các thông tin chưa biết được để
+            trống, không tự tạo số hiệu hoặc ngày cấp.
+          </p>
+        )}
+      </div>
     </div>
   );
 }

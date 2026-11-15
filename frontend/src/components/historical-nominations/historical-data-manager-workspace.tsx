@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Archive, FilePlus2, LayoutDashboard, Search } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import {
   dossierApi,
@@ -34,6 +34,7 @@ export function HistoricalDataManagerWorkspace() {
   const [dossierTypeId, setDossierTypeId] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const creatingRecord = useRef(false);
   const records = useQuery({
     queryKey: [
       "historical-nominations",
@@ -71,6 +72,8 @@ export function HistoricalDataManagerWorkspace() {
   );
 
   async function createRecord() {
+    if (creatingRecord.current) return;
+    creatingRecord.current = true;
     setBusy(true);
     setError(null);
     try {
@@ -84,6 +87,7 @@ export function HistoricalDataManagerWorkspace() {
         cause instanceof Error ? cause.message : "Không tạo được hồ sơ.",
       );
     } finally {
+      creatingRecord.current = false;
       setBusy(false);
     }
   }

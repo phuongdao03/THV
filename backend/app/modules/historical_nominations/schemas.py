@@ -58,6 +58,7 @@ class HistoricalNominationWrite(HistoricalSchema):
 
 
 class HistoricalNominationPatch(HistoricalSchema):
+    expected_updated_at: datetime | None = None
     subject_type: HistoricalSubjectType | None = None
     subject_name: Annotated[str | None, Field(max_length=255)] = None
     title: Annotated[str | None, Field(max_length=255)] = None
@@ -255,6 +256,21 @@ class HistoricalAwardWrite(HistoricalSchema):
     provenance_notes: Annotated[str | None, Field(max_length=10_000)] = None
 
 
+class HistoricalAwardPatch(HistoricalSchema):
+    expected_updated_at: datetime
+    award_name: Annotated[str | None, Field(max_length=255)] = None
+    certificate_number: Annotated[str | None, Field(max_length=128)] = None
+    issued_at: date | None = None
+    issued_by: Annotated[str | None, Field(max_length=255)] = None
+    recipient_person_id: UUID | None = None
+    provenance_notes: Annotated[str | None, Field(max_length=10_000)] = None
+
+    @field_validator("award_name", mode="before")
+    @classmethod
+    def strip_award_name(cls, value: object) -> object:
+        return value.strip() if isinstance(value, str) else value
+
+
 class HistoricalAwardVerificationRequest(HistoricalSchema):
     action: Annotated[
         str,
@@ -272,6 +288,7 @@ class HistoricalAwardData(HistoricalSchema):
     verification_status: HistoricalAwardVerificationStatus
     recipient_person_id: UUID | None
     provenance_notes: str | None
+    updated_at: datetime
 
 
 class HistoricalMediaLinkWrite(HistoricalSchema):

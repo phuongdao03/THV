@@ -121,3 +121,33 @@ made.
   and 2 unrelated failures: the mobile navigation click was intercepted by the
   Next.js dev portal, and the public portal test treated an image LCP warning as
   a console error.
+
+## Historical save, dates, and award presentation
+
+- Fixed the historical-record PATCH boundary: Pydantic aliases were serialized
+  as camelCase while the service consumes snake_case, so submitted fields could
+  be ignored/rejected. The route now dumps canonical names and forwards the
+  optimistic `expected_updated_at` version. Record and award edits reject stale
+  versions; the UI updates cached details and shows a save confirmation only
+  after the API responds.
+- Added a Vietnamese `dd/mm/yyyy` keyboard-and-calendar field. It serializes a
+  calendar date as `YYYY-MM-DD`, without a timezone conversion; year-only data
+  stays in the separate year field and unknown dates stay empty. Blank legacy
+  record/award names receive explicit placeholders so incomplete archive data
+  can still be saved.
+- Historical award metadata can be edited in its source record. Existing
+  attached files can be linked to an award without copying the original asset.
+  Its digital presentation shows only recorded metadata and linked scans and is
+  labeled as historical digitization, not a new or blockchain-verified
+  certificate.
+- The requested YEAR/MONTH/DAY/UNKNOWN precision model is not implemented:
+  adding month precision requires a schema/API change, and automatic approval
+  rejected the additive database migration. Do not invent a day to represent a
+  month; retain year-only and exact-date behavior until that migration is
+  approved.
+- Verification for this follow-up: focused backend tests (4 passed), date-field
+  unit tests (3 passed), DATA_MANAGER save E2E (desktop and mobile passed),
+  frontend typecheck, repository format check, Ruff, and `git diff --check`. E2E
+  uses the local mock API; it does not write to production. The saved-state
+  screenshot is a local ignored artifact under `frontend/test-results/`.
+- No production migration, commit, push, or deployment was made.
