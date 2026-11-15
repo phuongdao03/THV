@@ -16,6 +16,10 @@ from app.modules.auth.models import (
     UserStatus,
 )
 from app.modules.auth.repositories import AuthRepository
+from app.modules.auth.roles import (
+    DATA_MANAGER_PERMISSION_CODES,
+    DATA_MANAGER_ROLE_CODE,
+)
 from app.modules.auth.schemas import (
     INTERNAL_MANAGED_ROLES,
     StaffAccountData,
@@ -200,6 +204,12 @@ class StaffAccountService:
                     "STAFF_ACCOUNT_NOT_FOUND", "The staff account was not found.", 404
                 )
             permissions = await self._direct_permission_codes(user_id)
+            if DATA_MANAGER_ROLE_CODE in await self._repository.get_role_codes(user_id):
+                permissions = tuple(
+                    code
+                    for code in permissions
+                    if code in DATA_MANAGER_PERMISSION_CODES
+                )
             revision = await self._session.get(UserPermissionRevision, user_id)
             return StaffPermissionData(
                 userId=user_id,
@@ -253,6 +263,15 @@ class StaffAccountService:
                     "STAFF_ACCOUNT_PROTECTED",
                     "Super Administrator permissions are managed out of band.",
                     409,
+                )
+            if DATA_MANAGER_ROLE_CODE in target_roles and not set(requested).issubset(
+                DATA_MANAGER_PERMISSION_CODES
+            ):
+                raise self._permission_error(
+                    "STAFF_DATA_MANAGER_PERMISSION_FORBIDDEN",
+                    "Data Manager permissions are limited to "
+                    "public work and certificate content operations.",
+                    403,
                 )
             revision = await self._session.scalar(
                 select(UserPermissionRevision)

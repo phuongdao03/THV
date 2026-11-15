@@ -125,3 +125,53 @@ def test_applicant_upgrade_rejects_non_public_account(tmp_path: Path) -> None:
                 )
 
     asyncio.run(exercise())
+
+
+def test_data_manager_cannot_self_upgrade_into_the_user_role(tmp_path: Path) -> None:
+    async def exercise() -> None:
+        factory = await _build_session(tmp_path)
+        async with factory() as session:
+            user = User(
+                email="data-manager@cnsgroup.vn",
+                status=UserStatus.ACTIVE,
+                email_verified_at=datetime.now(UTC),
+                account_type=AccountType.PUBLIC_USER,
+            )
+            viewer_role = Role(code="VIEWER")
+            manager_role = Role(code="DATA_MANAGER")
+            user_role = Role(code="USER")
+            session.add_all([user, viewer_role, manager_role, user_role])
+            await session.flush()
+            user_id = user.id
+            session.add_all(
+                [
+                    UserRole(user_id=user_id, role_id=viewer_role.id),
+                    UserRole(user_id=user_id, role_id=manager_role.id),
+                ]
+            )
+            await session.commit()
+
+            with pytest.raises(ApplicantUpgradeNotAllowedError):
+                await ApplicantUpgradeService(session=session).upgrade(
+                    AuthPrincipal(
+                        user_id=user_id,
+                        session_id=uuid4(),
+                        email="data-manager@cnsgroup.vn",
+                        roles=("DATA_MANAGER", "VIEWER"),
+                        account_type=AccountType.PUBLIC_USER,
+                    ),
+                    account_type=AccountType.INDIVIDUAL_APPLICANT,
+                )
+
+            roles = set(
+                (
+                    await session.scalars(
+                        select(Role.code)
+                        .join(UserRole, UserRole.role_id == Role.id)
+                        .where(UserRole.user_id == user_id)
+                    )
+                ).all()
+            )
+            assert roles == {"VIEWER", "DATA_MANAGER"}
+
+    asyncio.run(exercise())

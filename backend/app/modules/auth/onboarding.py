@@ -7,6 +7,7 @@ from app.modules.audit.service import AuditService
 from app.modules.auth.errors import ApplicantUpgradeNotAllowedError
 from app.modules.auth.models import AccountType, Role, UserRole, UserStatus
 from app.modules.auth.repositories import AuthRepository
+from app.modules.auth.roles import DATA_MANAGER_ROLE_CODE
 from app.modules.auth.session_service import AuthPrincipal
 
 APPLICANT_ACCOUNT_TYPES = frozenset(
@@ -53,6 +54,8 @@ class ApplicantUpgradeService:
                 raise ApplicantUpgradeNotAllowedError()
 
             existing_roles = await self._repository.get_role_codes(user.id)
+            if DATA_MANAGER_ROLE_CODE in existing_roles:
+                raise ApplicantUpgradeNotAllowedError()
             if user.account_type is not AccountType.PUBLIC_USER:
                 if user.account_type is account_type and "USER" in existing_roles:
                     result = ApplicantUpgradeResult(

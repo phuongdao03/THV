@@ -197,14 +197,27 @@ class StaffInvitationService:
                 await self._session.flush()
                 self._enqueue(invitation, raw_token=raw_token, now=now)
                 if target_user is not None and role_code != "USER":
+                    is_data_manager = role_code == "DATA_MANAGER"
                     self._session.add(
                         Notification(
                             user_id=target_user.id,
                             source_event_id=invitation.id,
-                            type="staff.reviewer_invited",
-                            title="Lời mời trở thành Người kiểm duyệt",
+                            type=(
+                                "staff.data_manager_invited"
+                                if is_data_manager
+                                else "staff.reviewer_invited"
+                            ),
+                            title=(
+                                "Lời mời trở thành Chuyên viên quản lý dữ liệu"
+                                if is_data_manager
+                                else "Lời mời trở thành Người kiểm duyệt"
+                            ),
                             body=(
-                                "Quản trị viên mời bạn tham gia thẩm định hồ sơ. "
+                                "Quản trị viên mời bạn bổ sung hồ sơ lịch sử, "
+                                "quản lý tư liệu và nội dung công khai. Hãy xem "
+                                "và xác nhận lời mời."
+                                if is_data_manager
+                                else "Quản trị viên mời bạn tham gia thẩm định hồ sơ. "
                                 "Hãy xem và xác nhận lời mời."
                             ),
                             data_json={
@@ -424,8 +437,24 @@ class StaffInvitationService:
                         or user.email_verified_at is None
                     ):
                         raise self._invalid()
-                if not await self._session.get(UserRole, (user.id, role.id)):
+                current_roles = set(await self._auth.get_role_codes(user.id))
+                self._require_data_manager_role_exclusive(
+                    invitation.role_code, current_roles
+                )
+                role_changed = role.code not in current_roles
+                if role_changed:
                     self._auth.add_user_role(UserRole(user_id=user.id, role_id=role.id))
+                revoked_sessions = 0
+                if (
+                    role_changed
+                    and invitation.role_code == "DATA_MANAGER"
+                    and existing_user is not None
+                ):
+                    revoked_sessions = (
+                        await self._auth.revoke_active_auth_sessions_for_user(
+                            user.id, now
+                        )
+                    )
                 if invitation.organization_id is not None:
                     self._session.add(
                         OrganizationMember(
@@ -451,7 +480,10 @@ class StaffInvitationService:
                         else "staff_invitation"
                     ),
                     resource_id=str(invitation.id),
-                    after={"role": invitation.role_code},
+                    after={
+                        "role": invitation.role_code,
+                        "revoked_sessions": revoked_sessions,
+                    },
                     request_id=request_id,
                     user_agent=user_agent,
                 )
@@ -499,10 +531,19 @@ class StaffInvitationService:
             if role is None or role.code not in INTERNAL_MANAGED_ROLES:
                 raise self._invalid()
             current_roles = set(await self._auth.get_role_codes(user.id))
+            self._require_data_manager_role_exclusive(
+                invitation.role_code, current_roles
+            )
             if "SUPER_ADMIN" in current_roles:
                 raise self._invalid()
-            if role.code not in current_roles:
+            role_changed = role.code not in current_roles
+            if role_changed:
                 self._auth.add_user_role(UserRole(user_id=user.id, role_id=role.id))
+            revoked_sessions = 0
+            if role_changed and invitation.role_code == "DATA_MANAGER":
+                revoked_sessions = (
+                    await self._auth.revoke_active_auth_sessions_for_user(user.id, now)
+                )
             invitation.accepted_at = now
             invitation.accepted_user_id = user.id
             await self._resolve_recipient_notification(
@@ -513,7 +554,10 @@ class StaffInvitationService:
                 action="auth.staff_invitation.accepted",
                 resource_type="staff_invitation",
                 resource_id=str(invitation.id),
-                after={"role": invitation.role_code},
+                after={
+                    "role": invitation.role_code,
+                    "revoked_sessions": revoked_sessions,
+                },
                 request_id=request_id,
                 user_agent=user_agent,
             )
@@ -613,6 +657,7 @@ class StaffInvitationService:
                     message="Only active, verified accounts can be invited.",
                     status_code=409,
                 )
+            self._require_data_manager_role_exclusive(role_code, roles)
             if "SUPER_ADMIN" in roles or role_code in roles:
                 raise DomainError(
                     code="STAFF_INVITATION_TARGET_ALREADY_PRIVILEGED",
@@ -742,6 +787,21 @@ class StaffInvitationService:
             invitation.is_test_account and invitation.role_code == "USER"
         ):
             raise StaffInvitationService._invalid()
+
+    @staticmethod
+    def _require_data_manager_role_exclusive(
+        role_code: str, current_roles: set[str]
+    ) -> None:
+        if (role_code == "DATA_MANAGER" and current_roles) or (
+            "DATA_MANAGER" in current_roles and role_code != "DATA_MANAGER"
+        ):
+            raise DomainError(
+                code="STAFF_INVITATION_MIXED_ROLE",
+                message=(
+                    "Data Manager accounts cannot be combined with other product roles."
+                ),
+                status_code=409,
+            )
 
     @staticmethod
     def _require_admin(principal: AuthPrincipal) -> None:

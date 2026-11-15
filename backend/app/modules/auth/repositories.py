@@ -19,6 +19,10 @@ from app.modules.auth.models import (
     UserStatus,
     VerificationToken,
 )
+from app.modules.auth.roles import (
+    DATA_MANAGER_PERMISSION_CODES,
+    DATA_MANAGER_ROLE_CODE,
+)
 
 
 class AuthRepository:
@@ -210,6 +214,10 @@ class AuthRepository:
         )
         effective = role_permissions.union(user_permissions).subquery()
         statement = select(effective.c.code).order_by(effective.c.code)
+        if DATA_MANAGER_ROLE_CODE in await self.get_role_codes(user_id):
+            statement = statement.where(
+                effective.c.code.in_(DATA_MANAGER_PERMISSION_CODES)
+            )
         return tuple((await self._session.scalars(statement)).all())
 
     async def list_user_ids_by_role_codes(
@@ -245,7 +253,7 @@ class AuthRepository:
         role_code: str | None = None,
         account_status: str | None = None,
     ) -> tuple[tuple[User, str], ...]:
-        internal_codes = ("MODERATOR", "SUPER_ADMIN")
+        internal_codes = ("MODERATOR", "DATA_MANAGER", "SUPER_ADMIN")
         statement = (
             select(User, Role.code)
             .join(UserRole, UserRole.user_id == User.id)
@@ -275,7 +283,7 @@ class AuthRepository:
         role_code: str | None = None,
         account_status: str | None = None,
     ) -> int:
-        internal_codes = ("MODERATOR", "SUPER_ADMIN")
+        internal_codes = ("MODERATOR", "DATA_MANAGER", "SUPER_ADMIN")
         statement = (
             select(func.count(distinct(User.id)))
             .join(UserRole, UserRole.user_id == User.id)

@@ -20,10 +20,10 @@ class RegisterRequest(BaseModel):
     referral_click_id: UUID | None = Field(default=None, alias="referralClickId")
 
 
-INTERNAL_ACCOUNT_ROLES = ("MODERATOR",)
+INTERNAL_ACCOUNT_ROLES = ("MODERATOR", "DATA_MANAGER")
 INTERNAL_MANAGED_ROLES = frozenset(INTERNAL_ACCOUNT_ROLES)
 STAFF_ACCOUNT_STATUSES = ("ACTIVE", "SUSPENDED", "DISABLED")
-StaffAccountRole = Literal["MODERATOR",]
+StaffAccountRole = Literal["MODERATOR", "DATA_MANAGER"]
 StaffAccountStatus = Literal["ACTIVE", "SUSPENDED", "DISABLED"]
 StaffInvitationStatus = Literal["PENDING", "ACCEPTED", "REVOKED", "EXPIRED"]
 
@@ -43,6 +43,7 @@ class PrivilegedActionRequest(BaseModel):
         Literal[
             "MODERATOR",
             "SUPER_ADMIN",
+            "DATA_MANAGER",
         ]
         | None
     ) = Field(default=None, alias="requestedRole")

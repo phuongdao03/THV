@@ -10,14 +10,20 @@ from app.core.errors import DomainError
 from app.modules.audit.service import AuditService
 from app.modules.auth.authorization import AuthorizationPolicy, PolicyRequirement
 from app.modules.auth.models import (
+    Permission,
     PrivilegedAction,
     PrivilegedActionStatus,
     PrivilegedActionType,
     Role,
+    UserPermission,
     UserRole,
     UserStatus,
 )
 from app.modules.auth.repositories import AuthRepository
+from app.modules.auth.roles import (
+    DATA_MANAGER_PERMISSION_CODES,
+    DATA_MANAGER_ROLE_CODE,
+)
 from app.modules.auth.schemas import (
     INTERNAL_MANAGED_ROLES,
     PrivilegedActionData,
@@ -282,6 +288,36 @@ class StaffPrivilegedActionService:
                 message="The requested internal role is not configured.",
                 status_code=409,
             )
+        current_codes = {current_role.code for _, current_role in current_roles}
+        if (
+            DATA_MANAGER_ROLE_CODE in current_codes
+            or requested == DATA_MANAGER_ROLE_CODE
+        ):
+            if current_codes.difference(INTERNAL_MANAGED_ROLES | {"SUPER_ADMIN"}):
+                raise DomainError(
+                    code="STAFF_INVITATION_MIXED_ROLE",
+                    message=(
+                        "Data Manager accounts cannot be combined with "
+                        "other product roles."
+                    ),
+                    status_code=409,
+                )
+            direct_permission_codes = set(
+                await self._session.scalars(
+                    select(Permission.code)
+                    .join(UserPermission, UserPermission.permission_id == Permission.id)
+                    .where(UserPermission.user_id == target_user_id)
+                )
+            )
+            if not direct_permission_codes.issubset(DATA_MANAGER_PERMISSION_CODES):
+                raise DomainError(
+                    code="STAFF_DATA_MANAGER_PERMISSION_FORBIDDEN",
+                    message=(
+                        "Replace non-historical direct permissions before changing "
+                        "this account's Data Manager role."
+                    ),
+                    status_code=409,
+                )
         for user_role, current_role in current_roles:
             if current_role.code in INTERNAL_MANAGED_ROLES | {"SUPER_ADMIN"}:
                 await self._repository.delete_user_role(
