@@ -171,10 +171,12 @@ function defaults(work: PublicWorkEditorData): EditorValues {
 
 type PublicWorkEditorProps = {
   initialSelectedId?: string;
+  managerMode?: boolean;
 };
 
 export function PublicWorkEditor({
   initialSelectedId,
+  managerMode = false,
 }: PublicWorkEditorProps = {}) {
   const queryClient = useQueryClient();
   const [query, setQuery] = useState("");
@@ -391,6 +393,11 @@ export function PublicWorkEditor({
   });
 
   const selectedTags = useWatch({ control, name: "tagIds" }) ?? [];
+  const stateActions = detail.data
+    ? availableActions[detail.data.publicationStatus].filter(
+        (action) => !managerMode || action !== "suspend",
+      )
+    : [];
   const existingTag = tags.data?.find(
     (tag) => tag.slug === tagSlug(newTagName) && tag.isActive,
   );
@@ -593,7 +600,9 @@ export function PublicWorkEditor({
             <div className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-3 border-b border-neutral-200 bg-white/95 px-5 py-4 backdrop-blur">
               <div>
                 <p className="text-xs font-bold tracking-[0.16em] text-primary-700 uppercase">
-                  Biên tập nội dung công bố
+                  {managerMode
+                    ? "Biên tập nội dung công bố · DataManager"
+                    : "Biên tập nội dung công bố"}
                 </p>
                 <h2 className="mt-1 text-xl font-bold tracking-tight">
                   {detail.data.title}
@@ -614,10 +623,7 @@ export function PublicWorkEditor({
                   <Check className="size-4" />{" "}
                   {save.isPending ? "Đang lưu…" : "Lưu thay đổi"}
                 </Button>
-                {!showPreview &&
-                availableActions[detail.data.publicationStatus].includes(
-                  "publish",
-                ) ? (
+                {!showPreview && stateActions.includes("publish") ? (
                   <Button
                     disabled={
                       !detail.data.checklist.every((item) => item.passed) ||
@@ -796,6 +802,7 @@ export function PublicWorkEditor({
                     >
                       <SelectControl
                         className={fieldClass}
+                        disabled={managerMode}
                         {...register("categoryId")}
                       >
                         <option value="">Chọn danh mục</option>
@@ -831,7 +838,8 @@ export function PublicWorkEditor({
                           return (
                             <button
                               aria-pressed={active}
-                              className={`min-h-10 rounded-full border px-3 text-sm font-semibold transition ${active ? "border-primary-600 bg-primary-50 text-primary-700" : "border-neutral-200 text-neutral-600 hover:border-neutral-400"}`}
+                              className={`min-h-10 rounded-full border px-3 text-sm font-semibold transition ${active ? "border-primary-600 bg-primary-50 text-primary-700" : "border-neutral-200 text-neutral-600 hover:border-neutral-400"} ${managerMode ? "cursor-default" : ""}`}
+                              disabled={managerMode}
                               key={tag.id}
                               onClick={() =>
                                 setValue(
@@ -854,50 +862,67 @@ export function PublicWorkEditor({
                         </p>
                       ) : null}
                     </div>
-                    <div className="mt-4 flex flex-col gap-2 border-t border-neutral-100 pt-4 sm:flex-row">
-                      <label className="sr-only" htmlFor="new-public-work-tag">
-                        Tên thẻ mới
-                      </label>
-                      <input
-                        className={`${fieldClass} min-w-0 flex-1`}
-                        id="new-public-work-tag"
-                        maxLength={160}
-                        onKeyDown={(event) => {
-                          if (event.key !== "Enter") return;
-                          event.preventDefault();
-                          if (existingTag) selectTag(existingTag.id);
-                          else if (!createTag.isPending && tagSlug(newTagName))
-                            createTag.mutate(newTagName);
-                        }}
-                        onChange={(event) => setNewTagName(event.target.value)}
-                        placeholder="Ví dụ: Video thương hiệu"
-                        value={newTagName}
-                      />
-                      <Button
-                        disabled={
-                          createTag.isPending ||
-                          tagSlug(newTagName).length === 0
-                        }
-                        onClick={() =>
-                          existingTag
-                            ? selectTag(existingTag.id)
-                            : createTag.mutate(newTagName)
-                        }
-                        type="button"
-                      >
-                        <Plus className="size-4" />
-                        {createTag.isPending
-                          ? "Đang tạo…"
-                          : existingTag
-                            ? "Dùng thẻ có sẵn"
-                            : "Tạo thẻ"}
-                      </Button>
-                    </div>
-                    <p className="mt-2 text-xs leading-5 text-neutral-600">
-                      Nhập tên rồi nhấn Enter hoặc Tạo thẻ. Thẻ được chọn ngay;
-                      bấm Lưu thay đổi để gắn vào tác phẩm.
-                    </p>
-                    {createTag.isError ? (
+                    {!managerMode ? (
+                      <div className="mt-4 flex flex-col gap-2 border-t border-neutral-100 pt-4 sm:flex-row">
+                        <label
+                          className="sr-only"
+                          htmlFor="new-public-work-tag"
+                        >
+                          Tên thẻ mới
+                        </label>
+                        <input
+                          className={`${fieldClass} min-w-0 flex-1`}
+                          id="new-public-work-tag"
+                          maxLength={160}
+                          onKeyDown={(event) => {
+                            if (event.key !== "Enter") return;
+                            event.preventDefault();
+                            if (existingTag) selectTag(existingTag.id);
+                            else if (
+                              !createTag.isPending &&
+                              tagSlug(newTagName)
+                            )
+                              createTag.mutate(newTagName);
+                          }}
+                          onChange={(event) =>
+                            setNewTagName(event.target.value)
+                          }
+                          placeholder="Ví dụ: Video thương hiệu"
+                          value={newTagName}
+                        />
+                        <Button
+                          disabled={
+                            createTag.isPending ||
+                            tagSlug(newTagName).length === 0
+                          }
+                          onClick={() =>
+                            existingTag
+                              ? selectTag(existingTag.id)
+                              : createTag.mutate(newTagName)
+                          }
+                          type="button"
+                        >
+                          <Plus className="size-4" />
+                          {createTag.isPending
+                            ? "Đang tạo…"
+                            : existingTag
+                              ? "Dùng thẻ có sẵn"
+                              : "Tạo thẻ"}
+                        </Button>
+                      </div>
+                    ) : null}
+                    {!managerMode ? (
+                      <p className="mt-2 text-xs leading-5 text-neutral-600">
+                        Nhập tên rồi nhấn Enter hoặc Tạo thẻ. Thẻ được chọn
+                        ngay; bấm Lưu thay đổi để gắn vào tác phẩm.
+                      </p>
+                    ) : (
+                      <p className="mt-2 text-xs leading-5 text-neutral-600">
+                        DataManager có thể biên tập nội dung và tư liệu trình
+                        bày; danh mục và thẻ do Admin quản lý.
+                      </p>
+                    )}
+                    {!managerMode && createTag.isError ? (
                       <p className="mt-2 text-sm text-red-700" role="alert">
                         {createTag.error instanceof ApiError &&
                         createTag.error.status === 403
@@ -961,9 +986,7 @@ export function PublicWorkEditor({
                       Phiên bản {detail.data.version}
                     </p>
                     <div className="mt-4 grid gap-2">
-                      {availableActions[detail.data.publicationStatus].includes(
-                        "hide",
-                      ) ? (
+                      {stateActions.includes("hide") ? (
                         <Button
                           disabled={isDirty || transition.isPending}
                           onClick={() => setPendingAction("hide")}
@@ -972,9 +995,7 @@ export function PublicWorkEditor({
                           <Eye className="size-4" /> Ẩn tác phẩm
                         </Button>
                       ) : null}
-                      {availableActions[detail.data.publicationStatus].includes(
-                        "suspend",
-                      ) ? (
+                      {!managerMode && stateActions.includes("suspend") ? (
                         <Button
                           disabled={isDirty || transition.isPending}
                           onClick={() => setPendingAction("suspend")}
@@ -983,9 +1004,7 @@ export function PublicWorkEditor({
                           <ShieldAlert className="size-4" /> Tạm ngưng
                         </Button>
                       ) : null}
-                      {availableActions[detail.data.publicationStatus].includes(
-                        "archive",
-                      ) ? (
+                      {stateActions.includes("archive") ? (
                         <Button
                           disabled={isDirty || transition.isPending}
                           onClick={() => setPendingAction("archive")}
@@ -995,7 +1014,8 @@ export function PublicWorkEditor({
                         </Button>
                       ) : null}
                     </div>
-                    {detail.data.publicationStatus === "PUBLISHED" &&
+                    {!managerMode &&
+                    detail.data.publicationStatus === "PUBLISHED" &&
                     detail.data.visibility === "PUBLIC" ? (
                       <div className="mt-5 border-t border-neutral-200 pt-5">
                         <p className="flex items-center gap-2 text-sm font-bold text-neutral-950">

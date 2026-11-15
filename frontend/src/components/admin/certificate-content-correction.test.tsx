@@ -86,7 +86,7 @@ it("submits edited content for a new version while previewing removals", async (
   ).toBeNull();
   expect(
     screen
-      .getByRole("button", { name: "Lưu và phát hành bản điều chỉnh" })
+      .getByRole("button", { name: "Gửi đề xuất điều chỉnh" })
       .hasAttribute("disabled"),
   ).toBe(true);
   fireEvent.change(screen.getByLabelText("Danh mục"), {
@@ -96,7 +96,7 @@ it("submits edited content for a new version while previewing removals", async (
     screen.getByLabelText("Xem trước nội dung phiên bản mới").textContent,
   ).not.toContain("Chưa công bố");
   fireEvent.click(
-    screen.getByRole("button", { name: "Lưu và phát hành bản điều chỉnh" }),
+    screen.getByRole("button", { name: "Gửi đề xuất điều chỉnh" }),
   );
   await waitFor(() =>
     expect(adminCertificateApi.requestContentCorrection).toHaveBeenCalledWith(
@@ -113,5 +113,7 @@ it("submits edited content for a new version while previewing removals", async (
       },
     ),
   );
-  expect(await screen.findByText(/Đã phát hành phiên bản mới/)).toBeDefined();
+  expect(
+    await screen.findByText(/Đã gửi đề xuất và đang chờ Admin duyệt/),
+  ).toBeDefined();
 });

@@ -189,8 +189,8 @@ export function CertificateContentCorrection({
           type="submit"
         >
           {correction.isPending
-            ? "Đang lưu…"
-            : "Lưu và phát hành bản điều chỉnh"}
+            ? "Đang gửi đề xuất…"
+            : "Gửi đề xuất điều chỉnh"}
         </button>
         {correction.isError ? (
           <p className="text-sm text-red-700" role="alert">
@@ -200,8 +200,8 @@ export function CertificateContentCorrection({
         ) : null}
         {submitted ? (
           <p className="text-sm text-emerald-800" role="status">
-            Đã phát hành phiên bản mới. Trang xác minh dùng nội dung vừa lưu;
-            PDF mới đang được tạo và sẽ sẵn sàng để tải sau khi xử lý xong.
+            Đã gửi đề xuất và đang chờ Admin duyệt. Nội dung hiện hành, trang
+            xác minh và PDF chưa thay đổi.
           </p>
         ) : null}
       </form>

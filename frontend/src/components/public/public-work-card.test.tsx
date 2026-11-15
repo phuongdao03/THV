@@ -40,3 +40,15 @@ it("shows cover loading feedback until the poster has loaded", async () => {
   );
   Reflect.deleteProperty(HTMLImageElement.prototype, "decode");
 });
+
+it("marks historical records in the public catalog", () => {
+  render(
+    <PublicWorkCard
+      work={{ ...work, isHistorical: true, historicalYear: 2018 }}
+      position={1}
+      source="list"
+    />,
+  );
+
+  expect(screen.getByText("Hồ sơ lịch sử · 2018")).toBeDefined();
+});

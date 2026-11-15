@@ -14,7 +14,14 @@ vi.mock("@/lib/api/client", () => ({
       .fn()
       .mockResolvedValue({ showCertificate: true, publicWorkVersion: 3 }),
   },
-  publicWorkAdminApi: { categories: vi.fn().mockResolvedValue([]) },
+  certificateArchiveApi: { list: vi.fn().mockResolvedValue([]) },
+  publicWorkAdminApi: {
+    categories: vi.fn().mockResolvedValue([]),
+    list: vi.fn().mockResolvedValue({
+      data: [],
+      meta: { page: 1, pageSize: 100, total: 0 },
+    }),
+  },
 }));
 const row: AdminCertificate = {
   certificate: {

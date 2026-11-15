@@ -64,6 +64,7 @@ beforeEach(() => {
   vi.mocked(publicApi.categories).mockResolvedValue([
     {
       id: "e02bb168-d32a-4ce5-8e2a-bfeef3788bb3",
+      parentId: null,
       code: "DIGITAL_ART",
       name: "Nghệ thuật số",
       slug: "nghe-thuat-so",

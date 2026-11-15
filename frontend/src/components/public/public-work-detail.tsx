@@ -139,6 +139,12 @@ export function PublicWorkPresentation({
               <p className="text-xs font-bold tracking-[0.2em] text-gold-300 uppercase">
                 {detail.categoryName}
               </p>
+              {detail.isHistorical ? (
+                <p className="mt-3 inline-flex rounded-full border border-gold-300/30 bg-gold-300/10 px-3 py-1.5 text-xs font-bold text-gold-200">
+                  Hồ sơ đề cử lịch sử
+                  {detail.historicalYear ? ` · ${detail.historicalYear}` : ""}
+                </p>
+              ) : null}
               <h1 className="mt-3 max-w-5xl text-3xl leading-tight font-bold break-words tracking-[-0.035em] text-white @min-[40rem]/work:text-5xl @min-[64rem]/work:text-6xl">
                 {detail.title}
               </h1>
@@ -231,9 +237,16 @@ export function PublicWorkPresentation({
             {!preview ? <PublicWorkShareControls detail={detail} /> : null}
           </div>
           <aside className="h-fit min-w-0 divide-y divide-white/10 border-y border-white/10">
-            <CertificatePanel certificate={detail.certificate} />
+            <CertificatePanel
+              certificate={detail.certificate}
+              isHistorical={detail.isHistorical ?? false}
+            />
+            {detail.certificateArchives?.map((archive) => (
+              <CertificateArchivePanel archive={archive} key={archive.id} />
+            ))}
             <ProofPanel
               proof={detail.proof}
+              isHistorical={detail.isHistorical ?? false}
               verification={verification.data}
               verificationPending={
                 verification.isPending &&
@@ -409,8 +422,10 @@ function PublicGallery({
 
 function CertificatePanel({
   certificate,
+  isHistorical,
 }: {
   certificate: PublicWorkDetail["certificate"];
+  isHistorical: boolean;
 }) {
   return (
     <section className="py-6">
@@ -438,23 +453,125 @@ function CertificatePanel({
         </>
       ) : (
         <p className="mt-3 text-sm leading-6 text-slate-500">
-          Chưa có chứng nhận được phép công bố.
+          {isHistorical
+            ? "Đây là hồ sơ lưu trữ lịch sử, không phát hành bằng xác lập mới."
+            : "Chưa có chứng nhận được phép công bố."}
         </p>
       )}
     </section>
   );
 }
 
+function CertificateArchivePanel({
+  archive,
+}: {
+  archive: NonNullable<PublicWorkDetail["certificateArchives"]>[number];
+}) {
+  return (
+    <section className="space-y-4 border-t border-white/10 py-6">
+      <div>
+        <p className="text-xs font-bold tracking-[0.16em] text-gold-300 uppercase">
+          Tư liệu lưu trữ
+        </p>
+        <h2 className="mt-2 text-lg font-bold text-white">
+          Bằng xác lập lưu trữ
+        </h2>
+        <p className="mt-2 text-sm leading-6 text-slate-400">
+          Bản scan tư liệu lịch sử. Bản này không có xác thực blockchain.
+        </p>
+      </div>
+      <dl className="space-y-3 text-sm">
+        <DataRow label="Tên bằng" value={archive.title} />
+        <DataRow
+          label="Danh hiệu"
+          value={archive.awardName ?? "Chưa ghi nhận"}
+        />
+        <DataRow
+          label="Số bằng"
+          value={archive.certificateNumber ?? "Chưa ghi nhận"}
+          mono
+        />
+        <DataRow
+          label="Người được ghi nhận"
+          value={archive.recipientDisplayName ?? "Chưa ghi nhận"}
+        />
+        <DataRow
+          label="Đơn vị cấp"
+          value={archive.issuerName ?? "Chưa ghi nhận"}
+        />
+        <DataRow
+          label="Hạng / loại"
+          value={archive.awardClass ?? "Chưa ghi nhận"}
+        />
+        <DataRow
+          label="Ngày cấp"
+          value={
+            archive.issuedAt
+              ? new Intl.DateTimeFormat("vi-VN", { dateStyle: "long" }).format(
+                  new Date(archive.issuedAt),
+                )
+              : (archive.issuedYear?.toString() ?? "Chưa ghi nhận")
+          }
+        />
+      </dl>
+      {archive.publicNote ? (
+        <p className="whitespace-pre-wrap text-sm leading-6 text-slate-300">
+          {archive.publicNote}
+        </p>
+      ) : null}
+      <div className="space-y-4">
+        {archive.pages.map((page, index) => (
+          <figure
+            className="overflow-hidden rounded-xl border border-white/10 bg-black/20"
+            key={page.id}
+          >
+            <a href={page.url} rel="noreferrer" target="_blank">
+              <Image
+                alt={page.altText}
+                className="h-auto max-h-[34rem] w-full object-contain"
+                height={page.height ?? 1200}
+                src={page.url}
+                unoptimized
+                width={page.width ?? 900}
+              />
+            </a>
+            {page.caption ? (
+              <figcaption className="px-3 py-2 text-xs text-slate-400">
+                Trang {index + 1}: {page.caption}
+              </figcaption>
+            ) : (
+              <figcaption className="sr-only">
+                Trang scan bằng xác lập {index + 1}
+              </figcaption>
+            )}
+          </figure>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function ProofPanel({
   proof,
+  isHistorical,
   verification,
   verificationPending,
 }: {
   proof: PublicWorkDetail["proof"];
+  isHistorical: boolean;
   verification?: Verification;
   verificationPending: boolean;
 }) {
-  const state = verificationState(proof, verification, verificationPending);
+  const state =
+    isHistorical && !proof
+      ? {
+          label: "Hồ sơ lưu trữ lịch sử",
+          description:
+            "Nội dung này được xác minh theo nguồn tư liệu lịch sử; không tạo giao dịch blockchain mới.",
+          color: "text-slate-400",
+          icon: <CircleHelp className="size-5 text-slate-500" />,
+        }
+      : verificationState(proof, verification, verificationPending);
   return (
     <section className="py-6">
       <div className="flex items-start justify-between gap-3">

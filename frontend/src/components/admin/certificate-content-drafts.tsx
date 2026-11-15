@@ -7,7 +7,11 @@ import { useState } from "react";
 import { adminCertificateApi, publicWorkAdminApi } from "@/lib/api/client";
 import type { CertificateContent } from "@/lib/api/types";
 
-export function CertificateContentDrafts() {
+export function CertificateContentDrafts({
+  canConfirm = true,
+}: {
+  canConfirm?: boolean;
+} = {}) {
   const queryClient = useQueryClient();
   const drafts = useQuery({
     queryKey: ["admin", "certificate-content-drafts"],
@@ -66,6 +70,9 @@ export function CertificateContentDrafts() {
       <p className="mt-2 text-sm leading-6 text-[#6d5949]">
         Chỉnh nội dung sẽ in trên PDF và hiển thị trên trang xác minh. Sau khi
         phát hành, bản ghi đã xác thực không thể sửa trực tiếp.
+        {!canConfirm
+          ? " DataManager lưu bản nháp; Admin xác nhận phát hành."
+          : ""}
       </p>
       {drafts.isPending ? (
         <p className="mt-5 flex items-center gap-2 text-sm" role="status">
@@ -204,22 +211,24 @@ export function CertificateContentDrafts() {
                   >
                     {save.isPending ? "Đang lưu…" : "Lưu nội dung"}
                   </button>
-                  <button
-                    type="button"
-                    disabled={
-                      dirty ||
-                      !content.title.trim() ||
-                      !categorySelected ||
-                      confirm.isPending ||
-                      save.isPending
-                    }
-                    onClick={() => confirm.mutate(selected.dossierId)}
-                    className="min-h-11 rounded-lg bg-[#720b17] px-4 font-bold text-white disabled:opacity-50"
-                  >
-                    {confirm.isPending
-                      ? "Đang xác nhận…"
-                      : "Xác nhận phát hành"}
-                  </button>
+                  {canConfirm ? (
+                    <button
+                      type="button"
+                      disabled={
+                        dirty ||
+                        !content.title.trim() ||
+                        !categorySelected ||
+                        confirm.isPending ||
+                        save.isPending
+                      }
+                      onClick={() => confirm.mutate(selected.dossierId)}
+                      className="min-h-11 rounded-lg bg-[#720b17] px-4 font-bold text-white disabled:opacity-50"
+                    >
+                      {confirm.isPending
+                        ? "Đang xác nhận…"
+                        : "Xác nhận phát hành"}
+                    </button>
+                  ) : null}
                 </div>
                 {save.isError || confirm.isError ? (
                   <p role="alert" className="text-sm text-red-700">

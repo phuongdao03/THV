@@ -129,6 +129,12 @@ export function PublicWorkCard({
           <span className="catalog-work-card__category">
             {work.categoryName}
           </span>
+          {work.isHistorical ? (
+            <span className="absolute left-3 top-3 rounded-full border border-white/20 bg-black/70 px-3 py-1.5 text-xs font-bold text-white backdrop-blur-sm">
+              Hồ sơ lịch sử
+              {work.historicalYear ? ` · ${work.historicalYear}` : ""}
+            </span>
+          ) : null}
         </div>
 
         <div className="catalog-work-card__body">

@@ -9,7 +9,11 @@ import { adminCertificateApi } from "@/lib/api/client";
 
 const pageSize = 10;
 
-export function CertificateCorrectionList() {
+export function CertificateCorrectionList({
+  onSelectCertificateId,
+}: {
+  onSelectCertificateId?: (certificateId: string) => void;
+} = {}) {
   const [searchDraft, setSearchDraft] = useState("");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
@@ -126,7 +130,17 @@ export function CertificateCorrectionList() {
                     </p>
                   ) : null}
                 </div>
-                {canCorrect ? (
+                {canCorrect && onSelectCertificateId ? (
+                  <button
+                    aria-label={"Sửa nội dung " + certificate.certificateNumber}
+                    className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-lg border border-primary-700 px-4 text-sm font-bold text-primary-700 hover:bg-primary-50"
+                    onClick={() => onSelectCertificateId(certificate.id)}
+                    type="button"
+                  >
+                    Sửa nội dung{" "}
+                    <ArrowRight aria-hidden="true" className="size-4" />
+                  </button>
+                ) : canCorrect ? (
                   <Link
                     aria-label={`Sửa nội dung ${certificate.certificateNumber}`}
                     className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-lg border border-primary-700 px-4 text-sm font-bold text-primary-700 hover:bg-primary-50"

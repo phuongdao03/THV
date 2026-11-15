@@ -13,6 +13,7 @@ import { type FormEvent, useState } from "react";
 
 import { adminCertificateApi } from "@/lib/api/client";
 import { CertificateContentDrafts } from "@/components/admin/certificate-content-drafts";
+import { CertificateArchiveWorkspace } from "@/components/certificates/certificate-archive-workspace";
 import type { CertificateStatus, PublicationStatus } from "@/lib/api/types";
 import { displayCnsDossierCode } from "@/lib/brand/identifiers";
 
@@ -94,6 +95,7 @@ export function AdminCertificateManager() {
   return (
     <main className="mx-auto max-w-7xl space-y-6 pb-8">
       <CertificateContentDrafts />
+      <CertificateArchiveWorkspace canRestore />
       <header className="flex flex-col gap-5 border-b border-neutral-200 pb-6 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] text-primary-700">
