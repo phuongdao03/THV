@@ -10,7 +10,7 @@ export default async function DataManagerPage({
 }) {
   const { area } = await searchParams;
   const initialTab: "historical-records" | "public-content" =
-    area === "historical-records" ? area : "public-content";
+    area === "public-content" ? area : "historical-records";
 
   return (
     <div className="mx-auto max-w-7xl space-y-7 pb-8">

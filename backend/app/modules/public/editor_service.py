@@ -24,6 +24,7 @@ from app.modules.public.detail_service import (
     PublicProofSummary,
 )
 from app.modules.public.errors import (
+    PublicWorkDraftDeletionConflictError,
     PublicWorkForbiddenError,
     PublicWorkMetadataValidationError,
     PublicWorkNotFoundError,
@@ -336,6 +337,69 @@ class PublicWorkEditorService:
         except IntegrityError as error:
             await self._session.rollback()
             raise PublicWorkSlugConflictError() from error
+
+    async def delete_draft(
+        self,
+        principal: AuthPrincipal,
+        work_id: UUID,
+        *,
+        expected_version: int,
+        request_id: str,
+    ) -> None:
+        self._require_editor(principal)
+        async with self._session.begin():
+            work = await self._repository.get_by_id(work_id, for_update=True)
+            if work is None:
+                raise PublicWorkNotFoundError()
+            if work.version != expected_version:
+                raise PublicWorkVersionConflictError(current_version=work.version)
+            if work.publication_status is not PublicationStatus.DRAFT:
+                raise PublicWorkDraftDeletionConflictError()
+            if not await self._repository.claim_version(work, expected_version):
+                await self._session.refresh(work, attribute_names=["version"])
+                raise PublicWorkVersionConflictError(current_version=work.version)
+
+            deleted_at = datetime.now(UTC)
+            work.deleted_at = deleted_at
+            self._audit.record(
+                actor_user_id=principal.user_id,
+                action="public_work.draft_deleted",
+                resource_type="public_work",
+                resource_id=str(work.id),
+                before={
+                    "slug": work.slug,
+                    "publication_status": work.publication_status.value,
+                    "version": expected_version,
+                },
+                after={
+                    "slug": work.slug,
+                    "publication_status": work.publication_status.value,
+                    "version": work.version,
+                    "deleted_at": deleted_at.isoformat(),
+                },
+                request_id=request_id,
+            )
+            event_type = "public_work.draft_deleted"
+            encrypted = self._payload_cipher.encrypt(
+                {
+                    "public_work_id": str(work.id),
+                    "slug": work.slug,
+                    "version": str(work.version),
+                    "invalidate_cache": "true",
+                },
+                event_type=event_type,
+                aggregate_id=work.id,
+            )
+            self._outbox.add(
+                OutboxEvent(
+                    event_type=event_type,
+                    aggregate_type="public_work",
+                    aggregate_id=work.id,
+                    payload_ciphertext=encrypted.ciphertext,
+                    payload_nonce=encrypted.nonce,
+                    key_id=encrypted.key_id,
+                )
+            )
 
     async def preview(
         self, principal: AuthPrincipal, work_id: UUID

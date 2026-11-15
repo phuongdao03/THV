@@ -1,7 +1,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Query, Request, status
+from fastapi import APIRouter, Query, Request, Response, status
 
 from app.core.schemas import (
     ListResponseMeta,
@@ -616,6 +616,23 @@ async def update_public_work_editor(
         data=_editor_data(view),
         meta=ResponseMeta(request_id=request.state.request_id),
     )
+
+
+@router.delete("/{work_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_public_work_draft(
+    work_id: UUID,
+    payload: PublicationVersionRequest,
+    request: Request,
+    principal: CsrfProtectedPrincipalDependency,
+    service: PublicWorkEditorServiceDependency,
+) -> Response:
+    await service.delete_draft(
+        principal,
+        work_id,
+        expected_version=payload.expected_version,
+        request_id=request.state.request_id,
+    )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get(

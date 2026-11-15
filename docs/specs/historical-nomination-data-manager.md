@@ -11,15 +11,15 @@ award records with submitter details and source documents, then prepare public
 content in the shared publication editor. Both Admin and DATA_MANAGER can edit
 public presentation for LEGACY and CURRENT works. DATA_MANAGER also edits
 certificate content and manages archival certificate scans. Historical-record
-completion and publication do not require an Admin review step; Admin retains all
-other administration.
+completion and publication do not require an Admin review step; Admin retains
+all other administration.
 
 ## Fixed account provisioning
 
 - Provide one operator-run bootstrap for the fixed username `data_manager`.
-- The operator supplies an account email because the existing user model requires
-  it, and sets the password through a hidden prompt. Do not send verification or
-  invitation email; store only an Argon2 password hash.
+- The operator supplies an account email because the existing user model
+  requires it, and sets the password through a hidden prompt. Do not send
+  verification or invitation email; store only an Argon2 password hash.
 - Treat the operator's explicit provisioning as email verification for this
   internal account. Assign only `DATA_MANAGER`; do not promote an existing user.
 - Refuse to overwrite an existing account or reserved username. Require an
@@ -87,7 +87,7 @@ other administration.
 | Issue, reissue, revoke, or manage blockchain proof                                 |                   Yes |           No |
 | Create/edit LEGACY nomination records, submitter, evidence, and historical awards  |                   Yes |          Yes |
 | Publish/hide historical public content without source-review status gating         |                   Yes |          Yes |
-| Submit legacy records for review                                                    |                    No |           No |
+| Submit legacy records for review                                                   |                    No |           No |
 | Edit CURRENT dossier source data, payments, or digital certificate state           |                   Yes |           No |
 | Bulk import historical records                                                     |                   Yes |           No |
 | Manage categories, tags, posts, pages, banners, scheduling, and featured placement |                   Yes |           No |
@@ -95,12 +95,11 @@ other administration.
 
 DATA_MANAGER receives the narrow source-data capabilities
 `historical.records.read`, `historical.records.manage`,
-`historical.documents.manage`, plus
-`public_content.works.manage`, `certificate_content.edit`, and
-`certificate_archives.manage`. Do not grant `historical.records.submit`,
-`historical.import.manage`, review capabilities, `historical.records.publish`,
-or broad `public_content.manage`; client-side button visibility is not an
-authorization control.
+`historical.documents.manage`, plus `public_content.works.manage`,
+`certificate_content.edit`, and `certificate_archives.manage`. Do not grant
+`historical.records.submit`, `historical.import.manage`, review capabilities,
+`historical.records.publish`, or broad `public_content.manage`; client-side
+button visibility is not an authorization control.
 
 ## Certificate archive behavior
 
@@ -156,6 +155,9 @@ authorization control.
   người đề cử**, private files, historical award metadata/scans, and edit
   history. The manager can save these records directly without an Admin review
   step.
+- Open the workspace on the historical-record overview. Put the old-record
+  intake action and its three steps first; each other work area starts with a
+  short explanation of its purpose and next actions.
 - Keep **Nội dung công bố** as the separate, publication-ready editor and
   preview. Admin and DATA_MANAGER can publish an active LEGACY record once its
   public content and media meet publication requirements. Private source
@@ -190,6 +192,11 @@ authorization control.
 - Publish requires confirmation and a passing checklist. Hide removes an item
   from public discovery; archive is recoverable. Admin alone restores archived
   items and manages digital certificate corrections.
+- Show **Xóa bản nháp** only for unpublished `DRAFT` public works. Deletion
+  soft-deletes the public presentation record, records the actor/version in the
+  audit log, and invalidates public caches. It does not delete the source
+  nomination, submitter, evidence files, certificate, or scan archive. Published
+  and other non-draft works continue to use hide/archive transitions.
 - Responsive layout collapses lists and side checklists into accessible sections
   on narrow screens; keep upload, page ordering, and previews usable from 320px
   upward.
@@ -277,6 +284,9 @@ authorization control.
 - Admin and DATA_MANAGER can edit, preview, publish, and hide public content for
   an active historical record. Readiness depends on public content, category,
   and selected public media, not a verification status.
+- DATA_MANAGER lands on a clear historical-record intake overview and receives
+  task guidance on all four work areas. Admin and DATA_MANAGER can delete only
+  unpublished public-work drafts; source records and their evidence remain.
 - A scan-only archive can be published without a PDF, blockchain transaction,
   synthetic certificate number, or ACTIVE digital status.
 - Public visitors can open the published archive viewer and distinguish a
@@ -307,8 +317,12 @@ authorization control.
   revocation stay Admin-only.
 - “Thêm tác phẩm” creates public content from an existing LEGACY or CURRENT
   source; source-less public work is not introduced.
-- “Xóa” means recoverable hide/archive. A scan may be publicly displayed only
-  after rights/privacy review; redacted scans can be used when needed.
+- Draft deletion hides only the unpublished public presentation through
+  `deleted_at`; source facts and evidence remain stored. Published works are
+  hidden or archived through their existing state transitions. A scan may be
+  publicly displayed only after rights/privacy review; redacted scans can be
+  used when needed.
 - Old LEGACY nomination records may be created with incomplete historical facts.
   Unknown provenance stays blank; the record can be completed and published
-  without an Admin review gate once its public-facing fields and media are ready.
+  without an Admin review gate once its public-facing fields and media are
+  ready.

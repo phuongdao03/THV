@@ -6,6 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.db.base import Base
+from app.db.outbox import OutboxEvent
 from app.modules.audit.models import AuditLog
 from app.modules.audit.service import AuditService
 from app.modules.dossiers.models import Dossier, DossierVersion
@@ -15,12 +16,15 @@ from app.modules.public.editor_service import (
     PublicWorkEditorService,
 )
 from app.modules.public.errors import (
+    PublicWorkDraftDeletionConflictError,
     PublicWorkForbiddenError,
     PublicWorkMetadataValidationError,
+    PublicWorkNotFoundError,
     PublicWorkVersionConflictError,
 )
 from app.modules.public.models import (
     DerivativeStatus,
+    PublicationStatus,
     PublicMediaKind,
     PublicWork,
     PublicWorkMedia,
@@ -202,6 +206,55 @@ def test_editor_permissions_validation_version_slug_history_and_preview(
             assert thumbnail.poster_url is not None
             assert preview.title == "Approved work — curated"
             assert await session.scalar(select(func.count()).select_from(AuditLog)) == 1
+            await session.rollback()
+
+            with pytest.raises(PublicWorkForbiddenError):
+                await service.delete_draft(
+                    applicant,
+                    work_id,
+                    expected_version=1,
+                    request_id="unauthorized-draft-delete",
+                )
+
+            async with session.begin():
+                work = await session.get(PublicWork, work_id)
+                assert work is not None
+                work.publication_status = PublicationStatus.PUBLISHED
+            manager = _principal(owner_id, "DATA_MANAGER")
+            with pytest.raises(PublicWorkDraftDeletionConflictError):
+                await service.delete_draft(
+                    manager,
+                    work_id,
+                    expected_version=2,
+                    request_id="published-work-delete",
+                )
+
+            async with session.begin():
+                work = await session.get(PublicWork, work_id)
+                assert work is not None
+                work.publication_status = PublicationStatus.DRAFT
+            await service.delete_draft(
+                manager,
+                work_id,
+                expected_version=2,
+                request_id="historical-draft-delete",
+            )
+            deleted_work = await session.get(PublicWork, work_id)
+            assert deleted_work is not None and deleted_work.deleted_at is not None
+            assert await session.get(Dossier, deleted_work.dossier_id) is not None
+            await session.rollback()
+            with pytest.raises(PublicWorkNotFoundError):
+                await service.get(admin, work_id)
+            assert (
+                await session.scalar(
+                    select(func.count())
+                    .select_from(OutboxEvent)
+                    .where(OutboxEvent.event_type == "public_work.draft_deleted")
+                )
+                == 1
+            )
+            audit_actions = await session.scalars(select(AuditLog.action))
+            assert "public_work.draft_deleted" in set(audit_actions)
         await engine.dispose()
 
     asyncio.run(exercise())

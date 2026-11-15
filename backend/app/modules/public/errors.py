@@ -31,6 +31,15 @@ class PublicWorkNotPublishableError(DomainError):
         )
 
 
+class PublicWorkDraftDeletionConflictError(DomainError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="PUBLIC_WORK_DRAFT_DELETE_CONFLICT",
+            message="Only an unpublished draft can be deleted.",
+            status_code=409,
+        )
+
+
 class PublicWorkVersionConflictError(DomainError):
     def __init__(self, *, current_version: int) -> None:
         super().__init__(

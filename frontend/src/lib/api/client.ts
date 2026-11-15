@@ -4716,6 +4716,12 @@ export const publicWorkAdminApi = {
       body: JSON.stringify(input),
     });
   },
+  deleteDraft(workId: string, expectedVersion: number) {
+    return request<void>(`/admin/public-works/${workId}`, {
+      method: "DELETE",
+      body: JSON.stringify({ expectedVersion }),
+    });
+  },
   preview(workId: string) {
     return request<PublicWorkPreview>(`/admin/public-works/${workId}/preview`);
   },

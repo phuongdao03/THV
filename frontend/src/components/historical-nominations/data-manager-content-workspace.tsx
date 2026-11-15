@@ -23,8 +23,54 @@ const tabs = [
   ["archival-certificates", "Bằng scan công khai", Archive],
 ] as const;
 
+const guides: Record<
+  WorkspaceTab,
+  { title: string; description: string; steps: readonly string[] }
+> = {
+  "historical-records": {
+    title: "Bổ sung hồ sơ cũ",
+    description:
+      "Tạo hồ sơ nguồn trước, sau đó thêm người gửi, tài liệu và bằng scan. Nội dung công khai được biên tập riêng khi sẵn sàng.",
+    steps: [
+      "Tạo hồ sơ nguồn",
+      "Bổ sung người gửi và tài liệu",
+      "Biên tập, xem trước rồi công bố riêng",
+    ],
+  },
+  "public-content": {
+    title: "Biên tập nội dung công khai",
+    description:
+      "Chọn tác phẩm để sửa phần trình bày, kiểm tra bản xem trước và xuất bản. Thông tin hồ sơ gốc, người gửi và tài liệu nằm ở Hồ sơ lịch sử.",
+    steps: [
+      "Chọn tác phẩm",
+      "Sửa tiêu đề, mô tả và tư liệu trình bày",
+      "Xem trước rồi xuất bản khi đã sẵn sàng",
+    ],
+  },
+  "digital-certificates": {
+    title: "Quản lý nội dung bằng số",
+    description:
+      "Chỉnh thông tin lưu trữ trước khi phát hành; với bằng đã phát hành, gửi đề xuất có lý do để Admin xem xét. Trạng thái blockchain được tra cứu trên website.",
+    steps: [
+      "Chọn nội dung cần cập nhật",
+      "Kiểm tra thông tin sẽ in trên bằng",
+      "Gửi đề xuất nếu bằng đã phát hành",
+    ],
+  },
+  "archival-certificates": {
+    title: "Bổ sung bằng xác lập scan cũ",
+    description:
+      "Lưu thông tin đọc được trên bằng cũ, tải ảnh scan theo từng trang và xem trước trang công khai. Không cần blockchain hay bằng số PDF.",
+    steps: [
+      "Chọn tác phẩm liên quan",
+      "Điền thông tin lưu trữ còn biết",
+      "Tải ảnh scan và xem trước trước khi công khai",
+    ],
+  },
+};
+
 export function DataManagerContentWorkspace({
-  initialTab = "public-content",
+  initialTab = "historical-records",
 }: {
   initialTab?: "historical-records" | "public-content";
 }) {
@@ -33,10 +79,15 @@ export function DataManagerContentWorkspace({
   function selectTab(nextTab: WorkspaceTab) {
     setTab(nextTab);
     const url = new URL(window.location.href);
-    if (nextTab === "historical-records") url.searchParams.set("area", nextTab);
-    else url.searchParams.delete("area");
+    if (nextTab === "historical-records" || nextTab === "public-content") {
+      url.searchParams.set("area", nextTab);
+    } else {
+      url.searchParams.delete("area");
+    }
     window.history.replaceState({}, "", url);
   }
+
+  const GuideIcon = tabs.find(([id]) => id === tab)?.[2] ?? BookOpen;
 
   return (
     <div className="space-y-5">
@@ -59,12 +110,50 @@ export function DataManagerContentWorkspace({
         ))}
       </nav>
 
+      <section
+        aria-labelledby="data-manager-task-guide-title"
+        className="rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-surface)] p-4 sm:p-5"
+      >
+        <div className="flex items-start gap-3">
+          <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-primary-50 text-primary-700">
+            <GuideIcon aria-hidden="true" className="size-5" />
+          </span>
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.14em] text-primary-700">
+              Bắt đầu tại đây
+            </p>
+            <h2
+              className="mt-1 text-lg font-bold text-[var(--theme-text)]"
+              id="data-manager-task-guide-title"
+            >
+              {guides[tab].title}
+            </h2>
+            <p className="mt-1 max-w-4xl text-sm leading-6 text-[var(--theme-muted)]">
+              {guides[tab].description}
+            </p>
+          </div>
+        </div>
+        <ol className="mt-4 grid gap-2 sm:grid-cols-3">
+          {guides[tab].steps.map((step, index) => (
+            <li
+              className="flex items-start gap-2 rounded-xl bg-primary-50/70 px-3 py-2 text-sm leading-5 text-[var(--theme-text)]"
+              key={step}
+            >
+              <span className="grid size-5 shrink-0 place-items-center rounded-full bg-white text-xs font-bold text-primary-700">
+                {index + 1}
+              </span>
+              {step}
+            </li>
+          ))}
+        </ol>
+      </section>
+
       {tab === "historical-records" ? (
         <div className="space-y-4">
           <p className="max-w-3xl text-sm leading-6 text-[var(--theme-muted)]">
-            Bổ sung và quản lý hồ sơ đề cử cũ, người gửi, tài liệu chứng minh,
-            bằng xác lập và bản scan. Lưu hồ sơ trực tiếp; nội dung công khai
-            được biên tập và xuất bản riêng khi sẵn sàng.
+            Hồ sơ lịch sử lưu người gửi, tài liệu chứng minh và thông tin bằng
+            scan. Lưu hồ sơ tại đây; chỉ phần trình bày được biên tập và xuất
+            bản ở tab Nội dung công bố.
           </p>
           <HistoricalDataManagerWorkspace />
         </div>

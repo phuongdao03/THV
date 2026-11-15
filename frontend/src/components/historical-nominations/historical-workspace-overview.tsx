@@ -30,10 +30,10 @@ export function HistoricalWorkspaceOverview({
 
   return (
     <section className="space-y-6" aria-labelledby="historical-overview-title">
-      <div className="flex flex-wrap items-end justify-between gap-4">
+      <div>
         <div>
           <p className="text-sm text-[var(--theme-muted)]">
-            Không gian làm việc
+            Bắt đầu từ hồ sơ nguồn
           </p>
           <h2
             className="mt-1 text-2xl font-semibold"
@@ -42,17 +42,29 @@ export function HistoricalWorkspaceOverview({
             Tổng quan hồ sơ lịch sử
           </h2>
           <p className="mt-2 max-w-2xl text-sm text-[var(--theme-muted)]">
-            Theo dõi hồ sơ đang bổ sung và nội dung đã công khai.
+            Ghi nhận hồ sơ cũ trước; người gửi, tài liệu và bằng scan được bổ
+            sung bên trong hồ sơ. Việc công bố nội dung là một bước riêng.
           </p>
         </div>
+      </div>
+
+      <section className="grid gap-4 rounded-2xl border border-primary-200 bg-primary-50/60 p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:p-5">
+        <div>
+          <h3 className="font-bold">Quy trình bổ sung hồ sơ cũ</h3>
+          <ol className="mt-3 grid gap-2 text-sm leading-5 text-[var(--theme-muted)] sm:grid-cols-3">
+            <li>1. Tạo hồ sơ nguồn</li>
+            <li>2. Thêm người gửi và tài liệu</li>
+            <li>3. Biên tập nội dung công khai riêng</li>
+          </ol>
+        </div>
         <button
-          className="inline-flex min-h-11 items-center gap-2 rounded-md bg-primary-700 px-4 text-sm font-semibold text-white hover:bg-primary-800"
+          className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-primary-700 px-5 text-sm font-bold text-white shadow-sm transition hover:bg-primary-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-700"
           onClick={onCreateRecord}
           type="button"
         >
-          <FilePlus2 aria-hidden className="h-4 w-4" /> Tạo hồ sơ
+          <FilePlus2 aria-hidden className="h-4 w-4" /> Bắt đầu bổ sung hồ sơ
         </button>
-      </div>
+      </section>
 
       {summary.isLoading ? (
         <div aria-busy="true" className="grid gap-3 sm:grid-cols-3">

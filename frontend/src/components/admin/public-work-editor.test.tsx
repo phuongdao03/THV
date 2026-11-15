@@ -30,6 +30,7 @@ vi.mock("@/lib/api/client", () => {
       categories: vi.fn(),
       configureVideo: vi.fn(),
       createTag: vi.fn(),
+      deleteDraft: vi.fn(),
       feature: vi.fn(),
       get: vi.fn(),
       list: vi.fn(),
@@ -139,6 +140,7 @@ beforeEach(() => {
     ...work,
     version: 3,
   });
+  vi.mocked(publicWorkAdminApi.deleteDraft).mockResolvedValue(undefined);
   vi.mocked(publicWorkAdminApi.preview).mockResolvedValue({
     slug: work.slug,
     title: work.title,
@@ -904,6 +906,91 @@ describe("PublicWorkEditor", () => {
     await user.click(screen.getByRole("button", { name: "Lưu thay đổi" }));
     expect(
       await screen.findByText(/Tác phẩm đã được người khác cập nhật/),
+    ).toBeTruthy();
+  });
+
+  it("deletes a draft only after confirmation and sends its current version", async () => {
+    const user = userEvent.setup();
+    render(<PublicWorkEditor />, { wrapper });
+
+    await screen.findByRole("button", { name: /Bản mẫu công khai/ });
+    await user.click(screen.getByRole("button", { name: "Xóa bản nháp" }));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(
+      within(dialog).getByText(
+        /Hồ sơ nguồn, người gửi, tài liệu và bản scan vẫn được giữ nguyên/,
+      ),
+    ).toBeTruthy();
+    await user.click(
+      within(dialog).getByRole("button", { name: "Xóa bản nháp" }),
+    );
+
+    await waitFor(() =>
+      expect(publicWorkAdminApi.deleteDraft).toHaveBeenCalledWith(
+        work.id,
+        work.version,
+      ),
+    );
+  });
+
+  it("does not offer draft deletion for published works", async () => {
+    const published = { ...work, publicationStatus: "PUBLISHED" as const };
+    vi.mocked(publicWorkAdminApi.list).mockResolvedValue({
+      success: true,
+      data: [published],
+      meta: { page: 1, pageSize: 50, total: 1 },
+    });
+    vi.mocked(publicWorkAdminApi.get).mockResolvedValue(published);
+    render(<PublicWorkEditor />, { wrapper });
+
+    await screen.findByRole("button", { name: /Bản mẫu công khai/ });
+
+    expect(
+      screen.queryByRole("button", {
+        name: "Xóa bản nháp",
+      }),
+    ).toBeNull();
+  });
+
+  it("guides a data manager from an empty publication list to historical records", async () => {
+    vi.mocked(publicWorkAdminApi.list).mockResolvedValue({
+      success: true,
+      data: [],
+      meta: { page: 1, pageSize: 50, total: 0 },
+    });
+    render(<PublicWorkEditor managerMode />, { wrapper });
+
+    expect(
+      (
+        await screen.findByRole("link", { name: "Bổ sung hồ sơ cũ" })
+      ).getAttribute("href"),
+    ).toBe("/data-manager?area=historical-records");
+  });
+
+  it("keeps the empty state after deleting the last draft", async () => {
+    let listCalls = 0;
+    vi.mocked(publicWorkAdminApi.list).mockImplementation(async () => {
+      listCalls += 1;
+      return {
+        success: true,
+        data: listCalls === 1 ? [work] : [],
+        meta: { page: 1, pageSize: 50, total: listCalls === 1 ? 1 : 0 },
+      };
+    });
+    const user = userEvent.setup();
+    render(<PublicWorkEditor managerMode />, { wrapper });
+
+    await user.click(
+      await screen.findByRole("button", { name: "Xóa bản nháp" }),
+    );
+    const dialog = await screen.findByRole("dialog");
+    await user.click(
+      within(dialog).getByRole("button", { name: "Xóa bản nháp" }),
+    );
+
+    expect(
+      await screen.findByRole("link", { name: "Bổ sung hồ sơ cũ" }),
     ).toBeTruthy();
   });
 });

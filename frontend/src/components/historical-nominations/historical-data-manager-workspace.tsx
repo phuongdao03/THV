@@ -27,7 +27,7 @@ const publicationStatusLabels: Record<string, string> = {
 export function HistoricalDataManagerWorkspace() {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const [tab, setTab] = useState<WorkspaceTab>("records");
+  const [tab, setTab] = useState<WorkspaceTab>("overview");
   const [query, setQuery] = useState("");
   const [publicationStatus, setPublicationStatus] = useState("");
   const [year, setYear] = useState("");

@@ -25,8 +25,8 @@ made.
   work. DATA_MANAGER may edit presentation content and media, preview, publish,
   hide, and archive. Historical public pages can be published directly from the
   source-record editor without verification-status gating. Admin retains
-  category/tag, scheduling, suspension,
-  featured placement, source-record, and restore controls.
+  category/tag, scheduling, suspension, featured placement, source-record, and
+  restore controls.
 - Both roles can edit pre-issue certificate content. Issued certificate edits
   submit a reasoned pending proposal; only Admin can approve and anchor it.
   Issuance and revocation remain Admin-only.
@@ -67,8 +67,8 @@ made.
   historical award metadata/scans, and record history. Managers save records
   without an Admin review stage.
 - Kept publication preview and publish controls in **Nội dung công bố** and
-  added direct preview/publish/hide controls to the historical record editor. The
-  certificate archive tab is labeled **Bằng scan công khai** to distinguish
+  added direct preview/publish/hide controls to the historical record editor.
+  The certificate archive tab is labeled **Bằng scan công khai** to distinguish
   public scans from private evidence attached to a historical source record.
 - Added the historical activity endpoint to the local DataManager mock.
 - Verification: 12 focused backend tests passed; the DataManager workspace
@@ -92,12 +92,32 @@ made.
 
 ## Fixed account provisioning
 
-- Added `backend/app/scripts/bootstrap_data_manager.py` for a single account with
-  the fixed `data_manager` username. An operator supplies the required account
-  email and chooses a password in a hidden prompt; only its Argon2 hash is
-  stored. No email is sent.
+- Added `backend/app/scripts/bootstrap_data_manager.py` for a single account
+  with the fixed `data_manager` username. An operator supplies the required
+  account email and chooses a password in a hidden prompt; only its Argon2 hash
+  is stored. No email is sent.
 - The script grants only DATA_MANAGER, marks the operator-provisioned account
   active, and refuses duplicate email or username. Staging and production need
   `--confirm CREATE_DATA_MANAGER_ACCOUNT`.
 - Updated `docs/runbooks/runtime-environment.md` with the command. Ruff check,
-  Ruff format check, mypy on the script, and CLI help passed. Tests were not run.
+  Ruff format check, mypy on the script, and CLI help passed. Tests were not
+  run.
+
+## Workspace usability and draft deletion
+
+- The DATA_MANAGER workspace now opens on **Hồ sơ lịch sử**. Its overview
+  highlights the old-record intake action and the sequence for adding source
+  facts, submitter/evidence, then public presentation. Every work area has a
+  short purpose and next-step guide.
+- Admin and DATA_MANAGER can delete only `DRAFT` public-work presentation rows.
+  The operation uses optimistic version checks, soft deletion, audit logging,
+  and public-cache invalidation. Source nominations, submitters, evidence,
+  certificates, and archive scans remain intact.
+- Focused frontend and backend editor/API tests were added.
+- Verification: all frontend tests passed (1,114); focused backend editor/API
+  tests passed (3); repository lint, typecheck, and format checks passed. Full
+  `npm test` could not collect the backend suite because `openpyxl` is missing
+  from the local Python environment. E2E finished with 122 passed, 9 skipped,
+  and 2 unrelated failures: the mobile navigation click was intercepted by the
+  Next.js dev portal, and the public portal test treated an image LCP warning as
+  a console error.

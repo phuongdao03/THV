@@ -22,6 +22,7 @@ import {
   Trash2,
 } from "lucide-react";
 import Image from "next/image";
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
@@ -185,11 +186,18 @@ export function PublicWorkEditor({
   const [chosenId, setSelectedId] = useState<string | undefined>(
     initialSelectedId,
   );
+  const [suppressedAutoSelectionId, setSuppressedAutoSelectionId] =
+    useState<string>();
   const [previewMode, setPreviewMode] = useState<"desktop" | "mobile">(
     "desktop",
   );
   const [showPreview, setShowPreview] = useState(false);
   const [pendingAction, setPendingAction] = useState<StateAction>();
+  const [pendingDelete, setPendingDelete] = useState<{
+    id: string;
+    title: string;
+    version: number;
+  }>();
   const [reason, setReason] = useState("");
   const [newTagName, setNewTagName] = useState("");
   const [featureDays, setFeatureDays] = useState<"7" | "30" | "unlimited">(
@@ -209,12 +217,15 @@ export function PublicWorkEditor({
   });
   const firstWorkId = works.data?.data[0]?.id;
   useEffect(() => {
-    if (chosenId || !firstWorkId) return;
+    if (chosenId || !firstWorkId || firstWorkId === suppressedAutoSelectionId)
+      return;
     // Keep the first selection stable when filters change during an edit.
     const timer = window.setTimeout(() => setSelectedId(firstWorkId), 0);
     return () => window.clearTimeout(timer);
-  }, [chosenId, firstWorkId]);
+  }, [chosenId, firstWorkId, suppressedAutoSelectionId]);
   const selectedId = chosenId;
+  const hasNoUnfilteredWorks =
+    !query && !status && page === 1 && works.data?.meta.total === 0;
   const detail = useQuery({
     queryKey: ["admin", "public-work", selectedId],
     queryFn: () => publicWorkAdminApi.get(selectedId!),
@@ -359,6 +370,45 @@ export function PublicWorkEditor({
       setPendingAction(undefined);
       setReason("");
       await refreshWork();
+    },
+  });
+
+  const deleteDraft = useMutation({
+    mutationFn: async () => {
+      if (!pendingDelete) throw new Error("Chưa chọn bản nháp cần xóa.");
+      await publicWorkAdminApi.deleteDraft(
+        pendingDelete.id,
+        pendingDelete.version,
+      );
+    },
+    onSuccess: async () => {
+      const deletedId = pendingDelete?.id;
+      if (deletedId === selectedId) {
+        const nextWorkId = works.data?.data.find(
+          (work) => work.id !== deletedId,
+        )?.id;
+        setSuppressedAutoSelectionId(nextWorkId ? undefined : deletedId);
+        setSelectedId(nextWorkId);
+        loadedWorkId.current = null;
+      }
+      setPendingDelete(undefined);
+      if (deletedId) {
+        queryClient.removeQueries({
+          queryKey: ["admin", "public-work", deletedId],
+        });
+        queryClient.removeQueries({
+          queryKey: ["admin", "public-work-media", deletedId],
+        });
+        queryClient.removeQueries({
+          queryKey: ["admin", "public-work-media-candidates", deletedId],
+        });
+        queryClient.removeQueries({
+          queryKey: ["admin", "public-work-preview", deletedId],
+        });
+      }
+      await queryClient.invalidateQueries({
+        queryKey: ["admin", "public-works"],
+      });
     },
   });
 
@@ -510,39 +560,66 @@ export function PublicWorkEditor({
               </div>
             ) : null}
             {works.data?.data.map((work) => (
-              <button
-                className={`cms-list-item mb-1 w-full rounded-xl border px-3 py-3 text-left transition ${selectedId === work.id ? "cms-list-item--selected border-primary-200 bg-white shadow-sm" : "border-transparent"}`}
+              <div
+                className={`cms-list-item mb-1 flex w-full items-start gap-2 rounded-xl border px-2 py-2 transition ${selectedId === work.id ? "cms-list-item--selected border-primary-200 bg-white shadow-sm" : "border-transparent"}`}
                 key={work.id}
-                onClick={() => {
-                  if (isDirty && !window.confirm("Bỏ các thay đổi chưa lưu?"))
-                    return;
-                  setSelectedId(work.id);
-                  setShowPreview(false);
-                }}
-                type="button"
               >
-                <span className="block text-pretty text-sm leading-5 font-bold text-neutral-950">
-                  {work.title}
-                </span>
-                <span className="mt-1 block truncate font-mono text-xs text-neutral-500">
-                  {displayCnsDossierCode(work.dossierCode) ||
-                    `TP-${work.id.slice(0, 8).toUpperCase()}`}
-                </span>
-                <span className="mt-3 flex flex-wrap gap-2 text-xs font-semibold">
-                  <span className="rounded-full border border-neutral-200 bg-white px-2.5 py-1 text-neutral-700">
-                    {statusLabels[work.publicationStatus]}
+                <button
+                  aria-pressed={selectedId === work.id}
+                  className="min-w-0 flex-1 rounded-lg px-1 py-1 text-left"
+                  onClick={() => {
+                    if (isDirty && !window.confirm("Bỏ các thay đổi chưa lưu?"))
+                      return;
+                    setSelectedId(work.id);
+                    setShowPreview(false);
+                  }}
+                  type="button"
+                >
+                  <span
+                    className="block text-pretty text-sm leading-5 font-bold text-neutral-950"
+                    id={`draft-title-${work.id}`}
+                  >
+                    {work.title}
                   </span>
-                  {work.publicationStatus === "PUBLISHED" ? (
-                    <span className="rounded-full border border-primary-200 bg-primary-50 px-2.5 py-1 text-primary-800">
-                      {work.visibility === "PUBLIC"
-                        ? "Trong danh mục"
-                        : work.visibility === "UNLISTED"
-                          ? "Chỉ qua liên kết"
-                          : "Riêng tư"}
+                  <span className="mt-1 block truncate font-mono text-xs text-neutral-500">
+                    {displayCnsDossierCode(work.dossierCode) ||
+                      `TP-${work.id.slice(0, 8).toUpperCase()}`}
+                  </span>
+                  <span className="mt-3 flex flex-wrap gap-2 text-xs font-semibold">
+                    <span className="rounded-full border border-neutral-200 bg-white px-2.5 py-1 text-neutral-700">
+                      {statusLabels[work.publicationStatus]}
                     </span>
-                  ) : null}
-                </span>
-              </button>
+                    {work.publicationStatus === "PUBLISHED" ? (
+                      <span className="rounded-full border border-primary-200 bg-primary-50 px-2.5 py-1 text-primary-800">
+                        {work.visibility === "PUBLIC"
+                          ? "Trong danh mục"
+                          : work.visibility === "UNLISTED"
+                            ? "Chỉ qua liên kết"
+                            : "Riêng tư"}
+                      </span>
+                    ) : null}
+                  </span>
+                </button>
+                {work.publicationStatus === "DRAFT" ? (
+                  <button
+                    aria-describedby={`draft-title-${work.id}`}
+                    aria-label="Xóa bản nháp"
+                    className="inline-flex min-h-10 shrink-0 items-center gap-1 rounded-lg px-2 text-xs font-semibold text-red-700 transition hover:bg-red-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-700 disabled:opacity-50"
+                    disabled={deleteDraft.isPending}
+                    onClick={() =>
+                      setPendingDelete({
+                        id: work.id,
+                        title: work.title,
+                        version: work.version,
+                      })
+                    }
+                    type="button"
+                  >
+                    <Trash2 aria-hidden="true" className="size-4" />
+                    <span>Xóa</span>
+                  </button>
+                ) : null}
+              </div>
             ))}
             {!works.isPending && works.data?.data.length === 0 ? (
               <p className="p-4 text-sm leading-6 text-neutral-500">
@@ -583,12 +660,23 @@ export function PublicWorkEditor({
             <div className="max-w-sm">
               <FilePenLine className="mx-auto size-10 text-primary-600" />
               <h2 className="mt-4 text-xl font-bold">
-                Chọn một tác phẩm để biên tập
+                {managerMode && hasNoUnfilteredWorks
+                  ? "Chưa có nội dung công khai để biên tập"
+                  : "Chọn một tác phẩm để biên tập"}
               </h2>
               <p className="mt-2 text-sm leading-6 text-neutral-500">
-                Thông tin, hình ảnh và bản xem trước sẽ sử dụng dữ liệu mới nhất
-                đã lưu trên hệ thống.
+                {managerMode && hasNoUnfilteredWorks
+                  ? "Bắt đầu bằng cách bổ sung hồ sơ lịch sử. Sau đó, bạn có thể biên tập và xem trước nội dung công khai tại đây."
+                  : "Thông tin, hình ảnh và bản xem trước sẽ sử dụng dữ liệu mới nhất đã lưu trên hệ thống."}
               </p>
+              {managerMode && hasNoUnfilteredWorks ? (
+                <Link
+                  className="mt-4 inline-flex min-h-11 items-center justify-center rounded-xl bg-primary-800 px-4 font-bold text-white transition hover:bg-primary-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-800"
+                  href="/data-manager?area=historical-records"
+                >
+                  Bổ sung hồ sơ cũ
+                </Link>
+              ) : null}
             </div>
           </div>
         ) : detail.isPending ? (
@@ -1131,6 +1219,33 @@ export function PublicWorkEditor({
             : "Xác nhận ẩn tác phẩm"
         }
       />
+      <ConfirmationDialog
+        confirmLabel="Xóa bản nháp"
+        description={
+          pendingDelete?.id === selectedId && isDirty
+            ? "Bản nháp sẽ bị xóa và các thay đổi chưa lưu sẽ mất. Hồ sơ nguồn, người gửi, tài liệu và bản scan vẫn được giữ nguyên."
+            : "Chỉ bản nháp chưa công bố mới có thể xóa. Hồ sơ nguồn, người gửi, tài liệu và bản scan vẫn được giữ nguyên. Thao tác này không thể khôi phục từ màn hình quản lý."
+        }
+        isPending={deleteDraft.isPending}
+        onCancel={() => {
+          if (deleteDraft.isPending) return;
+          setPendingDelete(undefined);
+          deleteDraft.reset();
+        }}
+        onConfirm={() => deleteDraft.mutate()}
+        open={Boolean(pendingDelete)}
+        title={`Xóa bản nháp${pendingDelete?.title ? ` “${pendingDelete.title}”` : "?"}`}
+      >
+        {deleteDraft.error ? (
+          <p
+            className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-800"
+            role="alert"
+          >
+            {deleteDraft.error.message ||
+              "Không thể xóa bản nháp. Tải lại danh sách và thử lại."}
+          </p>
+        ) : null}
+      </ConfirmationDialog>
       <ReasonDialog
         action={pendingAction}
         isPending={transition.isPending}

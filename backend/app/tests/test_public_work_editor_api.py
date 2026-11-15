@@ -45,6 +45,7 @@ class StubEditorService:
             version=3,
         )
         self.updated: PublicWorkEditorInput | None = None
+        self.deleted: tuple[UUID, int] | None = None
 
     async def list(
         self, _principal: object, **_filters: object
@@ -74,6 +75,16 @@ class StubEditorService:
         self.work.title = data.title
         self.work.version += 1
         return self.work
+
+    async def delete_draft(
+        self,
+        _principal: object,
+        work_id: UUID,
+        *,
+        expected_version: int,
+        request_id: str,
+    ) -> None:
+        self.deleted = (work_id, expected_version)
 
     async def preview(
         self, _principal: object, _work_id: UUID
@@ -165,9 +176,18 @@ def test_editor_api_contract_and_preview_privacy() -> None:
             assert "owner_user_id" not in serialized
             assert "public_id" not in serialized
 
+            deleted = client.request(
+                "DELETE",
+                f"/api/v1/admin/public-works/{service.work.id}",
+                json={"expectedVersion": 4},
+            )
+            assert deleted.status_code == 204
+            assert service.deleted == (service.work.id, 4)
+
         paths = app.openapi()["paths"]
         assert "/api/v1/admin/public-works" in paths
         assert "/api/v1/admin/public-works/{work_id}/preview" in paths
+        assert "/api/v1/admin/public-works/{work_id}" in paths
     finally:
         app.dependency_overrides.clear()
 
