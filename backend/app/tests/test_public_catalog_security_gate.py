@@ -203,9 +203,12 @@ def test_serializer_snapshot_contains_only_public_detail_fields() -> None:
             "certificate": None,
             "proof": None,
             "media": [],
+            "certificateArchives": [],
             "relatedWorks": [],
             "canonicalSlug": "safe-work",
             "redirected": False,
+            "isHistorical": False,
+            "historicalYear": None,
         }
     ).model_dump(mode="json", by_alias=True)
     assert set(data) == {
@@ -224,9 +227,12 @@ def test_serializer_snapshot_contains_only_public_detail_fields() -> None:
         "certificate",
         "proof",
         "media",
+        "certificateArchives",
         "relatedWorks",
         "canonicalSlug",
         "redirected",
+        "isHistorical",
+        "historicalYear",
     }
 
 

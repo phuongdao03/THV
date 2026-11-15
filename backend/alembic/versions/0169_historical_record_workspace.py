@@ -21,7 +21,8 @@ def upgrade() -> None:
             "UPDATE historical_nominations SET "
             "published_by_user_id = COALESCE("
             "published_by_user_id, public_content_approved_by_user_id), "
-            "published_at = COALESCE(published_at, public_content_approved_at, updated_at) "
+            "published_at = COALESCE(published_at, "
+            "public_content_approved_at, updated_at) "
             "WHERE publication_status = 'PUBLISHED'"
         )
     )

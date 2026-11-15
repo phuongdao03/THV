@@ -18,8 +18,8 @@ from app.api.v1.auth import router as auth_router
 from app.api.v1.billing import router as billing_router
 from app.api.v1.blockchain import router as blockchain_router
 from app.api.v1.blockchain_signing import router as blockchain_signing_router
-from app.api.v1.certificate_revocations import router as certificate_revocations_router
 from app.api.v1.certificate_archives import router as certificate_archives_router
+from app.api.v1.certificate_revocations import router as certificate_revocations_router
 from app.api.v1.certificate_version_requests import (
     router as certificate_version_requests_router,
 )
