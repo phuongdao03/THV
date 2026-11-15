@@ -9,6 +9,8 @@ from app.modules.blockchain.models import (
     BlockchainTransactionStatus,
     CertificateStatus,
 )
+from app.modules.certificate_archives.schemas import PublicCertificateArchiveData
+from app.modules.certificate_archives.service import list_published_public_archives
 from app.modules.public.catalog_cache import PublicCatalogCache, public_detail_cache_key
 from app.modules.public.catalog_query_service import PublicTagView, PublicWorkCardView
 from app.modules.public.catalog_repository import PublicWorkRepository
@@ -53,6 +55,9 @@ class PublicWorkDetailView:
     related_works: tuple[PublicWorkCardView, ...]
     canonical_slug: str
     redirected: bool
+    is_historical: bool = False
+    historical_year: int | None = None
+    certificate_archives: tuple[PublicCertificateArchiveData, ...] = ()
 
 
 class PublicWorkDetailService:
@@ -144,12 +149,18 @@ class PublicWorkDetailService:
                 ),
                 thumbnail_url=related.thumbnail_url,
                 thumbnail_alt_text=related.thumbnail_alt_text,
+                is_historical=related.work.historical_nomination_id is not None,
+                historical_year=related.work.historical_year,
             )
             for related in related_rows
             if related.work.published_at is not None
             and related.category.slug is not None
         )
         media = await self._media.list_public(row.work.id)
+        async with self._session.begin():
+            certificate_archives = await list_published_public_archives(
+                self._session, row.work.id
+            )
         detail = PublicWorkDetailView(
             id=row.work.id,
             slug=str(row.work.id),
@@ -171,6 +182,9 @@ class PublicWorkDetailService:
             related_works=related_works,
             canonical_slug=str(row.work.id),
             redirected=redirected,
+            is_historical=row.work.historical_nomination_id is not None,
+            historical_year=row.work.historical_year,
+            certificate_archives=certificate_archives,
         )
         if self._cache is not None:
             await self._cache.set(cache_key, self._serialize(detail, work_version))

@@ -808,6 +808,15 @@ class CertificateService:
 
     @staticmethod
     def _require_role(principal: AuthPrincipal) -> None:
+        if AuthorizationPolicy.allows_capability(
+            principal,
+            PolicyRequirement(
+                permission="certificate_content.edit",
+                compatible_roles=frozenset({"DATA_MANAGER"}),
+                allow_super_admin=False,
+            ),
+        ):
+            return
         AuthorizationPolicy.require_capability(
             principal,
             PolicyRequirement(

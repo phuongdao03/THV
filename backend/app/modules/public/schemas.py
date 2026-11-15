@@ -9,6 +9,7 @@ from app.modules.blockchain.models import (
     CertificateStatus,
     CertificateVersionStatus,
 )
+from app.modules.certificate_archives.schemas import PublicCertificateArchiveData
 from app.modules.dossiers.models import EvidenceVisibility
 from app.modules.public.models import (
     ContentReportReason,
@@ -41,6 +42,7 @@ class PublicSchema(BaseModel):
 
 class PublicCategoryData(PublicSchema):
     id: UUID
+    parent_id: UUID | None
     code: str
     name: str
     slug: str | None
@@ -395,6 +397,8 @@ class PublicWorkCardData(PublicSchema):
     is_featured: bool
     thumbnail_url: str | None
     thumbnail_alt_text: str | None
+    is_historical: bool = False
+    historical_year: int | None = None
 
 
 class PublicCertificateSummaryData(PublicSchema):
@@ -449,9 +453,14 @@ class PublicWorkDetailProjectionData(PublicSchema):
     certificate: PublicCertificateSummaryData | None
     proof: PublicProofSummaryData | None
     media: list[PublicMediaData]
+    certificate_archives: list[PublicCertificateArchiveData] = Field(
+        default_factory=list
+    )
     related_works: list[PublicWorkCardData]
     canonical_slug: str
     redirected: bool
+    is_historical: bool = False
+    historical_year: int | None = None
 
 
 class PublicSitemapManifestData(PublicSchema):

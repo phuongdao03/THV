@@ -15,6 +15,7 @@ from app.modules.blockchain.models import (
     CertificateVersion,
 )
 from app.modules.dossiers.models import Category, Dossier, DossierStatus, DossierVersion
+from app.modules.historical_nominations.models import HistoricalNomination
 from app.modules.media.models import MediaAsset, MediaStatus
 from app.modules.organizations.models import Organization
 from app.modules.public.cloudinary_variants import cloudinary_video_variant
@@ -82,13 +83,14 @@ class PublicWorkBackfillSource:
 @dataclass(frozen=True, slots=True)
 class PublicWorkPublicationContext:
     work: PublicWork
-    dossier: Dossier
+    dossier: Dossier | None
     certificate: Certificate | None
     category: Category
     thumbnail: MediaAsset | None
     has_ready_video: bool
     has_ready_image: bool
     dossier_version: DossierVersion | None
+    historical_nomination: HistoricalNomination | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -275,11 +277,19 @@ class PublicWorkRepository:
                     PublicWork.title.ilike(pattern, escape="\\"),
                     PublicWork.slug.ilike(pattern, escape="\\"),
                     Dossier.code.ilike(pattern, escape="\\"),
+                    HistoricalNomination.code.ilike(pattern, escape="\\"),
                 )
             )
         rows = await self._session.execute(
-            select(PublicWork, Dossier.code)
-            .join(Dossier, Dossier.id == PublicWork.dossier_id)
+            select(
+                PublicWork,
+                func.coalesce(Dossier.code, HistoricalNomination.code),
+            )
+            .outerjoin(Dossier, Dossier.id == PublicWork.dossier_id)
+            .outerjoin(
+                HistoricalNomination,
+                HistoricalNomination.id == PublicWork.historical_nomination_id,
+            )
             .where(*filters)
             .order_by(PublicWork.updated_at.desc(), PublicWork.id.desc())
             .offset(offset)
@@ -288,7 +298,11 @@ class PublicWorkRepository:
         total = await self._session.scalar(
             select(func.count())
             .select_from(PublicWork)
-            .join(Dossier, Dossier.id == PublicWork.dossier_id)
+            .outerjoin(Dossier, Dossier.id == PublicWork.dossier_id)
+            .outerjoin(
+                HistoricalNomination,
+                HistoricalNomination.id == PublicWork.historical_nomination_id,
+            )
             .where(*filters)
         )
         return tuple(rows.tuples()), int(total or 0)
@@ -329,9 +343,14 @@ class PublicWorkRepository:
                 ready_video.label("has_ready_video"),
                 ready_image.label("has_ready_image"),
                 DossierVersion,
+                HistoricalNomination,
             )
-            .join(Dossier, Dossier.id == PublicWork.dossier_id)
+            .outerjoin(Dossier, Dossier.id == PublicWork.dossier_id)
             .join(Category, Category.id == PublicWork.category_id)
+            .outerjoin(
+                HistoricalNomination,
+                HistoricalNomination.id == PublicWork.historical_nomination_id,
+            )
             .outerjoin(Certificate, Certificate.id == PublicWork.certificate_id)
             .outerjoin(MediaAsset, MediaAsset.id == PublicWork.thumbnail_media_id)
             .outerjoin(
@@ -362,6 +381,7 @@ class PublicWorkRepository:
             has_ready_video=bool(row[5]),
             has_ready_image=bool(row[6]),
             dossier_version=row[7],
+            historical_nomination=row[8],
         )
 
     async def claim_version(self, work: PublicWork, expected_version: int) -> bool:

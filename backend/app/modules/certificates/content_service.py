@@ -50,7 +50,18 @@ class CertificateContentService:
         self._audit = AuditService(session)
 
     @staticmethod
-    def _require_admin(principal: AuthPrincipal) -> None:
+    def _require_content_editor(principal: AuthPrincipal) -> None:
+        AuthorizationPolicy.require_capability(
+            principal,
+            PolicyRequirement(
+                permission="certificate_content.edit",
+                compatible_roles=frozenset({"DATA_MANAGER"}),
+            ),
+            CertificateForbiddenError,
+        )
+
+    @staticmethod
+    def _require_issue_admin(principal: AuthPrincipal) -> None:
         if "SUPER_ADMIN" not in principal.roles:
             raise CertificateForbiddenError()
         AuthorizationPolicy.require_capability(
@@ -88,7 +99,7 @@ class CertificateContentService:
     async def list_drafts(
         self, principal: AuthPrincipal
     ) -> tuple[CertificateContentDraftData, ...]:
-        self._require_admin(principal)
+        self._require_content_editor(principal)
         async with self._session.begin():
             rows = await self._session.execute(
                 select(Dossier, CertificateContentDraft)
@@ -140,7 +151,7 @@ class CertificateContentService:
         dossier_id: UUID,
         content: CertificateContentRequest,
     ) -> CertificateContentDraftData:
-        self._require_admin(principal)
+        self._require_content_editor(principal)
         normalized = CertificateContentRequest(
             title=content.title.strip(),
             summary=content.summary.strip(),
@@ -168,7 +179,7 @@ class CertificateContentService:
     async def confirm(
         self, principal: AuthPrincipal, dossier_id: UUID
     ) -> CertificateContentDraftData:
-        self._require_admin(principal)
+        self._require_issue_admin(principal)
         async with self._session.begin():
             dossier, draft = await self._editable(dossier_id)
             content = self._content(draft)

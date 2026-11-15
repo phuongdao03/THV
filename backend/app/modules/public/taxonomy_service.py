@@ -323,11 +323,11 @@ class TaxonomyService:
     async def list_admin_categories(
         self, principal: AuthPrincipal
     ) -> tuple[Category, ...]:
-        self._require_admin(principal)
+        self._require_work_editor(principal)
         return await self.list_categories(public_only=False)
 
     async def list_admin_tags(self, principal: AuthPrincipal) -> tuple[PublicTag, ...]:
-        self._require_admin(principal)
+        self._require_work_editor(principal)
         return await self.list_tags(public_only=False)
 
     async def _validate_category(
@@ -382,6 +382,17 @@ class TaxonomyService:
             PolicyRequirement(
                 permission="public_content.manage",
                 compatible_roles=TAXONOMY_ADMIN_ROLES,
+            ),
+            PublicWorkForbiddenError,
+        )
+
+    @staticmethod
+    def _require_work_editor(principal: AuthPrincipal) -> None:
+        AuthorizationPolicy.require_capability(
+            principal,
+            PolicyRequirement(
+                permission="public_content.works.manage",
+                compatible_roles=frozenset({"DATA_MANAGER"}),
             ),
             PublicWorkForbiddenError,
         )

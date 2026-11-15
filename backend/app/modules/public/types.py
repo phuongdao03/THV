@@ -9,6 +9,7 @@ from app.modules.public.verification import PublicEvidenceProof
 @dataclass(frozen=True, slots=True)
 class PublicCategoryView:
     id: UUID
+    parent_id: UUID | None
     code: str
     name: str
     slug: str | None

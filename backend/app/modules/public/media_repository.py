@@ -1,11 +1,22 @@
 from typing import cast
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import exists, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.blockchain.models import Certificate, CertificateVersion
+from app.modules.certificate_archives.models import (
+    CertificateArchive,
+    CertificateArchivePage,
+    CertificateArchiveRevision,
+    CertificateArchiveStatus,
+)
 from app.modules.dossiers.models import Dossier, DossierEvidence, DossierVersion
+from app.modules.historical_nominations.models import (
+    HistoricalArchiveStatus,
+    HistoricalMediaLink,
+    HistoricalNomination,
+)
 from app.modules.media.models import MediaAsset, MediaStatus
 from app.modules.public.models import PublicWork, PublicWorkMedia
 
@@ -70,7 +81,10 @@ class PublicMediaRepository:
     async def list_for_work(self, work_id: UUID) -> tuple[PublicWorkMedia, ...]:
         rows = await self._session.scalars(
             select(PublicWorkMedia)
-            .where(PublicWorkMedia.public_work_id == work_id)
+            .where(
+                PublicWorkMedia.public_work_id == work_id,
+                PublicWorkMedia.is_certificate_archive_page.is_(False),
+            )
             .order_by(
                 PublicWorkMedia.sort_order,
                 PublicWorkMedia.created_at,
@@ -101,10 +115,65 @@ class PublicMediaRepository:
     async def is_source_evidence_asset(
         self, work: PublicWork, media_asset_id: UUID
     ) -> bool:
+        if work.historical_nomination_id is not None:
+            selected_history_media = exists().where(
+                HistoricalMediaLink.nomination_id == work.historical_nomination_id,
+                HistoricalMediaLink.media_asset_id == media_asset_id,
+                HistoricalMediaLink.public_candidate.is_(True),
+                HistoricalNomination.id == HistoricalMediaLink.nomination_id,
+                HistoricalNomination.archive_status == HistoricalArchiveStatus.ACTIVE,
+                MediaAsset.id == HistoricalMediaLink.media_asset_id,
+                MediaAsset.status == MediaStatus.ACTIVE,
+                MediaAsset.deleted_at.is_(None),
+            )
+            return bool(await self._session.scalar(select(selected_history_media)))
         return any(
             asset.id == media_asset_id
             for _, asset in await self.list_source_evidence_assets(work)
         )
+
+    async def is_published_archive_relation(
+        self, work_id: UUID, relation_id: UUID
+    ) -> bool:
+        return bool(
+            await self._session.scalar(
+                select(
+                    exists().where(
+                        CertificateArchivePage.public_media_relation_id == relation_id,
+                        CertificateArchivePage.revision_id
+                        == CertificateArchiveRevision.id,
+                        CertificateArchiveRevision.archive_id == CertificateArchive.id,
+                        CertificateArchive.public_work_id == work_id,
+                        CertificateArchive.status == CertificateArchiveStatus.PUBLISHED,
+                        CertificateArchive.published_version_no
+                        == CertificateArchiveRevision.version_no,
+                    )
+                )
+            )
+        )
+
+    async def list_historical_candidate_assets(
+        self, work: PublicWork
+    ) -> tuple[tuple[HistoricalMediaLink, MediaAsset], ...]:
+        if work.historical_nomination_id is None:
+            return ()
+        rows = await self._session.execute(
+            select(HistoricalMediaLink, MediaAsset)
+            .join(MediaAsset, MediaAsset.id == HistoricalMediaLink.media_asset_id)
+            .join(
+                HistoricalNomination,
+                HistoricalNomination.id == HistoricalMediaLink.nomination_id,
+            )
+            .where(
+                HistoricalMediaLink.nomination_id == work.historical_nomination_id,
+                HistoricalMediaLink.public_candidate.is_(True),
+                HistoricalNomination.archive_status == HistoricalArchiveStatus.ACTIVE,
+                MediaAsset.status == MediaStatus.ACTIVE,
+                MediaAsset.deleted_at.is_(None),
+            )
+            .order_by(HistoricalMediaLink.display_order, HistoricalMediaLink.id)
+        )
+        return tuple(rows.tuples())
 
     async def source_version_number(self, work: PublicWork) -> int | None:
         version_id = await self._source_version_id(work)

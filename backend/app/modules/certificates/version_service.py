@@ -86,7 +86,7 @@ class CertificateVersionService:
     async def current_content(
         self, principal: AuthPrincipal, certificate_id: UUID
     ) -> CertificateIssuedContentData:
-        self._require_content_manage(principal)
+        self._require_content_edit(principal)
         async with self._session.begin():
             row = await self._certificates.get(certificate_id)
             if row is None:
@@ -115,7 +115,7 @@ class CertificateVersionService:
         certificate_id: UUID,
         payload: CertificateContentCorrectionRequest,
     ) -> CertificateVersionView:
-        self._require_content_manage(principal)
+        self._require_content_edit(principal)
         reason = self._reason(payload.reason, field="Change reason")
         content = CertificateContentRequest(
             title=payload.content.title.strip(),
@@ -215,12 +215,11 @@ class CertificateVersionService:
                     },
                 )
                 await self._session.flush()
-                requested_id = requested.id
         except IntegrityError as exc:
             raise CertificateConflictError(
                 "A certificate correction is already being processed."
             ) from exc
-        return await self.approve(principal, requested_id)
+        return self._view(requested)
 
     async def _verified_thv_proof(
         self, version: CertificateVersion
@@ -657,7 +656,27 @@ class CertificateVersionService:
         )
 
     @staticmethod
+    def _require_content_edit(principal: AuthPrincipal) -> None:
+        AuthorizationPolicy.require_capability(
+            principal,
+            PolicyRequirement(
+                permission="certificate_content.edit",
+                compatible_roles=frozenset({"DATA_MANAGER"}),
+            ),
+            CertificateForbiddenError,
+        )
+
+    @staticmethod
     def _require_read(principal: AuthPrincipal) -> None:
+        if AuthorizationPolicy.allows_capability(
+            principal,
+            PolicyRequirement(
+                permission="certificate_content.edit",
+                compatible_roles=frozenset({"DATA_MANAGER"}),
+                allow_super_admin=False,
+            ),
+        ):
+            return
         AuthorizationPolicy.require_capability(
             principal,
             PolicyRequirement(

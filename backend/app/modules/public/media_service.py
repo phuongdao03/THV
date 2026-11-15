@@ -51,7 +51,7 @@ from app.modules.public.models import (
 )
 from app.modules.public.video_poster import extract_video_poster
 
-PUBLIC_MEDIA_ADMIN_ROLES = frozenset({"SUPER_ADMIN"})
+PUBLIC_MEDIA_ADMIN_ROLES = frozenset({"SUPER_ADMIN", "DATA_MANAGER"})
 PUBLIC_MEDIA_MIME_KINDS = {
     "image/jpeg": PublicMediaKind.IMAGE,
     "image/png": PublicMediaKind.IMAGE,
@@ -370,6 +370,8 @@ class PublicMediaService:
             relation = await self._repository.get_relation(relation_id, for_update=True)
             if relation is None or relation.public_work_id != work_id:
                 raise PublicMediaNotFoundError()
+            if relation.is_certificate_archive_page:
+                raise PublicWorkForbiddenError()
             await self._repository.delete(relation)
             self._audit.record(
                 actor_user_id=principal.user_id,
@@ -402,6 +404,28 @@ class PublicMediaService:
                 row.media_asset_id
                 for row in await self._repository.list_for_work(work_id)
             }
+            if work.historical_nomination_id is not None:
+                historical_rows = (
+                    await self._repository.list_historical_candidate_assets(work)
+                )
+                return tuple(
+                    PublicMediaCandidateView(
+                        media_asset_id=asset.id,
+                        kind=self._validate_asset(asset),
+                        title=work.title,
+                        filename=asset.original_filename,
+                        mime_type=asset.mime_type,
+                        bytes=asset.bytes,
+                        width=asset.width,
+                        height=asset.height,
+                        duration_ms=asset.duration_ms,
+                        evidence_role=link.media_kind.value,
+                        access_scope=EvidenceVisibility(link.access_scope.value),
+                        already_attached=asset.id in attached,
+                    )
+                    for link, asset in historical_rows
+                    if asset.mime_type in PUBLIC_MEDIA_MIME_KINDS
+                )
             rows = await self._repository.list_source_evidence_assets(work)
             return tuple(
                 PublicMediaCandidateView(
@@ -561,6 +585,8 @@ class PublicMediaService:
             row = await self._repository.get_relation(relation_id, for_update=True)
             if row is None or row.public_work_id != work_id:
                 raise PublicMediaNotFoundError()
+            if row.is_certificate_archive_page:
+                raise PublicWorkForbiddenError()
             if (
                 row.media_kind is not PublicMediaKind.IMAGE
                 or row.derivative_status is not DerivativeStatus.READY
@@ -583,7 +609,7 @@ class PublicMediaService:
         AuthorizationPolicy.require_capability(
             principal,
             PolicyRequirement(
-                permission="public_content.manage",
+                permission="public_content.works.manage",
                 compatible_roles=PUBLIC_MEDIA_ADMIN_ROLES,
             ),
             PublicWorkForbiddenError,
@@ -691,6 +717,7 @@ class PublicMediaWorker:
             if is_editorial_cover(asset) or (
                 self._single_copy_storage_enabled
                 and relation.media_kind is not PublicMediaKind.VIDEO
+                and not relation.is_certificate_archive_page
             ):
                 if (
                     asset.status is not MediaStatus.ACTIVE
@@ -710,8 +737,11 @@ class PublicMediaWorker:
                 work = await self._repository.get_work(relation.public_work_id)
                 if work is None or (
                     not is_editorial_cover(asset)
-                    and not await self._repository.is_source_evidence_asset(
-                        work, asset.id
+                    and not (
+                        await self._repository.is_source_evidence_asset(work, asset.id)
+                        or await self._repository.is_published_archive_relation(
+                            work.id, relation.id
+                        )
                     )
                 ):
                     relation.derivative_status = DerivativeStatus.FAILED

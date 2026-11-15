@@ -19,6 +19,7 @@ from app.api.v1.billing import router as billing_router
 from app.api.v1.blockchain import router as blockchain_router
 from app.api.v1.blockchain_signing import router as blockchain_signing_router
 from app.api.v1.certificate_revocations import router as certificate_revocations_router
+from app.api.v1.certificate_archives import router as certificate_archives_router
 from app.api.v1.certificate_version_requests import (
     router as certificate_version_requests_router,
 )
@@ -38,6 +39,9 @@ from app.api.v1.engagement import router as engagement_router
 from app.api.v1.events import admin_router as events_admin_router
 from app.api.v1.events import router as events_router
 from app.api.v1.health import router as health_router
+from app.api.v1.historical_nominations import (
+    router as historical_nominations_router,
+)
 from app.api.v1.hr import router as hr_router
 from app.api.v1.hr import self_router as my_hr_router
 from app.api.v1.media import router as media_router
@@ -297,6 +301,7 @@ def create_application(
     app.include_router(certificates_router)
     app.include_router(certificate_version_requests_router)
     app.include_router(certificate_revocations_router)
+    app.include_router(certificate_archives_router)
     app.include_router(content_reports_router)
     app.include_router(dossiers_router)
     app.include_router(type_versions_router)
@@ -306,6 +311,7 @@ def create_application(
     app.include_router(events_router)
     app.include_router(events_admin_router)
     app.include_router(media_router)
+    app.include_router(historical_nominations_router)
     app.include_router(organizations_router)
     app.include_router(notifications_router)
     app.include_router(admin_promotions_router)

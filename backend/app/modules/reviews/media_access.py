@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.modules.auth.authorization import AuthorizationPolicy, PolicyRequirement
 from app.modules.auth.session_service import AuthPrincipal
 from app.modules.dossiers.models import DossierEvidence, EvidenceVisibility
+from app.modules.historical_nominations.models import HistoricalMediaLink
 from app.modules.reviews.models import (
     ReviewAssignment,
     ReviewAssignmentStatus,
@@ -48,7 +49,27 @@ class ReviewMediaAccessPolicy:
             self.ADMIN_DOSSIER_EVIDENCE_DELIVERY,
         ):
             admin_evidence = exists().where(DossierEvidence.media_asset_id == media_id)
-            return bool(await self._session.scalar(select(admin_evidence)))
+            historical_evidence = exists().where(
+                HistoricalMediaLink.media_asset_id == media_id
+            )
+            return bool(
+                await self._session.scalar(
+                    select(or_(admin_evidence, historical_evidence))
+                )
+            )
+
+        if AuthorizationPolicy.allows_capability(
+            principal,
+            PolicyRequirement(
+                permission="historical.documents.manage",
+                compatible_roles=frozenset({"DATA_MANAGER"}),
+                allow_super_admin=False,
+            ),
+        ):
+            historical_evidence = exists().where(
+                HistoricalMediaLink.media_asset_id == media_id
+            )
+            return bool(await self._session.scalar(select(historical_evidence)))
 
         if not AuthorizationPolicy.allows_capability(
             principal,

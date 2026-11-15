@@ -18,6 +18,9 @@ from app.modules.community import models as community_models  # noqa: F401
 from app.modules.council import models as council_models  # noqa: F401
 from app.modules.dossiers import models as dossier_models  # noqa: F401
 from app.modules.engagement import models as engagement_models  # noqa: F401
+from app.modules.historical_nominations import (
+    models as historical_nominations_models,  # noqa: F401
+)
 from app.modules.hr import models as hr_models  # noqa: F401
 from app.modules.media import models as media_models  # noqa: F401
 from app.modules.memberships import models as membership_models  # noqa: F401

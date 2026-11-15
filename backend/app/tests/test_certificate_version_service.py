@@ -492,7 +492,12 @@ def test_existing_thv_content_correction_creates_new_version_and_pdf_job() -> No
         )
         with pytest.raises(CertificateForbiddenError):
             await service.current_content(delegated_staff, certificate_id)
-        current = await service.current_content(requester, certificate_id)
+        manager = _principal(
+            uuid4(),
+            "DATA_MANAGER",
+            permissions=("certificate_content.edit",),
+        )
+        current = await service.current_content(manager, certificate_id)
         assert current.content.subject == "Chưa công bố"
         with pytest.raises(CertificateConflictError):
             await service.request_content_correction(
@@ -510,7 +515,7 @@ def test_existing_thv_content_correction_creates_new_version_and_pdf_job() -> No
                 ),
             )
         requested = await service.request_content_correction(
-            requester,
+            manager,
             certificate_id,
             CertificateContentCorrectionRequest(
                 expected_version_no=1,
@@ -523,9 +528,11 @@ def test_existing_thv_content_correction_creates_new_version_and_pdf_job() -> No
                 ),
             ),
         )
-        assert requested.status is CertificateVersionStatus.ACTIVE
+        assert requested.status is CertificateVersionStatus.PENDING_APPROVAL
         assert requested.content is not None
         assert requested.content["subject"] == "Trường Đại học Trà Vinh (TVU)"
+        active_version = await service.approve(requester, requested.id)
+        assert active_version.status is CertificateVersionStatus.ACTIVE
         async with sessions() as check:
             certificate = await check.get(Certificate, certificate_id)
             predecessor = await check.get(

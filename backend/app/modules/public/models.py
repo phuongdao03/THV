@@ -103,8 +103,21 @@ class PublicWork(UtcTimestampMixin, Base):
             "dossier_id",
             name="uq_public_works_dossier_id",
         ),
+        UniqueConstraint(
+            "historical_nomination_id",
+            name="uq_public_works_historical_nomination_id",
+        ),
+        CheckConstraint(
+            "(dossier_id IS NULL AND historical_nomination_id IS NOT NULL) OR "
+            "(dossier_id IS NOT NULL AND historical_nomination_id IS NULL)",
+            name="public_work_source_exactly_one",
+        ),
         CheckConstraint("view_count >= 0", name="view_count_non_negative"),
         CheckConstraint("version > 0", name="version_positive"),
+        CheckConstraint(
+            "historical_year IS NULL OR historical_year > 0",
+            name="historical_year_positive",
+        ),
         Index(
             "ix_public_works_status_visibility_published",
             "publication_status",
@@ -120,11 +133,16 @@ class PublicWork(UtcTimestampMixin, Base):
     )
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
-    dossier_id: Mapped[UUID] = mapped_column(
+    dossier_id: Mapped[UUID | None] = mapped_column(
         Uuid,
         ForeignKey("dossiers.id", ondelete="RESTRICT"),
-        nullable=False,
+        nullable=True,
     )
+    historical_nomination_id: Mapped[UUID | None] = mapped_column(
+        Uuid,
+        ForeignKey("historical_nominations.id", ondelete="RESTRICT"),
+    )
+    historical_year: Mapped[int | None] = mapped_column(Integer)
     certificate_id: Mapped[UUID | None] = mapped_column(
         Uuid,
         ForeignKey("certificates.id", ondelete="RESTRICT"),
@@ -317,6 +335,9 @@ class PublicWorkMedia(UtcTimestampMixin, Base):
         Uuid,
         ForeignKey("media_assets.id", ondelete="RESTRICT"),
         nullable=False,
+    )
+    is_certificate_archive_page: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="0"
     )
     media_kind: Mapped[PublicMediaKind] = mapped_column(
         _enum(PublicMediaKind, "public_media_kind"),

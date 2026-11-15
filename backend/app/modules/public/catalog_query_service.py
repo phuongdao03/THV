@@ -44,6 +44,8 @@ class PublicWorkCardView:
     is_featured: bool
     thumbnail_url: str | None
     thumbnail_alt_text: str | None
+    is_historical: bool = False
+    historical_year: int | None = None
 
 
 class PublicCatalogQueryService:
@@ -183,6 +185,8 @@ class PublicCatalogQueryService:
                     ),
                     thumbnail_url=row.thumbnail_url,
                     thumbnail_alt_text=row.thumbnail_alt_text,
+                    is_historical=row.work.historical_nomination_id is not None,
+                    historical_year=row.work.historical_year,
                 )
             )
         return tuple(views)
@@ -208,6 +212,8 @@ class PublicCatalogQueryService:
                         "is_featured": view.is_featured,
                         "thumbnail_url": view.thumbnail_url,
                         "thumbnail_alt_text": view.thumbnail_alt_text,
+                        "is_historical": view.is_historical,
+                        "historical_year": view.historical_year,
                     }
                     for view in views
                 ],
@@ -235,6 +241,8 @@ class PublicCatalogQueryService:
                 is_featured=item["is_featured"],
                 thumbnail_url=item.get("thumbnail_url"),
                 thumbnail_alt_text=item.get("thumbnail_alt_text"),
+                is_historical=item.get("is_historical", False),
+                historical_year=item.get("historical_year"),
             )
             for item in payload["items"]
         )

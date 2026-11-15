@@ -66,6 +66,7 @@ class PublicCatalogService:
         categories = tuple(
             PublicCategoryView(
                 id=category.id,
+                parent_id=category.parent_id,
                 code=category.code,
                 name=category.name,
                 slug=category.slug,

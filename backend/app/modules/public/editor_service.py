@@ -42,7 +42,7 @@ from app.modules.public.publication_policy import (
     publication_checklist,
 )
 
-EDITOR_ROLES = frozenset({"SUPER_ADMIN"})
+EDITOR_ROLES = frozenset({"SUPER_ADMIN", "DATA_MANAGER"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -115,6 +115,23 @@ class PublicWorkPreviewView:
 def _source_fields(
     context: PublicWorkPublicationContext,
 ) -> tuple[int, tuple[SourceField, ...]]:
+    if context.dossier is None:
+        record = context.historical_nomination
+        if record is None:
+            return 1, ()
+        fields = [
+            SourceField("title", "Tiêu đề hồ sơ lịch sử", record.title),
+            SourceField("subject", "Đối tượng", record.subject_name),
+        ]
+        if record.summary:
+            fields.append(SourceField("summary", "Tóm tắt", record.summary))
+        if record.historical_result:
+            fields.append(
+                SourceField(
+                    "historical_result", "Kết quả lịch sử", record.historical_result
+                )
+            )
+        return 1, tuple(fields)
     version = context.dossier_version
     fields = [
         SourceField("title", "Tiêu đề hồ sơ", context.dossier.title),
@@ -223,7 +240,13 @@ class PublicWorkEditorService:
             source_version_no, source_fields = _source_fields(context)
             return PublicWorkEditorView(
                 work=context.work,
-                dossier_code=context.dossier.code,
+                dossier_code=(
+                    context.dossier.code
+                    if context.dossier is not None
+                    else context.historical_nomination.code
+                    if context.historical_nomination is not None
+                    else ""
+                ),
                 category_name=context.category.name,
                 tag_ids=await self._repository.list_work_tag_ids(work_id),
                 checklist=checklist,
@@ -270,6 +293,15 @@ class PublicWorkEditorService:
                         "Cover must be a ready image or video attached to the work."
                     )
                 unique_tag_ids = tuple(dict.fromkeys(data.tag_ids))
+                if "DATA_MANAGER" in principal.roles:
+                    current_tag_ids = set(
+                        await self._repository.list_work_tag_ids(work.id)
+                    )
+                    if (
+                        data.category_id != work.category_id
+                        or set(unique_tag_ids) != current_tag_ids
+                    ):
+                        raise PublicWorkForbiddenError()
                 if len(unique_tag_ids) > 50:
                     raise PublicWorkMetadataValidationError(
                         "A public work can contain at most 50 tags."
@@ -497,7 +529,8 @@ class PublicWorkEditorService:
         AuthorizationPolicy.require_capability(
             principal,
             PolicyRequirement(
-                permission="public_content.manage", compatible_roles=EDITOR_ROLES
+                permission="public_content.works.manage",
+                compatible_roles=EDITOR_ROLES,
             ),
             PublicWorkForbiddenError,
         )

@@ -210,7 +210,8 @@ def test_pdf_uses_public_vietnamese_details_without_dates_or_provider(
     assert "Video chào mừng thương hiệu Đề cử Tinh Hoa Việt" in text
     assert "Tác phẩm giới thiệu vẻ đẹp văn hóa Việt" in text
     assert "MÔ TẢ TÁC PHẨM" in text
-    assert "Mạng blockchain Polygon" in text
+    assert "Mạng blockchain Polygon" not in text
+    assert "Mã GD:" not in text
     assert "Ghi nhận tác phẩm · Tôn vinh giá trị Việt" in text
     assert "NGÀY PHÁT HÀNH" not in text
     assert "NGÀY HẾT HẠN" not in text

@@ -37,6 +37,7 @@ async def get_publication_service(
             encoded_key=secret.get_secret_value() if secret is not None else "",
             key_id=settings.auth_outbox_key_id,
         ),
+        media_dispatcher=CeleryPublicMediaDispatcher(),
     )
 
 

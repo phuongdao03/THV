@@ -158,8 +158,6 @@ class CertificatePdfRenderer:
 
         asset_value = metadata.get("asset")
         asset = asset_value if isinstance(asset_value, Mapping) else {}
-        blockchain_value = metadata.get("blockchain")
-        blockchain = blockchain_value if isinstance(blockchain_value, Mapping) else {}
         buffer = BytesIO()
         width, height = landscape(A4)
         pdf = Canvas(
@@ -312,19 +310,7 @@ class CertificatePdfRenderer:
         )
         pdf.setFillColor(muted)
         pdf.setFont(self.FONT_NAME, 8)
-        network_label = (
-            "Mạng blockchain Polygon"
-            if str(blockchain.get("network") or "").lower() == "polygon"
-            else "Mạng blockchain"
-        )
-        pdf.drawString(width - 211, 72, network_label)
-        pdf.setFont(self.FONT_NAME, 6)
         pdf.drawString(65, 37, self.LEGAL_DISCLAIMER)
-        pdf.drawString(
-            width - 211,
-            57,
-            "Mã GD: " + str(blockchain.get("transactionHash") or "Đang cập nhật")[:22],
-        )
         needs_appendix = (
             len(self._wrap_full_text(title, max_width=width - 368, font_size=19)) > 3
             or len(self._wrap_full_text(summary, max_width=width - 339, font_size=8))
