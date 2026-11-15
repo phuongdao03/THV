@@ -91,6 +91,19 @@ does not run in staging or production, never prints the password, and refuses to
 promote an existing non-admin account. Use the normal application flows for
 Viewer/User registration and the staff-management flow to onboard Moderators.
 
+Create the fixed-username DATA_MANAGER account with a separately chosen email
+and password. The password is entered interactively, hashed with Argon2, and is
+never sent by email. The account is assigned only the DATA_MANAGER role. Staging
+and production require an explicit confirmation token:
+
+```powershell
+docker compose exec backend python -m app.scripts.bootstrap_data_manager --email data-manager@example.com
+```
+
+For staging or production, append
+`--confirm CREATE_DATA_MANAGER_ACCOUNT`. The login username is always
+`data_manager`; an existing account or username is never overwritten.
+
 Bootstrap writes only the deployed local contract address and allowlist to
 `.runtime/local-contract.env`; it never extracts or injects an Anvil private
 key. Link a disposable wallet through the Super Admin signing screen to test the
