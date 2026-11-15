@@ -399,25 +399,23 @@ export function HistoricalRecordDetailComplete({
         </div>
       </header>
 
-
       <nav
         aria-label="Các phần trong hồ sơ"
         className="-mx-1 flex gap-1 overflow-x-auto px-1 pb-1"
         role="tablist"
       >
-        {sections
-          .map((item) => (
-            <button
-              aria-selected={section === item}
-              className="min-h-10 shrink-0 rounded-md px-3 text-sm text-[var(--theme-muted)] hover:bg-[var(--theme-surface-muted)] aria-selected:bg-[var(--theme-surface-muted)] aria-selected:font-semibold aria-selected:text-[var(--theme-foreground)]"
-              key={item}
-              onClick={() => setSection(item)}
-              role="tab"
-              type="button"
-            >
-              {item}
-            </button>
-          ))}
+        {sections.map((item) => (
+          <button
+            aria-selected={section === item}
+            className="min-h-10 shrink-0 rounded-md px-3 text-sm text-[var(--theme-muted)] hover:bg-[var(--theme-surface-muted)] aria-selected:bg-[var(--theme-surface-muted)] aria-selected:font-semibold aria-selected:text-[var(--theme-foreground)]"
+            key={item}
+            onClick={() => setSection(item)}
+            role="tab"
+            type="button"
+          >
+            {item}
+          </button>
+        ))}
       </nav>
 
       {section === "Thông tin" ? (
@@ -593,7 +591,8 @@ export function HistoricalRecordDetailComplete({
               <h3 className="font-semibold">Tài liệu nguồn và hồ sơ đề cử</h3>
               <p className="mt-1 text-sm text-[var(--theme-muted)]">
                 Tải thư đề cử, giấy tờ đối chiếu, ảnh và tài liệu liên quan đến
-                hồ sơ cũ. Tệp gốc được lưu riêng; chỉ tệp được chọn mới công khai.
+                hồ sơ cũ. Tệp gốc được lưu riêng; chỉ tệp được chọn mới công
+                khai.
               </p>
             </div>
             {canEdit ? (

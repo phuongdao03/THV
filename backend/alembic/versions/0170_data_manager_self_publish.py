@@ -56,9 +56,13 @@ def upgrade() -> None:
         bind.execute(
             permissions.insert().values(id=permission_id, code=PUBLISH_PERMISSION)
         )
-    other_ids = bind.execute(
-        sa.select(permissions.c.id).where(permissions.c.code.in_(ALLOWLIST[:-1]))
-    ).scalars().all()
+    other_ids = (
+        bind.execute(
+            sa.select(permissions.c.id).where(permissions.c.code.in_(ALLOWLIST[:-1]))
+        )
+        .scalars()
+        .all()
+    )
     allowed_ids = (*other_ids, permission_id)
     bind.execute(
         role_permissions.delete().where(

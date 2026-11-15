@@ -63,8 +63,8 @@ export function DataManagerContentWorkspace({
         <div className="space-y-4">
           <p className="max-w-3xl text-sm leading-6 text-[var(--theme-muted)]">
             Bổ sung và quản lý hồ sơ đề cử cũ, người gửi, tài liệu chứng minh,
-            bằng xác lập và bản scan. Lưu hồ sơ trực tiếp; nội dung công khai được
-            biên tập và xuất bản riêng khi sẵn sàng.
+            bằng xác lập và bản scan. Lưu hồ sơ trực tiếp; nội dung công khai
+            được biên tập và xuất bản riêng khi sẵn sàng.
           </p>
           <HistoricalDataManagerWorkspace />
         </div>

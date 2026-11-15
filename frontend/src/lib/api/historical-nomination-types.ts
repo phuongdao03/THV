@@ -66,25 +66,27 @@ export interface HistoricalNomination {
   mediaCount: number;
 }
 
-export type HistoricalNominationInput = Partial<Pick<
-  HistoricalNomination,
-  | "subjectType"
-  | "subjectName"
-  | "title"
-  | "summary"
-  | "description"
-  | "dossierTypeId"
-  | "categoryId"
+export type HistoricalNominationInput = Partial<
+  Pick<
+    HistoricalNomination,
+    | "subjectType"
+    | "subjectName"
+    | "title"
+    | "summary"
+    | "description"
+    | "dossierTypeId"
+    | "categoryId"
     | "legacyCategoryLabel"
-  | "nominationYear"
-  | "nominatedAt"
-  | "historicalResult"
-  | "sourceKind"
-  | "sourceLabel"
-  | "sourceReference"
-  | "sourceRecordedAt"
-  | "provenanceNotes"
->>;
+    | "nominationYear"
+    | "nominatedAt"
+    | "historicalResult"
+    | "sourceKind"
+    | "sourceLabel"
+    | "sourceReference"
+    | "sourceRecordedAt"
+    | "provenanceNotes"
+  >
+>;
 
 export interface HistoricalRelatedPerson {
   id: string;

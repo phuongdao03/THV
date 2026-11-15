@@ -1602,7 +1602,5 @@ class HistoricalNominationService:
     async def _validate_dossier_type(self, dossier_type_id: object) -> DossierType:
         dossier_type = await self._session.get(DossierType, dossier_type_id)
         if dossier_type is None or not dossier_type.is_active:
-            raise HistoricalNominationValidationError(
-                "Choose an active dossier type."
-            )
+            raise HistoricalNominationValidationError("Choose an active dossier type.")
         return dossier_type

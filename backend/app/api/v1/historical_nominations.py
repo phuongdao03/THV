@@ -615,8 +615,7 @@ async def list_historical_public_content_versions(
     versions = await service.list_public_content_versions(principal, record_id)
     return SuccessEnvelope(
         data=[
-            HistoricalPublicContentVersionData.model_validate(item)
-            for item in versions
+            HistoricalPublicContentVersionData.model_validate(item) for item in versions
         ],
         meta=ResponseMeta(request_id=request.state.request_id),
     )
@@ -644,6 +643,7 @@ async def restore_historical_public_content_version(
         data=HistoricalPublicContentDraftData.model_validate(draft),
         meta=ResponseMeta(request_id=request.state.request_id),
     )
+
 
 @router.patch("/{record_id}", response_model=SuccessEnvelope[HistoricalNominationData])
 async def patch_historical_nomination(

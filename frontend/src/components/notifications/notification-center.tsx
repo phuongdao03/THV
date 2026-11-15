@@ -236,8 +236,7 @@ function NotificationInbox() {
             const invitationId =
               ["staff.reviewer_invited", "staff.data_manager_invited"].includes(
                 item.type,
-              ) &&
-              typeof item.data.invitationId === "string"
+              ) && typeof item.data.invitationId === "string"
                 ? item.data.invitationId
                 : null;
             const invitedRoleLabel =

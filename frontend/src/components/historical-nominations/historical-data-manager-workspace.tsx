@@ -35,7 +35,13 @@ export function HistoricalDataManagerWorkspace() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const records = useQuery({
-    queryKey: ["historical-nominations", query, publicationStatus, year, dossierTypeId],
+    queryKey: [
+      "historical-nominations",
+      query,
+      publicationStatus,
+      year,
+      dossierTypeId,
+    ],
     queryFn: () =>
       historicalNominationApi.list({
         query,
@@ -251,8 +257,9 @@ export function HistoricalDataManagerWorkspace() {
                         <span className="rounded-full border border-[var(--theme-border)] px-2 py-0.5 text-xs">
                           {record.publicationStatus === "PUBLISHED"
                             ? "Đã công khai"
-                            : publicationStatusLabels[record.publicationStatus] ??
-                              "Chưa công khai"}
+                            : (publicationStatusLabels[
+                                record.publicationStatus
+                              ] ?? "Chưa công khai")}
                         </span>
                       </div>
                       <p className="mt-1 truncate text-sm text-[var(--theme-muted)]">
