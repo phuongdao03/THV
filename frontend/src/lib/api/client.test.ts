@@ -18,6 +18,7 @@ import {
   hrEmployeeApi,
   hrModeratorDashboardApi,
   hrPayrollApi,
+  historicalNominationApi,
   mediaApi,
   membershipApi,
   organizationApi,
@@ -27,6 +28,20 @@ import {
   staffInvitationsApi,
   taskAdminApi,
 } from "@/lib/api/client";
+
+it("bypasses the browser cache when reading the historical record version", async () => {
+  const fetchMock = vi
+    .spyOn(globalThis, "fetch")
+    .mockResolvedValue(
+      response({ success: true, data: {}, meta: { requestId: "record" } }),
+    );
+  await historicalNominationApi.get("record-1");
+  expect(fetchMock).toHaveBeenCalledWith(
+    "/api/v1/historical-nominations/record-1",
+    expect.objectContaining({ cache: "no-store" }),
+  );
+  fetchMock.mockRestore();
+});
 
 describe("admin review API client", () => {
   beforeEach(() => {

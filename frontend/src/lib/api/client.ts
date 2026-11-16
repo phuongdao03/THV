@@ -1855,6 +1855,7 @@ export const historicalNominationApi = {
   get(id: string) {
     return request<HistoricalNomination>(
       `/historical-nominations/${encodeURIComponent(id)}`,
+      { cache: "no-store" },
     );
   },
   create(input: HistoricalNominationInput, idempotencyKey?: string) {
