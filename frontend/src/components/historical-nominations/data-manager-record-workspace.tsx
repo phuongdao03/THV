@@ -6,7 +6,10 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 import { historicalNominationApi } from "@/lib/api/client";
-import type { HistoricalNominationInput } from "@/lib/api/historical-nomination-types";
+import type {
+  HistoricalNomination,
+  HistoricalNominationInput,
+} from "@/lib/api/historical-nomination-types";
 
 import { HistoricalRecordDetailComplete } from "./historical-record-detail-complete";
 import { HistoricalRecordFormComplete } from "./historical-record-form-complete";
@@ -17,7 +20,10 @@ export function DataManagerRecordWorkspace({ recordId }: { recordId: string }) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
+  const [editingRecord, setEditingRecord] =
+    useState<HistoricalNomination | null>(null);
   const [busy, setBusy] = useState(false);
+  const [refreshingForEdit, setRefreshingForEdit] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
@@ -117,6 +123,7 @@ export function DataManagerRecordWorkspace({ recordId }: { recordId: string }) {
       return;
     }
     setEditing(false);
+    setEditingRecord(null);
     if (target.href) router.push(target.href);
   }
 
@@ -126,6 +133,7 @@ export function DataManagerRecordWorkspace({ recordId }: { recordId: string }) {
     setPendingExit(null);
     setDirty(false);
     setEditing(false);
+    setEditingRecord(null);
     if (target.backSteps) {
       allowNextPopstate.current = true;
       window.history.go(-target.backSteps);
@@ -141,6 +149,31 @@ export function DataManagerRecordWorkspace({ recordId }: { recordId: string }) {
     formRef.current.requestSubmit();
   }
 
+  async function beginEditing() {
+    if (!record.data || busy || refreshingForEdit) return;
+    setRefreshingForEdit(true);
+    setError(null);
+    try {
+      const refreshed = await record.refetch();
+      if (refreshed.isError || !refreshed.data) {
+        throw (
+          refreshed.error ??
+          new Error("Không tải được phiên bản hồ sơ mới nhất.")
+        );
+      }
+      setEditingRecord(refreshed.data);
+      setEditing(true);
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Không tải được phiên bản hồ sơ mới nhất.",
+      );
+    } finally {
+      setRefreshingForEdit(false);
+    }
+  }
+
   async function saveRecord(input: HistoricalNominationInput) {
     if (saving.current) return;
     saving.current = true;
@@ -149,12 +182,13 @@ export function DataManagerRecordWorkspace({ recordId }: { recordId: string }) {
     try {
       const saved = await historicalNominationApi.update(recordId, {
         ...input,
-        expectedUpdatedAt: record.data?.updatedAt,
+        expectedUpdatedAt: editingRecord?.updatedAt ?? record.data?.updatedAt,
       });
       queryClient.setQueryData(["historical-nomination", recordId], saved);
       setSavedAt(saved.updatedAt);
       setDirty(false);
       setEditing(false);
+      setEditingRecord(null);
       await invalidateRecordQueries();
       const target = exitAfterSave.current;
       exitAfterSave.current = null;
@@ -225,6 +259,11 @@ export function DataManagerRecordWorkspace({ recordId }: { recordId: string }) {
       >
         ← Danh sách hồ sơ
       </Link>
+      {refreshingForEdit ? (
+        <p className="text-sm text-[var(--theme-muted)]" role="status">
+          Đang kiểm tra phiên bản hồ sơ mới nhất…
+        </p>
+      ) : null}
       {record.isLoading ? (
         <p
           aria-busy="true"
@@ -248,7 +287,7 @@ export function DataManagerRecordWorkspace({ recordId }: { recordId: string }) {
             onCancel={() => requestExit({ href: null })}
             onDirtyChange={() => setDirty(true)}
             onSave={(input) => void saveRecord(input)}
-            record={record.data}
+            record={editingRecord ?? record.data}
           />
           <p className="mt-4 text-sm text-[var(--theme-muted)]" role="status">
             {busy
@@ -284,9 +323,9 @@ export function DataManagerRecordWorkspace({ recordId }: { recordId: string }) {
           <HistoricalRecordDetailComplete
             canEdit={record.data.archiveStatus === "ACTIVE"}
             onArchive={() => void archiveRecord()}
-            onEdit={() => setEditing(true)}
+            onEdit={() => void beginEditing()}
             record={record.data}
-            submitting={busy}
+            submitting={busy || refreshingForEdit}
           />
         </>
       )}

@@ -467,7 +467,8 @@ export function HistoricalRecordDetailComplete({
         <div className="flex flex-wrap gap-2">
           {canEdit ? (
             <button
-              className="min-h-10 rounded-md border border-[var(--theme-border)] px-3 text-sm"
+              className="min-h-10 rounded-md border border-[var(--theme-border)] px-3 text-sm disabled:opacity-60"
+              disabled={submitting}
               onClick={onEdit}
               type="button"
             >
