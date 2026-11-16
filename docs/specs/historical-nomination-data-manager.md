@@ -1,5 +1,36 @@
 # DataManager legacy records, public content, and certificates
 
+## Proposed account linking (2026-11-16, design only)
+
+- A registered user opens "My nominations" and requests to link an existing
+  historical nomination using its public code. Keep the private record hidden.
+- Collect the claimant's relationship (nominee or authorized representative)
+  and private supporting evidence. Show pending/approved/rejected status.
+- Admin reviews evidence and records a reason. Matching names, phone numbers,
+  or email addresses are search hints, never proof of ownership.
+- On approval, link the verified historical person to the account through the
+  existing `HistoricalRelatedPerson.linked_user_id`; preserve all source facts,
+  issued certificates, audit attribution, and publication state.
+- Only approved nominee/representative relationships grant an account view;
+  witness/contact/nominator roles alone grant no ownership access. Specify
+  those view permissions separately before implementation.
+- Handle duplicate requests, an already linked person, organization delegation,
+  revocation, and disputed claims explicitly. Audit approvals and revocations.
+- No account-linking endpoint, authorization change, or migration is shipped
+  by the presentation/concurrency fixes in this revision. Implementation needs
+  a separate reviewed authorization plan and deterministic permission tests.
+
+## Follow-up verification (2026-11-16)
+
+- Source editing retries a 409 once only if a fresh GET confirms every source
+  field in the form and record editability states match the original snapshot.
+  A real source conflict preserves form input and stops without overwriting.
+- Public draft readiness accepts non-empty title and summary, matching the
+  publish input contract, and lists missing saved values by name.
+- Historical activity uses human-readable Vietnamese action/field labels.
+- Historical presentation uses the same round logo crop, drum watermark, and
+  burgundy/gold palette as `CertificatePdfRenderer`; issued PDFs are unchanged.
+
 **Status:** Implemented; local verification complete.
 
 **Role names:** The UI's Admin role is `SUPER_ADMIN` in the codebase.

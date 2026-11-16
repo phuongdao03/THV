@@ -32,6 +32,10 @@ import { uploadMedia } from "@/lib/media/upload";
 import { HistoricalCertificatePresentation } from "@/components/certificates/historical-certificate-presentation";
 
 import { HistoricalDateField } from "./historical-date-field";
+import {
+  historicalActivityLabel,
+  historicalActivityDescription,
+} from "./historical-activity-labels";
 
 const sections = [
   "Thông tin",
@@ -505,6 +509,11 @@ export function HistoricalRecordDetailComplete({
         </div>
       </header>
 
+      <p className="text-xs leading-5 text-[var(--theme-muted)]">
+        “Sửa thông tin” cập nhật dữ liệu nguồn. “Lưu trữ hồ sơ” đưa hồ sơ ngừng
+        xử lý ra khỏi danh sách đang làm; thông tin và tài liệu vẫn được giữ
+        lại. Để đăng lên website, dùng bước Nội dung &amp; xuất bản.
+      </p>
       <section
         aria-label="Các bước hoàn thiện hồ sơ"
         className="overflow-hidden rounded-xl border border-[var(--theme-border)] bg-[var(--theme-surface)]"
@@ -1184,10 +1193,11 @@ export function HistoricalRecordDetailComplete({
                     key={item.id}
                   >
                     <div>
-                      <p className="text-sm font-medium">{item.action}</p>
+                      <p className="text-sm font-medium">
+                        {historicalActivityLabel(item.action)}
+                      </p>
                       <p className="mt-1 text-xs text-[var(--theme-muted)]">
-                        {item.changedFields.join(", ") ||
-                          "Không có chi tiết trường"}
+                        {historicalActivityDescription(item.changedFields)}
                       </p>
                     </div>
                     <time
@@ -1418,6 +1428,13 @@ function PublicContentDraftEditor({
   onSave,
 }: Omit<Parameters<typeof PublicContentSection>[0], "draftLoading">) {
   const categoryNames = categoryLabels(categories);
+  const missingPublicationFields = [
+    !draft?.title?.trim() && "Tiêu đề công khai",
+    !draft?.slug?.trim() && "Đường dẫn dự kiến",
+    !draft?.shortDescription?.trim() && "Mô tả ngắn",
+    !draft?.categoryId && "Danh mục",
+    !draft?.coverMediaId && "Ảnh bìa",
+  ].filter(Boolean);
   const availableMedia = media.filter((item) =>
     ["PHOTO", "VIDEO", "AWARD_SCAN"].includes(item.mediaKind),
   );
@@ -1674,7 +1691,7 @@ function PublicContentDraftEditor({
           </p>
         </div>
       )}
-      {draft ? (
+      {draft && !draft.coverMediaId ? (
         <section
           className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-surface)] p-4"
           aria-label="Bản xem trước nội dung công khai"
@@ -1731,14 +1748,9 @@ function PublicContentDraftEditor({
                   : "Chưa xuất bản"}
             </p>
             <p className="mt-1 text-[var(--theme-muted)]">
-              {draft &&
-              draft.slug &&
-              (draft.title?.trim().length ?? 0) >= 3 &&
-              (draft.shortDescription?.trim().length ?? 0) >= 10 &&
-              draft.categoryId &&
-              draft.coverMediaId
+              {!missingPublicationFields.length
                 ? "Nội dung đã có thông tin bắt buộc để xuất bản."
-                : "Lưu tiêu đề, đường dẫn, mô tả, danh mục và ảnh bìa trước khi xuất bản."}
+                : `Cần bổ sung và lưu: ${missingPublicationFields.join(", ")}.`}
             </p>
           </div>
           {publication?.publicationStatus === "PUBLISHED" ? (
@@ -1756,11 +1768,7 @@ function PublicContentDraftEditor({
               disabled={
                 busy ||
                 publicationLoading ||
-                !draft?.slug ||
-                (draft.title?.trim().length ?? 0) < 3 ||
-                (draft.shortDescription?.trim().length ?? 0) < 10 ||
-                !draft.categoryId ||
-                !draft.coverMediaId
+                missingPublicationFields.length > 0
               }
               onClick={onPublish}
               type="button"

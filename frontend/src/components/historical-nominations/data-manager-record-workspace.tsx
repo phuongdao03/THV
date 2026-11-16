@@ -180,10 +180,48 @@ export function DataManagerRecordWorkspace({ recordId }: { recordId: string }) {
     setBusy(true);
     setError(null);
     try {
-      const saved = await historicalNominationApi.update(recordId, {
-        ...input,
-        expectedUpdatedAt: editingRecord?.updatedAt ?? record.data?.updatedAt,
-      });
+      const baseline = editingRecord ?? record.data;
+      let saved: HistoricalNomination;
+      try {
+        saved = await historicalNominationApi.update(recordId, {
+          ...input,
+          expectedUpdatedAt: baseline?.updatedAt,
+        });
+      } catch (cause) {
+        if (
+          !baseline ||
+          typeof cause !== "object" ||
+          cause === null ||
+          !("status" in cause) ||
+          cause.status !== 409
+        )
+          throw cause;
+        const latest = await historicalNominationApi.get(recordId);
+        // Related files and publication metadata also advance the record version.
+        // Retry only when every source field in this form is still unchanged.
+        const sourceChanged = (
+          Object.keys(input) as (keyof HistoricalNominationInput)[]
+        )
+          .filter((key) => key !== "expectedUpdatedAt")
+          .some(
+            (key) =>
+              latest[key as keyof HistoricalNomination] !==
+              baseline[key as keyof HistoricalNomination],
+          );
+        if (
+          sourceChanged ||
+          latest.archiveStatus !== baseline.archiveStatus ||
+          latest.verificationStatus !== baseline.verificationStatus
+        ) {
+          throw new Error(
+            "Thông tin hồ sơ đã được thay đổi ở phiên khác. Nội dung bạn nhập vẫn được giữ lại; hãy đối chiếu bản mới trước khi lưu.",
+          );
+        }
+        saved = await historicalNominationApi.update(recordId, {
+          ...input,
+          expectedUpdatedAt: latest.updatedAt,
+        });
+      }
       queryClient.setQueryData(["historical-nomination", recordId], saved);
       setSavedAt(saved.updatedAt);
       setDirty(false);

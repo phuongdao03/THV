@@ -65,7 +65,51 @@ const record: HistoricalNomination = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  api.get.mockReset();
+  api.update.mockReset();
 });
+
+it.each([false, true])(
+  "recovers only metadata conflicts; source changed: %s",
+  async (sourceChanged) => {
+    const latest = {
+      ...record,
+      updatedAt: "2026-11-16T09:00:00Z",
+      title: sourceChanged ? "Tên mới từ phiên khác" : record.title,
+    };
+    api.get.mockResolvedValueOnce(record).mockResolvedValue(latest);
+    api.update
+      .mockRejectedValueOnce(
+        Object.assign(new Error("Conflict"), { status: 409 }),
+      )
+      .mockRejectedValue(new Error("Stopped after retry"));
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false, staleTime: Infinity, gcTime: 0 },
+      },
+    });
+    client.setQueryData(["historical-nomination", record.id], record);
+    render(
+      <QueryClientProvider client={client}>
+        <DataManagerRecordWorkspace recordId={record.id} />
+      </QueryClientProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Sửa thông tin" }));
+    await screen.findByRole("heading", { name: "Chỉnh sửa hồ sơ" });
+    fireEvent.change(screen.getByDisplayValue(record.title), {
+      target: { value: "Tên vừa nhập" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Lưu bản nháp" }));
+    await screen.findByRole("alert");
+    expect(api.update).toHaveBeenCalledTimes(sourceChanged ? 1 : 2);
+    expect(screen.getByDisplayValue("Tên vừa nhập")).toBeTruthy();
+    if (!sourceChanged)
+      expect(api.update).toHaveBeenLastCalledWith(
+        record.id,
+        expect.objectContaining({ expectedUpdatedAt: latest.updatedAt }),
+      );
+  },
+);
 
 it("refreshes the record version before opening the edit form", async () => {
   let resolveLatest!: (value: HistoricalNomination) => void;

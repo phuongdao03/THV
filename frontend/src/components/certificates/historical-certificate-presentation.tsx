@@ -18,8 +18,16 @@ export function HistoricalCertificatePresentation({
   return (
     <section
       aria-label="Bản trình bày bằng xác lập lịch sử"
-      className="relative overflow-hidden border-4 border-[#680d1b] bg-[#fffdf5] p-3 text-[#281b18] sm:p-6"
+      className="relative isolate overflow-hidden border-4 border-[#720b17] bg-[#fffcf5] p-3 text-[#2b1714] sm:p-6"
     >
+      <Image
+        alt=""
+        aria-hidden
+        className="pointer-events-none absolute bottom-4 right-0 -z-10 h-auto w-3/4 opacity-[0.07]"
+        src="/assets/brand/trong-dong.png"
+        width={800}
+        height={800}
+      />
       <div className="relative border border-[#ad8a35] p-5 sm:p-10">
         <header className="text-center">
           <p className="text-xs uppercase tracking-widest text-[#916c23]">
@@ -28,13 +36,15 @@ export function HistoricalCertificatePresentation({
           <h3 className="mt-4 font-serif text-3xl font-bold uppercase sm:text-5xl">
             Bằng xác lập
           </h3>
-          <Image
-            alt="Trung tâm xác lập Tinh Hoa Việt"
-            className="mx-auto my-6 h-28 w-28 object-contain sm:h-40 sm:w-40"
-            height={160}
-            src="/assets/brand/thv-certificate-seal.png"
-            width={160}
-          />
+          <div className="mx-auto my-6 h-28 w-28 overflow-hidden rounded-full border-2 border-[#b7882f] sm:h-40 sm:w-40">
+            <Image
+              alt="Trung tâm xác lập Tinh Hoa Việt"
+              className="h-full w-full scale-[1.235] object-contain"
+              height={160}
+              src="/assets/brand/logo-tinh-hoa-viet.png"
+              width={160}
+            />
+          </div>
           <p className="text-sm text-[#786b61]">
             Ghi nhận tác phẩm · Tôn vinh giá trị Việt
           </p>

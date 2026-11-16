@@ -105,6 +105,54 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
+it("allows publishing a saved short title and summary and explains missing values", async () => {
+  api.publicContentDraft.mockResolvedValueOnce({
+    id: "draft-1",
+    nominationId: record.id,
+    slug: "a",
+    title: "A",
+    shortDescription: "B",
+    fullDescription: null,
+    authorDisplayName: null,
+    categoryId: "category-1",
+    coverMediaId: "cover-1",
+    featuredVideoMediaId: null,
+    publicMediaIds: [],
+    revision: 1,
+    status: "DRAFT",
+    updatedAt: record.updatedAt,
+  });
+  renderDetail();
+  fireEvent.click(screen.getByRole("tab", { name: "Nội dung công khai" }));
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "Xuất bản" })).toHaveProperty(
+      "disabled",
+      false,
+    ),
+  );
+  expect(
+    screen.getByText("Nội dung đã có thông tin bắt buộc để xuất bản."),
+  ).toBeTruthy();
+});
+
+it("shows readable history without database field names", async () => {
+  api.recordActivity.mockResolvedValueOnce([
+    {
+      id: "event-1",
+      action: "historical_nomination.public_content_draft_saved",
+      changedFields: ["revision"],
+      occurredAt: record.updatedAt,
+      actorUserId: null,
+    },
+  ]);
+  renderDetail();
+  fireEvent.click(screen.getByRole("tab", { name: "Lịch sử chỉnh sửa" }));
+  expect(
+    await screen.findByText("Lưu bản nháp nội dung công khai"),
+  ).toBeTruthy();
+  expect(screen.queryByText("revision")).toBeNull();
+});
+
 it("directs an empty record to basic information before publication", async () => {
   const onEdit = vi.fn();
   renderDetail(
