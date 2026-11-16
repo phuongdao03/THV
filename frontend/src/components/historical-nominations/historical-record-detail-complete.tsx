@@ -135,6 +135,12 @@ export function HistoricalRecordDetailComplete({
     });
   }
 
+  function invalidateRecordVersion() {
+    return queryClient.invalidateQueries({
+      queryKey: ["historical-nomination", record.id],
+    });
+  }
+
   async function addPerson(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
@@ -155,9 +161,12 @@ export function HistoricalRecordDetailComplete({
         ) as HistoricalRelatedPersonRole,
       });
       form.reset();
-      await queryClient.invalidateQueries({
-        queryKey: ["historical-nomination-people", record.id],
-      });
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ["historical-nomination-people", record.id],
+        }),
+        invalidateRecordVersion(),
+      ]);
     } catch (cause) {
       setError(
         cause instanceof Error
@@ -204,9 +213,12 @@ export function HistoricalRecordDetailComplete({
       setEditingAwardId(null);
       setAwardFormOpen(false);
       setAwardFormRevision((revision) => revision + 1);
-      await queryClient.invalidateQueries({
-        queryKey: ["historical-nomination-awards", record.id],
-      });
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ["historical-nomination-awards", record.id],
+        }),
+        invalidateRecordVersion(),
+      ]);
     } catch (cause) {
       setError(
         cause instanceof Error ? cause.message : "Không lưu được bằng xác lập.",
@@ -228,9 +240,12 @@ export function HistoricalRecordDetailComplete({
         awardId,
         displayOrder: item.displayOrder,
       });
-      await queryClient.invalidateQueries({
-        queryKey: ["historical-nomination-media", record.id],
-      });
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ["historical-nomination-media", record.id],
+        }),
+        invalidateRecordVersion(),
+      ]);
     } catch (cause) {
       setError(
         cause instanceof Error
@@ -280,6 +295,7 @@ export function HistoricalRecordDetailComplete({
         queryKey: ["historical-nomination-media", record.id],
       }),
       queryClient.invalidateQueries({ queryKey: ["historical-media-library"] }),
+      invalidateRecordVersion(),
     ]);
     if (failures.length) setError(failures.join(" · "));
     setBusy(false);
@@ -300,6 +316,7 @@ export function HistoricalRecordDetailComplete({
         queryClient.invalidateQueries({
           queryKey: ["historical-nomination-public-content-draft", record.id],
         }),
+        invalidateRecordVersion(),
       ]);
     } catch (cause) {
       setError(

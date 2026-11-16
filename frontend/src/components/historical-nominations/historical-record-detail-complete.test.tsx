@@ -82,7 +82,8 @@ function renderDetail() {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
-  return render(
+  queryClient.setQueryData(["historical-nomination", record.id], record);
+  render(
     <QueryClientProvider client={queryClient}>
       <HistoricalRecordDetailComplete
         canEdit
@@ -93,6 +94,7 @@ function renderDetail() {
       />
     </QueryClientProvider>,
   );
+  return queryClient;
 }
 
 beforeEach(() => {
@@ -117,7 +119,8 @@ it("keeps award details when the operator switches to another section", async ()
 });
 
 it("explains how to link an award recipient and where the record will be published", async () => {
-  renderDetail();
+  const queryClient = renderDetail();
+  const recordQueryKey = ["historical-nomination", record.id];
 
   fireEvent.click(await screen.findByRole("tab", { name: "Bằng xác lập" }));
   fireEvent.click(screen.getByRole("button", { name: "Thêm bằng cũ" }));
@@ -141,6 +144,10 @@ it("explains how to link an award recipient and where the record will be publish
     screen.getByRole("button", { name: /Thêm người gửi \/ người liên quan/ }),
   );
   await waitFor(() => expect(api.people).toHaveLength(1));
+  await waitFor(() =>
+    expect(queryClient.getQueryState(recordQueryKey)?.isInvalidated).toBe(true),
+  );
+  queryClient.setQueryData(recordQueryKey, record);
 
   fireEvent.click(screen.getByRole("tab", { name: "Bằng xác lập" }));
   const recipient = screen.getByLabelText(
@@ -161,6 +168,9 @@ it("explains how to link an award recipient and where the record will be publish
       record.id,
       expect.objectContaining({ recipientPersonId: "person-1" }),
     ),
+  );
+  await waitFor(() =>
+    expect(queryClient.getQueryState(recordQueryKey)?.isInvalidated).toBe(true),
   );
 
   fireEvent.click(
