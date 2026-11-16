@@ -3,6 +3,7 @@ const actions: Record<string, string> = {
   updated: "Cập nhật thông tin hồ sơ",
   person_added: "Thêm người liên quan",
   person_linked: "Liên kết người liên quan",
+  account_linked: "Liên kết tài khoản người nhận",
   award_added: "Thêm bằng xác lập cũ",
   award_updated: "Sửa thông tin bằng cũ",
   media_linked: "Thêm ảnh hoặc tài liệu",

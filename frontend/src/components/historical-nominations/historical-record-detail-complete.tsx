@@ -32,6 +32,7 @@ import { uploadMedia } from "@/lib/media/upload";
 import { HistoricalCertificatePresentation } from "@/components/certificates/historical-certificate-presentation";
 
 import { HistoricalDateField } from "./historical-date-field";
+import { HistoricalAccountLinkControl } from "./historical-account-link-control";
 import {
   historicalActivityLabel,
   historicalActivityDescription,
@@ -560,6 +561,7 @@ export function HistoricalRecordDetailComplete({
           {[
             {
               title: "Thông tin hồ sơ",
+              done: hasBasicInfo,
               description: "Tên hồ sơ, đối tượng, thời gian và nguồn.",
               state: hasBasicInfo
                 ? "Đã có tên và đối tượng"
@@ -569,6 +571,7 @@ export function HistoricalRecordDetailComplete({
             },
             {
               title: "Người & tư liệu",
+              done: Boolean(people.data?.length && media.data?.length),
               description: "Thêm người liên quan, ảnh và tài liệu nguồn.",
               state:
                 people.isPending || media.isPending
@@ -579,6 +582,7 @@ export function HistoricalRecordDetailComplete({
             },
             {
               title: "Bằng xác lập cũ",
+              done: Boolean(awards.data?.length),
               description: "Nhập thông tin bằng, tải ảnh chụp hoặc bản scan.",
               state: awards.isPending
                 ? "Đang tải…"
@@ -588,6 +592,7 @@ export function HistoricalRecordDetailComplete({
             },
             {
               title: "Nội dung & xuất bản",
+              done: record.publicationStatus === "PUBLISHED",
               description:
                 "Soạn bài, chọn tệp công khai và xem lại trước khi đăng.",
               state:
@@ -602,10 +607,21 @@ export function HistoricalRecordDetailComplete({
               run: () => selectSection("Nội dung công khai"),
             },
           ].map((step, index) => (
-            <li className="flex flex-col items-start p-5" key={step.title}>
-              <span className="mb-3 grid h-7 w-7 place-items-center rounded-full border border-[var(--theme-border)] text-xs font-semibold text-[var(--theme-accent)]">
-                {index + 1}
+            <li
+              className={`flex flex-col items-start p-5 ${step.done ? "bg-emerald-700/5 dark:bg-emerald-300/10" : ""}`}
+              key={step.title}
+            >
+              <span
+                aria-label={step.done ? "Đã hoàn thành" : `Bước ${index + 1}`}
+                className={`mb-3 grid h-7 w-7 place-items-center rounded-full border text-xs font-semibold ${step.done ? "border-emerald-700 bg-emerald-700 text-white dark:border-emerald-300 dark:bg-emerald-300 dark:text-emerald-950" : "border-[var(--theme-border)] text-[var(--theme-accent)]"}`}
+              >
+                {step.done ? "✓" : index + 1}
               </span>
+              {step.done ? (
+                <p className="mb-2 text-xs font-semibold text-emerald-800 dark:text-emerald-200">
+                  Đã hoàn thành
+                </p>
+              ) : null}
               <h4 className="font-semibold">{step.title}</h4>
               <p className="mt-2 text-sm leading-6 text-[var(--theme-muted)]">
                 {step.description}
@@ -744,6 +760,28 @@ export function HistoricalRecordDetailComplete({
                   <p className="text-sm sm:col-span-2">
                     Ghi chú nội bộ: {person.internalNotes}
                   </p>
+                ) : null}
+                {canEdit &&
+                ["NOMINEE", "REPRESENTATIVE"].includes(person.role) ? (
+                  <div className="sm:col-span-2">
+                    <HistoricalAccountLinkControl
+                      recordId={record.id}
+                      personId={person.id}
+                      linkedUserId={person.linkedUserId}
+                      onLinked={() => {
+                        void queryClient.invalidateQueries({
+                          queryKey: ["historical-nomination-people", record.id],
+                        });
+                        void queryClient.invalidateQueries({
+                          queryKey: [
+                            "historical-nomination-activity",
+                            record.id,
+                          ],
+                        });
+                        void invalidateRecordVersion();
+                      }}
+                    />
+                  </div>
                 ) : null}
               </li>
             ))}

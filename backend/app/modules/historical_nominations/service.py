@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.modules.audit.models import AuditLog
 from app.modules.audit.service import AuditService
 from app.modules.auth.authorization import AuthorizationPolicy, PolicyRequirement
+from app.modules.auth.models import User, UserStatus
 from app.modules.auth.session_service import AuthPrincipal
 from app.modules.dossiers.models import Category, DossierType
 from app.modules.historical_nominations.errors import (
@@ -38,8 +39,12 @@ from app.modules.historical_nominations.models import (
     HistoricalRelatedPersonRole,
 )
 from app.modules.historical_nominations.schemas import (
+    HistoricalAccountLinkWrite,
     HistoricalAwardPatch,
     HistoricalAwardWrite,
+    HistoricalLinkableAccountData,
+    HistoricalLinkedAwardData,
+    HistoricalLinkedRecordData,
     HistoricalNominationWrite,
     HistoricalPersonWrite,
     HistoricalPublicContentApproval,
@@ -1330,6 +1335,172 @@ class HistoricalNominationService:
         self._session.add(version)
         await self._session.flush()
         return version
+
+    async def find_linkable_account(
+        self, principal: AuthPrincipal, email: str
+    ) -> HistoricalLinkableAccountData:
+        _require_manager(principal, "historical.records.manage")
+        async with self._session.begin():
+            user = await self._session.scalar(
+                select(User).where(
+                    func.lower(User.email) == email.strip().lower(),
+                    User.status == UserStatus.ACTIVE,
+                    User.deleted_at.is_(None),
+                    User.disabled_at.is_(None),
+                )
+            )
+            if user is None:
+                raise HistoricalNominationValidationError(
+                    "Không tìm thấy tài khoản đang hoạt động với email này. "
+                    "Hãy mời người nhận đăng ký trước."
+                )
+            return HistoricalLinkableAccountData(id=user.id, email=user.email)
+
+    async def link_account(
+        self,
+        principal: AuthPrincipal,
+        record_id: UUID,
+        person_id: UUID,
+        payload: HistoricalAccountLinkWrite,
+    ) -> tuple[HistoricalRelatedPerson, HistoricalRelatedPersonRole]:
+        _require_manager(principal, "historical.records.manage")
+        async with self._session.begin():
+            record = await self._editable_record(record_id)
+            role = await self._session.scalar(
+                select(HistoricalNominationPartyRole.role).where(
+                    HistoricalNominationPartyRole.nomination_id == record_id,
+                    HistoricalNominationPartyRole.person_id == person_id,
+                )
+            )
+            if role is None:
+                raise HistoricalNominationNotFoundError()
+            if role not in (
+                HistoricalRelatedPersonRole.NOMINEE,
+                HistoricalRelatedPersonRole.REPRESENTATIVE,
+            ):
+                raise HistoricalNominationValidationError(
+                    "Chỉ liên kết tài khoản người được đề cử hoặc đại diện."
+                )
+            person = await self._session.scalar(
+                select(HistoricalRelatedPerson)
+                .where(HistoricalRelatedPerson.id == person_id)
+                .with_for_update()
+            )
+            if person is None:
+                raise HistoricalNominationNotFoundError()
+            if (
+                person.linked_user_id is not None
+                and person.linked_user_id != payload.user_id
+            ):
+                raise HistoricalNominationStateError(
+                    "Người này đã liên kết tài khoản khác. Không thể ghi đè liên kết."
+                )
+            user = await self._session.scalar(
+                select(User)
+                .where(
+                    User.id == payload.user_id,
+                    User.status == UserStatus.ACTIVE,
+                    User.deleted_at.is_(None),
+                    User.disabled_at.is_(None),
+                )
+                .with_for_update()
+            )
+            if user is None:
+                raise HistoricalNominationValidationError(
+                    "Tài khoản không còn hoạt động. Hãy kiểm tra lại người nhận."
+                )
+            if person.linked_user_id == user.id:
+                return person, role
+            person.linked_user_id = user.id
+            person.updated_by_user_id = principal.user_id
+            record.updated_by_user_id = principal.user_id
+            record.updated_at = datetime.now(UTC)
+            self._audit.record(
+                actor_user_id=principal.user_id,
+                action="historical_nomination.account_linked",
+                resource_type="historical_nomination",
+                resource_id=str(record.id),
+                after={
+                    "person_id": str(person.id),
+                    "linked_user_id": str(user.id),
+                    "reason": payload.reason,
+                },
+            )
+            await self._session.flush()
+            return person, role
+
+    async def list_linked_records(
+        self, principal: AuthPrincipal, *, page: int, page_size: int
+    ) -> tuple[list[HistoricalLinkedRecordData], int]:
+        linked_people = select(HistoricalRelatedPerson.id).where(
+            HistoricalRelatedPerson.linked_user_id == principal.user_id
+        )
+        linked_records = select(HistoricalNominationPartyRole.nomination_id).where(
+            HistoricalNominationPartyRole.person_id.in_(linked_people),
+            HistoricalNominationPartyRole.role.in_(
+                (
+                    HistoricalRelatedPersonRole.NOMINEE,
+                    HistoricalRelatedPersonRole.REPRESENTATIVE,
+                )
+            ),
+        )
+        filters = (
+            HistoricalNomination.id.in_(linked_records),
+            HistoricalNomination.deleted_at.is_(None),
+            HistoricalNomination.archive_status == HistoricalArchiveStatus.ACTIVE,
+        )
+        async with self._session.begin():
+            total = int(
+                await self._session.scalar(
+                    select(func.count(HistoricalNomination.id)).where(*filters)
+                )
+                or 0
+            )
+            records = list(
+                await self._session.scalars(
+                    select(HistoricalNomination)
+                    .where(*filters)
+                    .order_by(
+                        HistoricalNomination.created_at.desc(), HistoricalNomination.id
+                    )
+                    .offset((page - 1) * page_size)
+                    .limit(page_size)
+                )
+            )
+            awards = (
+                list(
+                    await self._session.scalars(
+                        select(HistoricalAward)
+                        .where(
+                            HistoricalAward.nomination_id.in_(
+                                [record.id for record in records]
+                            ),
+                            HistoricalAward.recipient_person_id.is_(None)
+                            | HistoricalAward.recipient_person_id.in_(linked_people),
+                        )
+                        .order_by(HistoricalAward.created_at, HistoricalAward.id)
+                    )
+                )
+                if records
+                else []
+            )
+            return [
+                HistoricalLinkedRecordData(
+                    id=record.id,
+                    code=record.code,
+                    title=record.title,
+                    subject_name=record.subject_name,
+                    nomination_year=record.nomination_year,
+                    awards=[
+                        HistoricalLinkedAwardData.model_validate(
+                            award, from_attributes=True
+                        )
+                        for award in awards
+                        if award.nomination_id == record.id
+                    ],
+                )
+                for record in records
+            ], total
 
     async def list_people(
         self,

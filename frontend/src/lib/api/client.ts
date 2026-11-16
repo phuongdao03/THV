@@ -246,6 +246,7 @@ import type {
   HistoricalPublicContentDraft,
   HistoricalPublicContentDraftInput,
   HistoricalRelatedPerson,
+  HistoricalLinkedRecord,
   HistoricalRelatedPersonInput,
   HistoricalWorkspaceSummary,
 } from "./historical-nomination-types";
@@ -2009,6 +2010,26 @@ export const historicalNominationApi = {
   listPeople(id: string) {
     return request<HistoricalRelatedPerson[]>(
       `/historical-nominations/${encodeURIComponent(id)}/people`,
+    );
+  },
+  findLinkableAccount(email: string) {
+    return request<{ id: string; email: string }>(
+      `/historical-nominations/linkable-account?${new URLSearchParams({ email })}`,
+    );
+  },
+  linkAccount(
+    id: string,
+    personId: string,
+    input: { userId: string; reason: string },
+  ) {
+    return request<HistoricalRelatedPerson>(
+      `/historical-nominations/${encodeURIComponent(id)}/people/${encodeURIComponent(personId)}/account`,
+      { method: "PUT", body: JSON.stringify(input) },
+    );
+  },
+  mine(page = 1) {
+    return requestPaginated<HistoricalLinkedRecord[]>(
+      `/historical-nominations/mine?page=${page}&page_size=10`,
     );
   },
   addPerson(id: string, input: HistoricalRelatedPersonInput) {

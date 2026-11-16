@@ -16,6 +16,7 @@ from app.modules.historical_nominations.errors import (
     HistoricalNominationForbiddenError,
     HistoricalNominationNotFoundError,
     HistoricalNominationStateError,
+    HistoricalNominationValidationError,
 )
 from app.modules.historical_nominations.models import (
     HistoricalArchiveStatus,
@@ -26,18 +27,195 @@ from app.modules.historical_nominations.models import (
     HistoricalNomination,
     HistoricalNominationPublicationStatus,
     HistoricalNominationStatus,
+    HistoricalRelatedPersonRole,
     HistoricalSourceKind,
     HistoricalSubjectType,
 )
 from app.modules.historical_nominations.schemas import (
+    HistoricalAccountLinkWrite,
     HistoricalAwardPatch,
+    HistoricalAwardWrite,
     HistoricalNominationPatch,
     HistoricalNominationWrite,
+    HistoricalPersonWrite,
     HistoricalPublicContentDraftWrite,
 )
 from app.modules.historical_nominations.service import HistoricalNominationService
 from app.modules.media.models import MediaAsset
 from app.modules.public.models import PublicWork
+
+
+def test_staff_explicitly_links_registered_recipient_without_granting_management() -> (
+    None
+):
+    async def scenario() -> None:
+        engine = create_async_engine("sqlite+aiosqlite://")
+        factory = async_sessionmaker(engine, expire_on_commit=False)
+        async with engine.begin() as connection:
+            await connection.run_sync(Base.metadata.create_all)
+        staff_id, recipient_id, stranger_id = uuid4(), uuid4(), uuid4()
+        manager = AuthPrincipal(
+            user_id=staff_id,
+            session_id=uuid4(),
+            email="staff@test.example",
+            roles=("DATA_MANAGER",),
+            permissions=("historical.records.manage", "historical.records.read"),
+        )
+        recipient = AuthPrincipal(
+            user_id=recipient_id,
+            session_id=uuid4(),
+            email="recipient@test.example",
+            roles=("PUBLIC_USER",),
+            permissions=(),
+        )
+        stranger = AuthPrincipal(
+            user_id=stranger_id,
+            session_id=uuid4(),
+            email="stranger@test.example",
+            roles=("PUBLIC_USER",),
+            permissions=(),
+        )
+        async with factory() as session:
+            session.add_all(
+                [
+                    User(
+                        id=p.user_id,
+                        email=p.email,
+                        password_hash="unused",
+                        status=UserStatus.ACTIVE,
+                    )
+                    for p in (manager, recipient, stranger)
+                ]
+            )
+            await session.commit()
+            service = HistoricalNominationService(session)
+            record = await service.create_record(
+                manager,
+                HistoricalNominationWrite(
+                    title="Đề cử cũ", provenance_notes="PRIVATE NOTES"
+                ),
+                creation_request_id=uuid4(),
+            )
+            person, _ = await service.add_person(
+                manager,
+                record.id,
+                HistoricalPersonWrite(
+                    display_name="Người nhận",
+                    email=recipient.email,
+                    role=HistoricalRelatedPersonRole.NOMINEE,
+                ),
+            )
+            record_id, person_id = record.id, person.id
+            assert person.linked_user_id is None  # Matching email does not link.
+            assert (await service.list_linked_records(recipient, page=1, page_size=10))[
+                1
+            ] == 0
+            account = await service.find_linkable_account(
+                manager, recipient.email.upper()
+            )
+            assert account.id == recipient_id
+            payload = HistoricalAccountLinkWrite(
+                user_id=recipient_id, reason="Đã đối chiếu thông tin người nhận"
+            )
+            with pytest.raises(HistoricalNominationForbiddenError):
+                await service.link_account(recipient, record_id, person_id, payload)
+            with pytest.raises(HistoricalNominationForbiddenError):
+                await service.find_linkable_account(recipient, recipient.email)
+            with pytest.raises(HistoricalNominationNotFoundError):
+                await service.link_account(manager, record_id, uuid4(), payload)
+            await service.link_account(manager, record_id, person_id, payload)
+            await service.link_account(
+                manager, record_id, person_id, payload
+            )  # Idempotent.
+            other_person, _ = await service.add_person(
+                manager,
+                record_id,
+                HistoricalPersonWrite(
+                    display_name="Người nhận khác",
+                    role=HistoricalRelatedPersonRole.NOMINEE,
+                ),
+            )
+            other_person_id = other_person.id
+            for name, award_recipient in (
+                ("Bằng của tôi", person_id),
+                ("Bằng chung", None),
+                ("Bằng người khác", other_person_id),
+            ):
+                await service.add_award(
+                    manager,
+                    record_id,
+                    HistoricalAwardWrite(
+                        award_name=name,
+                        recipient_person_id=award_recipient,
+                        provenance_notes="PRIVATE AWARD NOTES",
+                    ),
+                )
+            rows, total = await service.list_linked_records(
+                recipient, page=1, page_size=10
+            )
+            assert total == 1 and rows[0].id == record_id
+            assert "provenanceNotes" not in rows[0].model_dump(by_alias=True)
+            assert {award.award_name for award in rows[0].awards} == {
+                "Bằng của tôi",
+                "Bằng chung",
+            }
+            assert "PRIVATE AWARD NOTES" not in rows[0].model_dump_json()
+            assert (await service.list_linked_records(stranger, page=1, page_size=10))[
+                1
+            ] == 0
+            with pytest.raises(HistoricalNominationForbiddenError):
+                await service.list_people(recipient, record_id)
+            with pytest.raises(HistoricalNominationStateError):
+                await service.link_account(
+                    manager,
+                    record_id,
+                    person_id,
+                    HistoricalAccountLinkWrite(
+                        user_id=stranger_id,
+                        reason="Không được ghi đè tài khoản đã liên kết",
+                    ),
+                )
+            contact, _ = await service.add_person(
+                manager,
+                record_id,
+                HistoricalPersonWrite(
+                    display_name="Liên hệ", role=HistoricalRelatedPersonRole.CONTACT
+                ),
+            )
+            with pytest.raises(HistoricalNominationValidationError):
+                await service.link_account(manager, record_id, contact.id, payload)
+            user = await session.get(User, stranger_id)
+            assert user is not None
+            user.status = UserStatus.SUSPENDED
+            await session.commit()
+            nominee, _ = await service.add_person(
+                manager,
+                record_id,
+                HistoricalPersonWrite(
+                    display_name="Người khác", role=HistoricalRelatedPersonRole.NOMINEE
+                ),
+            )
+            with pytest.raises(HistoricalNominationValidationError):
+                await service.link_account(
+                    manager,
+                    record_id,
+                    nominee.id,
+                    HistoricalAccountLinkWrite(
+                        user_id=stranger_id, reason="Tài khoản đã bị đình chỉ hoạt động"
+                    ),
+                )
+            async with session.begin():
+                assert (
+                    await session.scalar(
+                        select(func.count(AuditLog.id)).where(
+                            AuditLog.action == "historical_nomination.account_linked"
+                        )
+                    )
+                    == 1
+                )
+        await engine.dispose()
+
+    asyncio.run(scenario())
 
 
 def test_historical_record_code_is_thv_and_creation_is_idempotent() -> None:

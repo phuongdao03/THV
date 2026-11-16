@@ -17,4 +17,9 @@ it("presents historical award facts without claiming blockchain verification", (
   expect(screen.getByText(/THV-1998-01/)).toBeTruthy();
   expect(screen.getByText(/Nguyễn Văn A/)).toBeTruthy();
   expect(screen.getByText(/Không có xác thực blockchain/)).toBeTruthy();
+  expect(screen.getByText("Trung tâm Tinh Hoa Việt")).toBeTruthy();
+  expect(screen.getByText("04/11/1998")).toBeTruthy();
+  expect(screen.getByText("Tư liệu lịch sử · Bằng đã cấp")).toBeTruthy();
+  expect(screen.queryByRole("img", { name: /Mã QR/ })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Chia sẻ" })).toBeNull();
 });

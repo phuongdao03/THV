@@ -1,13 +1,19 @@
 "use client";
 
-import { ExternalLink, Share2, ShieldCheck } from "lucide-react";
+import { Archive, ExternalLink, Share2, ShieldCheck } from "lucide-react";
 import Image from "next/image";
 import { useState } from "react";
 
 import type { Verification } from "@/lib/api/types";
 import { displayCnsDossierCode } from "@/lib/brand/identifiers";
 
-export function DigitalCertificate({ data }: { data: Verification }) {
+export function DigitalCertificate({
+  data,
+  historicalFacts,
+}: {
+  data: Verification;
+  historicalFacts?: { issuer?: string | null; issuedAt?: string | null };
+}) {
   const [failedQr, setFailedQr] = useState<string | null>(null);
   const [sharing, setSharing] = useState(false);
   const [shareFeedback, setShareFeedback] = useState<{
@@ -114,14 +120,22 @@ export function DigitalCertificate({ data }: { data: Verification }) {
           <p
             className={`mt-3 inline-flex items-center gap-2 text-sm font-bold ${valid ? "text-[#245b38]" : "text-[#76530c]"}`}
           >
-            <ShieldCheck className="size-4" />
-            {data.isCurrentVersion === false
-              ? "Phiên bản cũ · đã có bản cập nhật"
-              : statusLabel}
+            {historicalFacts ? (
+              <Archive className="size-4" />
+            ) : (
+              <ShieldCheck className="size-4" />
+            )}
+            {historicalFacts
+              ? "Tư liệu lịch sử · Bằng đã cấp"
+              : data.isCurrentVersion === false
+                ? "Phiên bản cũ · đã có bản cập nhật"
+                : statusLabel}
           </p>
         </div>
 
-        <div className="grid gap-6 py-6 lg:grid-cols-[minmax(0,1fr)_11rem] lg:items-center lg:gap-12">
+        <div
+          className={`grid gap-6 py-6 ${historicalFacts ? "" : "lg:grid-cols-[minmax(0,1fr)_11rem] lg:items-center lg:gap-12"}`}
+        >
           <section className="min-w-0">
             <div className="digital-certificate__work-panel">
               <p className="text-xs font-semibold tracking-[0.08em] text-[#76530c] uppercase sm:text-sm">
@@ -150,84 +164,110 @@ export function DigitalCertificate({ data }: { data: Verification }) {
                   value={displayCnsDossierCode(data.dossierCode)}
                 />
               ) : null}
-              <CertificateFact label="Danh mục" value={data.categoryName} />
-              <CertificateFact
-                label="Đơn vị đề cử"
-                value="Đề cử Tinh Hoa Việt"
-              />
-              <CertificateFact
-                label="Phiên bản"
-                value={data.version ? `Phiên bản ${data.version}` : null}
-              />
+              {!historicalFacts ? (
+                <>
+                  <CertificateFact label="Danh mục" value={data.categoryName} />
+                  <CertificateFact
+                    label="Đơn vị đề cử"
+                    value="Đề cử Tinh Hoa Việt"
+                  />
+                </>
+              ) : null}
+              {!historicalFacts ? (
+                <CertificateFact
+                  label="Phiên bản"
+                  value={data.version ? `Phiên bản ${data.version}` : null}
+                />
+              ) : (
+                <>
+                  <CertificateFact
+                    label="Đơn vị cấp"
+                    value={historicalFacts.issuer || "Chưa ghi nhận"}
+                  />
+                  <CertificateFact
+                    label="Ngày cấp"
+                    value={historicalFacts.issuedAt || "Chưa ghi nhận"}
+                  />
+                </>
+              )}
             </dl>
           </section>
 
-          <section className="mx-auto w-full max-w-44 text-center">
-            <div className="border border-[#c9ad60] bg-white p-2 shadow-[0_8px_24px_rgba(65,42,20,.12)]">
-              {failedQr !== data.certificateNumber ? (
-                <Image
-                  alt={`Mã QR kiểm tra bằng xác lập ${data.certificateNumber}`}
-                  className="aspect-square size-full object-contain"
-                  height={320}
-                  loading="eager"
-                  src={`/api/v1/verify/certificate/${encodeURIComponent(data.certificateNumber)}/qr`}
-                  onError={() => setFailedQr(data.certificateNumber)}
-                  unoptimized
-                  width={320}
-                />
+          {!historicalFacts ? (
+            <section className="mx-auto w-full max-w-44 text-center">
+              <div className="border border-[#c9ad60] bg-white p-2 shadow-[0_8px_24px_rgba(65,42,20,.12)]">
+                {failedQr !== data.certificateNumber ? (
+                  <Image
+                    alt={`Mã QR kiểm tra bằng xác lập ${data.certificateNumber}`}
+                    className="aspect-square size-full object-contain"
+                    height={320}
+                    loading="eager"
+                    src={`/api/v1/verify/certificate/${encodeURIComponent(data.certificateNumber)}/qr`}
+                    onError={() => setFailedQr(data.certificateNumber)}
+                    unoptimized
+                    width={320}
+                  />
+                ) : (
+                  <a
+                    className="flex aspect-square items-center justify-center p-3 text-sm font-bold text-[#82141d]"
+                    href={verifyPath}
+                  >
+                    Mở trang kiểm tra bằng xác lập
+                  </a>
+                )}
+              </div>
+              <p className="mt-3 text-xs leading-5 font-bold text-[#503d32]">
+                Quét mã để mở trang kiểm tra công khai
+              </p>
+            </section>
+          ) : null}
+        </div>
+
+        {historicalFacts ? (
+          <p className="border-t border-[#d8c798] pt-6 text-sm text-[#503d32]">
+            Bản trình bày từ thông tin bằng đã cấp. Không có xác thực
+            blockchain.
+          </p>
+        ) : (
+          <footer className="flex flex-wrap justify-end gap-2 border-t border-[#d8c798] pt-6">
+            <div className="grid gap-2 sm:grid-cols-2">
+              <button
+                className="inline-flex min-h-11 items-center justify-center gap-2 border border-[#b78e4b] bg-transparent px-4 text-sm font-bold text-[#82141d] transition hover:bg-[#f7ecd0] active:translate-y-px"
+                onClick={() => void share()}
+                disabled={sharing}
+                type="button"
+              >
+                <Share2 className="size-4" />{" "}
+                {sharing ? "Đang mở chia sẻ…" : "Chia sẻ"}
+              </button>
+              {workPath ? (
+                <a className="digital-certificate__verify" href={workPath}>
+                  Xem tác phẩm <ExternalLink className="size-4" />
+                </a>
               ) : (
-                <a
-                  className="flex aspect-square items-center justify-center p-3 text-sm font-bold text-[#82141d]"
-                  href={verifyPath}
-                >
-                  Mở trang kiểm tra bằng xác lập
+                <a className="digital-certificate__verify" href={verifyPath}>
+                  Mở trang tra cứu <ExternalLink className="size-4" />
                 </a>
               )}
             </div>
-            <p className="mt-3 text-xs leading-5 font-bold text-[#503d32]">
-              Quét mã để mở trang kiểm tra công khai
-            </p>
-          </section>
-        </div>
-
-        <footer className="flex flex-wrap justify-end gap-2 border-t border-[#d8c798] pt-6">
-          <div className="grid gap-2 sm:grid-cols-2">
-            <button
-              className="inline-flex min-h-11 items-center justify-center gap-2 border border-[#b78e4b] bg-transparent px-4 text-sm font-bold text-[#82141d] transition hover:bg-[#f7ecd0] active:translate-y-px"
-              onClick={() => void share()}
-              disabled={sharing}
-              type="button"
-            >
-              <Share2 className="size-4" />{" "}
-              {sharing ? "Đang mở chia sẻ…" : "Chia sẻ"}
-            </button>
-            {workPath ? (
-              <a className="digital-certificate__verify" href={workPath}>
-                Xem tác phẩm <ExternalLink className="size-4" />
-              </a>
-            ) : (
-              <a className="digital-certificate__verify" href={verifyPath}>
-                Mở trang tra cứu <ExternalLink className="size-4" />
-              </a>
-            )}
-          </div>
-          {shareFeedback?.certificateNumber === data.certificateNumber ? (
-            <div className="w-full min-w-0 text-sm text-[#503d32]">
-              <p role="status">{shareFeedback.message}</p>
-              {shareFeedback.manualUrl ? (
-                <label className="mt-2 block font-bold">
-                  Liên kết tra cứu để sao chép
-                  <input
-                    className="mt-2 min-h-11 w-full min-w-0 rounded border border-[#b78e4b] bg-white px-3 text-sm text-[#2b1714]"
-                    readOnly
-                    value={shareFeedback.manualUrl}
-                    onFocus={(event) => event.currentTarget.select()}
-                  />
-                </label>
-              ) : null}
-            </div>
-          ) : null}
-        </footer>
+            {shareFeedback?.certificateNumber === data.certificateNumber ? (
+              <div className="w-full min-w-0 text-sm text-[#503d32]">
+                <p role="status">{shareFeedback.message}</p>
+                {shareFeedback.manualUrl ? (
+                  <label className="mt-2 block font-bold">
+                    Liên kết tra cứu để sao chép
+                    <input
+                      className="mt-2 min-h-11 w-full min-w-0 rounded border border-[#b78e4b] bg-white px-3 text-sm text-[#2b1714]"
+                      readOnly
+                      value={shareFeedback.manualUrl}
+                      onFocus={(event) => event.currentTarget.select()}
+                    />
+                  </label>
+                ) : null}
+              </div>
+            ) : null}
+          </footer>
+        )}
       </div>
     </article>
   );

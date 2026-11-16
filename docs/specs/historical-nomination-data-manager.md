@@ -1,35 +1,39 @@
 # DataManager legacy records, public content, and certificates
 
-## Proposed account linking (2026-11-16, design only)
+## Staff account linking (2026-11-16, user-approved workflow)
 
-- A registered user opens "My nominations" and requests to link an existing
-  historical nomination using its public code. Keep the private record hidden.
-- Collect the claimant's relationship (nominee or authorized representative)
-  and private supporting evidence. Show pending/approved/rejected status.
-- Admin reviews evidence and records a reason. Matching names, phone numbers,
-  or email addresses are search hints, never proof of ownership.
-- On approval, link the verified historical person to the account through the
-  existing `HistoricalRelatedPerson.linked_user_id`; preserve all source facts,
-  issued certificates, audit attribution, and publication state.
-- Only approved nominee/representative relationships grant an account view;
-  witness/contact/nominator roles alone grant no ownership access. Specify
-  those view permissions separately before implementation.
-- Handle duplicate requests, an already linked person, organization delegation,
-  revocation, and disputed claims explicitly. Audit approvals and revocations.
-- No account-linking endpoint, authorization change, or migration is shipped
-  by the presentation/concurrency fixes in this revision. Implementation needs
-  a separate reviewed authorization plan and deterministic permission tests.
+- Internal staff enters old nominations, invites recipients to register, then
+  explicitly selects the registered account and links it to the historical
+  nominee/representative. The user clarified this replaces self-service claims.
+- DATA_MANAGER and SUPER_ADMIN with `historical.records.manage` may look up an
+  active account by exact email and explicitly confirm its UUID with a reason.
+  Names and email matches never create links automatically.
+- Reuse `HistoricalRelatedPerson.linked_user_id`; no migration. Lock the person
+  and record when linking; an existing different account cannot be overwritten.
+  Repeating the same link is idempotent. Reject unrelated person IDs, inactive
+  accounts, and roles other than NOMINEE/REPRESENTATIVE. Audit the staff action.
+- Registered recipients see only their linked record summary and award facts
+  in `/dossiers`. Never expose source notes, contacts, private files, or other
+  people's details. Existing management endpoints remain staff-only; linking
+  grants no editing, publishing, staff role, or CURRENT dossier ownership.
+- Implementation order: service/DTO and permission regression tests; staff
+  lookup and confirmation UI; recipient list; focused and full quality gates.
+- Checks: `npm test`, `npm run lint`, `npm run typecheck`, and
+  `npm run test:e2e -- historical-data-manager-save.spec.ts` (use npm.cmd on Windows).
 
 ## Follow-up verification (2026-11-16)
 
-- Source editing retries a 409 once only if a fresh GET confirms every source
-  field in the form and record editability states match the original snapshot.
-  A real source conflict preserves form input and stops without overwriting.
+- Source editing handles a 409 with a fresh GET and one retry of only locally
+  changed fields. Concurrent edits to other fields survive. Identical already
+  saved values count as success; overlapping edits or changed editability
+  states preserve form input and stop without overwriting.
 - Public draft readiness accepts non-empty title and summary, matching the
   publish input contract, and lists missing saved values by name.
 - Historical activity uses human-readable Vietnamese action/field labels.
-- Historical presentation uses the same round logo crop, drum watermark, and
-  burgundy/gold palette as `CertificatePdfRenderer`; issued PDFs are unchanged.
+- Historical presentation reuses `DigitalCertificate`, matching the supplied
+  `/verify/THV-2026-99C3A2EA159D` reference. Preserve issuer/date/recipient facts,
+  label it as historical, and omit live QR/share/status claims. Issued PDFs are
+  unchanged.
 
 **Status:** Implemented; local verification complete.
 

@@ -1,5 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 
 import { HistoricalRecordDetailComplete } from "@/components/historical-nominations/historical-record-detail-complete";
@@ -103,6 +109,23 @@ function renderDetail(
 beforeEach(() => {
   api.people.splice(0);
   vi.clearAllMocks();
+});
+
+it("marks completed steps with a visible label and keeps optional empty steps unfinished", async () => {
+  renderDetail({ ...record, publicationStatus: "PUBLISHED" });
+  const overview = screen.getByRole("region", {
+    name: "Các bước hoàn thiện hồ sơ",
+  });
+  await waitFor(() =>
+    expect(within(overview).getAllByText("Đã hoàn thành")).toHaveLength(2),
+  );
+  const steps = within(overview).getAllByRole("listitem");
+  expect(steps).toHaveLength(4);
+  steps.forEach((step, index) => {
+    expect(Boolean(within(step).queryByLabelText("Đã hoàn thành"))).toBe(
+      index === 0 || index === 3,
+    );
+  });
 });
 
 it("allows publishing a saved short title and summary and explains missing values", async () => {

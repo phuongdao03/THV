@@ -67,6 +67,11 @@ beforeEach(() => {
   vi.clearAllMocks();
   api.get.mockReset();
   api.update.mockReset();
+  vi.stubGlobal(
+    "matchMedia",
+    vi.fn(() => ({ matches: true })),
+  );
+  Element.prototype.scrollIntoView = vi.fn();
 });
 
 it.each([false, true])(
@@ -173,3 +178,46 @@ it("refreshes the record version before opening the edit form", async () => {
     ),
   );
 });
+
+it.each([false, true])(
+  "preserves another session's edits when recovering a save; already saved: %s",
+  async (alreadySaved) => {
+    const latest = {
+      ...record,
+      title: alreadySaved ? "Tên vừa nhập" : record.title,
+      description: "Mô tả được bổ sung ở phiên khác",
+      updatedAt: "2026-11-16T09:00:00Z",
+    };
+    api.get.mockResolvedValueOnce(record).mockResolvedValue(latest);
+    api.update
+      .mockRejectedValueOnce(
+        Object.assign(new Error("Conflict"), { status: 409 }),
+      )
+      .mockResolvedValue({ ...latest, title: "Tên vừa nhập" });
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false, staleTime: Infinity, gcTime: 0 },
+      },
+    });
+    client.setQueryData(["historical-nomination", record.id], record);
+    render(
+      <QueryClientProvider client={client}>
+        <DataManagerRecordWorkspace recordId={record.id} />
+      </QueryClientProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Sửa thông tin" }));
+    await screen.findByRole("heading", { name: "Chỉnh sửa hồ sơ" });
+    fireEvent.change(screen.getByDisplayValue(record.title), {
+      target: { value: "Tên vừa nhập" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Lưu bản nháp" }));
+    await screen.findByText(/Đã lưu thay đổi lúc/);
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(api.update).toHaveBeenCalledTimes(alreadySaved ? 1 : 2);
+    if (!alreadySaved)
+      expect(api.update).toHaveBeenLastCalledWith(record.id, {
+        title: "Tên vừa nhập",
+        expectedUpdatedAt: latest.updatedAt,
+      });
+  },
+);

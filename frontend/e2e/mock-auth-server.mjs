@@ -3445,6 +3445,14 @@ const server = createServer(async (request, response) => {
     send(response, 200, envelope([historicalNominationPreview]));
     return;
   }
+  if (
+    request.method === "GET" &&
+    path === "/api/v1/historical-nominations/mine" &&
+    authenticated
+  ) {
+    send(response, 200, paginatedEnvelope([], { page: 1, pageSize: 10 }));
+    return;
+  }
   const historicalRecordPath = `/api/v1/historical-nominations/${historicalNominationPreview.id}`;
   if (
     request.method === "GET" &&

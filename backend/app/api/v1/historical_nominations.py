@@ -32,6 +32,7 @@ from app.modules.historical_nominations.models import (
     HistoricalNominationStatus,
 )
 from app.modules.historical_nominations.schemas import (
+    HistoricalAccountLinkWrite,
     HistoricalArchiveRequest,
     HistoricalAwardData,
     HistoricalAwardLibraryItemData,
@@ -44,6 +45,8 @@ from app.modules.historical_nominations.schemas import (
     HistoricalImportResultData,
     HistoricalImportRowData,
     HistoricalImportUploadData,
+    HistoricalLinkableAccountData,
+    HistoricalLinkedRecordData,
     HistoricalMediaLibraryItemData,
     HistoricalMediaLinkData,
     HistoricalMediaLinkWrite,
@@ -72,6 +75,45 @@ router = APIRouter(
     prefix="/api/v1/historical-nominations",
     tags=["historical nominations"],
 )
+
+
+@router.get(
+    "/linkable-account", response_model=SuccessEnvelope[HistoricalLinkableAccountData]
+)
+async def find_historical_linkable_account(
+    request: Request,
+    principal: CurrentPrincipalDependency,
+    service: HistoricalNominationServiceDependency,
+    email: Annotated[str, Query(min_length=3, max_length=320)],
+) -> SuccessEnvelope[HistoricalLinkableAccountData]:
+    return SuccessEnvelope(
+        data=await service.find_linkable_account(principal, email),
+        meta=ResponseMeta(request_id=request.state.request_id),
+    )
+
+
+@router.get(
+    "/mine", response_model=PaginatedSuccessEnvelope[list[HistoricalLinkedRecordData]]
+)
+async def list_my_historical_nominations(
+    request: Request,
+    principal: CurrentPrincipalDependency,
+    service: HistoricalNominationServiceDependency,
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 10,
+) -> PaginatedSuccessEnvelope[list[HistoricalLinkedRecordData]]:
+    records, total = await service.list_linked_records(
+        principal, page=page, page_size=page_size
+    )
+    return PaginatedSuccessEnvelope(
+        data=records,
+        meta=ListResponseMeta(
+            request_id=request.state.request_id,
+            page=page,
+            page_size=page_size,
+            total=total,
+        ),
+    )
 
 
 def _activity_fields(after: dict[str, object] | None) -> list[str]:
@@ -810,6 +852,7 @@ async def list_historical_people(
     return SuccessEnvelope(
         data=[
             HistoricalPersonData(
+                linked_user_id=person.linked_user_id,
                 id=person.id,
                 display_name=person.display_name,
                 organization_name=person.organization_name,
@@ -840,7 +883,37 @@ async def add_historical_person(
     person, role = await service.add_person(principal, record_id, payload)
     return SuccessEnvelope(
         data=HistoricalPersonData(
+            linked_user_id=person.linked_user_id,
             id=person.id,
+            display_name=person.display_name,
+            organization_name=person.organization_name,
+            email=person.email,
+            phone=person.phone,
+            address=person.address,
+            internal_notes=person.internal_notes,
+            role=role,
+        ),
+        meta=ResponseMeta(request_id=request.state.request_id),
+    )
+
+
+@router.put(
+    "/{record_id}/people/{person_id}/account",
+    response_model=SuccessEnvelope[HistoricalPersonData],
+)
+async def link_historical_person_account(
+    record_id: UUID,
+    person_id: UUID,
+    payload: HistoricalAccountLinkWrite,
+    request: Request,
+    principal: CsrfProtectedPrincipalDependency,
+    service: HistoricalNominationServiceDependency,
+) -> SuccessEnvelope[HistoricalPersonData]:
+    person, role = await service.link_account(principal, record_id, person_id, payload)
+    return SuccessEnvelope(
+        data=HistoricalPersonData(
+            id=person.id,
+            linked_user_id=person.linked_user_id,
             display_name=person.display_name,
             organization_name=person.organization_name,
             email=person.email,

@@ -2,6 +2,7 @@ import { FilePlus2, FolderKanban } from "lucide-react";
 import Link from "next/link";
 
 import { DossierList } from "@/components/dossiers/dossier-list";
+import { LinkedHistoricalRecords } from "@/components/historical-nominations/linked-historical-records";
 import { SelectControl } from "@/components/ui/form-controls";
 import type { DossierStatus } from "@/lib/api/types";
 
@@ -120,6 +121,7 @@ export default async function DossiersPage({
       </form>
 
       <DossierList page={page} pageSize={10} status={status} />
+      <LinkedHistoricalRecords />
     </div>
   );
 }

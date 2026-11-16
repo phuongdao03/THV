@@ -92,6 +92,7 @@ export type HistoricalNominationInput = Partial<
 > & { expectedUpdatedAt?: string };
 
 export interface HistoricalRelatedPerson {
+  linkedUserId?: string | null;
   id: string;
   displayName: string;
   organizationName: string | null;
@@ -100,6 +101,21 @@ export interface HistoricalRelatedPerson {
   address: string | null;
   internalNotes: string | null;
   role: HistoricalRelatedPersonRole;
+}
+
+export interface HistoricalLinkedRecord {
+  id: string;
+  code: string;
+  title: string;
+  subjectName: string | null;
+  nominationYear: number | null;
+  awards: Array<{
+    id: string;
+    awardName: string;
+    certificateNumber: string | null;
+    issuedAt: string | null;
+    issuedBy: string | null;
+  }>;
 }
 
 export interface HistoricalRelatedPersonInput {

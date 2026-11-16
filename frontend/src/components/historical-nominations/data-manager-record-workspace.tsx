@@ -198,16 +198,20 @@ export function DataManagerRecordWorkspace({ recordId }: { recordId: string }) {
           throw cause;
         const latest = await historicalNominationApi.get(recordId);
         // Related files and publication metadata also advance the record version.
-        // Retry only when every source field in this form is still unchanged.
-        const sourceChanged = (
+        // Merge only local edits; preserve remote changes to other source fields.
+        const localFields = (
           Object.keys(input) as (keyof HistoricalNominationInput)[]
         )
           .filter((key) => key !== "expectedUpdatedAt")
-          .some(
-            (key) =>
-              latest[key as keyof HistoricalNomination] !==
-              baseline[key as keyof HistoricalNomination],
+          .filter(
+            (key) => input[key] !== baseline[key as keyof HistoricalNomination],
           );
+        const sourceChanged = localFields.some(
+          (key) =>
+            latest[key as keyof HistoricalNomination] !==
+              baseline[key as keyof HistoricalNomination] &&
+            latest[key as keyof HistoricalNomination] !== input[key],
+        );
         if (
           sourceChanged ||
           latest.archiveStatus !== baseline.archiveStatus ||
@@ -217,10 +221,16 @@ export function DataManagerRecordWorkspace({ recordId }: { recordId: string }) {
             "Thông tin hồ sơ đã được thay đổi ở phiên khác. Nội dung bạn nhập vẫn được giữ lại; hãy đối chiếu bản mới trước khi lưu.",
           );
         }
-        saved = await historicalNominationApi.update(recordId, {
-          ...input,
-          expectedUpdatedAt: latest.updatedAt,
-        });
+        saved = localFields.every(
+          (key) => latest[key as keyof HistoricalNomination] === input[key],
+        )
+          ? latest
+          : await historicalNominationApi.update(recordId, {
+              ...Object.fromEntries(
+                localFields.map((key) => [key, input[key]]),
+              ),
+              expectedUpdatedAt: latest.updatedAt,
+            });
       }
       queryClient.setQueryData(["historical-nomination", recordId], saved);
       setSavedAt(saved.updatedAt);

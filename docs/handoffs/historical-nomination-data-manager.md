@@ -5,6 +5,41 @@ Implemented from the
 remains excluded. No production database migration, deployment, or commit was
 made.
 
+## 2026-11-16: save recovery, progress, account linking, certificate preview
+
+- User clarified the account flow: staff enters old nominations, invites the
+  recipient to register, then explicitly links that account. No self-service
+  ownership claims or automatic name/email matching.
+- `GET /historical-nominations/linkable-account?email=...` returns only an
+  active account's ID/email for an exact lookup, restricted to source managers.
+  Staff confirms in **Người gửi & liên quan**, under a nominee/representative,
+  with a reason. `PUT /{recordId}/people/{personId}/account` locks and validates
+  the record/person/account, audits the link, permits an identical retry, and
+  refuses a different existing account. Reuses `linked_user_id`; no migration.
+- `GET /historical-nominations/mine` returns paginated linked record/award facts
+  for the session user, rendered in **Hồ sơ của tôi → Đề cử cũ đã liên kết**.
+  Private notes, contacts, source files, and management permissions are excluded.
+  Awards for a different named recipient are excluded. Unassigned historical
+  awards on the linked nomination remain visible.
+- Save recovery merges only local field changes after a 409; unrelated remote
+  edits survive. An already persisted identical edit succeeds without another
+  write. Overlapping changes retain the form and show the conflict.
+- Completed steps have a green background, checkmark, and visible completion
+  label. Empty optional people/media/award steps remain unfinished.
+- Historical previews reuse the public `DigitalCertificate` reference layout
+  with recorded issuer/date and an archival label, without a live QR, share
+  action, or blockchain verification claim. Existing issued PDFs are unchanged.
+- Verification: 1,144 frontend tests and 14 historical service/API/schema tests
+  passed. Full lint, frontend/backend typechecks, and backend format checks
+  passed. Desktop/mobile save/conflict/reload, explicit account linking, and
+  certificate rendering (including a loaded logo) passed browser checks.
+- Full backend suite remains unverified: the initial run lacked `openpyxl`;
+  after installing it into temporary storage and isolating test temp paths,
+  the full run reached 15% but was stopped after extended waiting. No source
+  dependency or environment file was changed. Focused checks used the regular
+  sandbox and passed. Unrelated pre-existing image changes were preserved.
+- No commit, push, deployment, or production data change.
+
 ## Delivered
 
 - **DATA_MANAGER** receives narrow source capabilities for legacy records and

@@ -80,6 +80,21 @@ test("data manager saves historical dates and sees persisted edits after reload"
     if (method === "PATCH") {
       const body = route.request().postDataJSON() as Record<string, unknown>;
       patchBodies.push(body);
+      if (patchBodies.length === 1) {
+        persistedRecord = {
+          ...persistedRecord,
+          description: "Mô tả bổ sung từ phiên làm việc khác",
+          updatedAt: "2026-11-16T04:00:00Z",
+        };
+        await route.fulfill({
+          status: 409,
+          json: {
+            success: false,
+            error: { code: "CONFLICT", message: "Record changed" },
+          },
+        });
+        return;
+      }
       persistedRecord = {
         ...persistedRecord,
         subjectName: String(body.subjectName ?? persistedRecord.subjectName),
@@ -98,10 +113,7 @@ test("data manager saves historical dates and sees persisted edits after reload"
     await route.continue();
   });
 
-  await page.goto("/data-manager");
-  await page
-    .getByRole("link", { name: /Gìn giữ nghề thủ công truyền thống/ })
-    .click();
+  await page.goto(`/data-manager/records/${recordId}`);
   await expect(page.getByText(recordCode)).toBeVisible();
   await expect(
     page.getByRole("region", { name: "Các bước hoàn thiện hồ sơ" }),
@@ -213,13 +225,21 @@ test("data manager saves historical dates and sees persisted edits after reload"
   } else {
     await page.getByRole("tab", { name: "Thông tin" }).click();
   }
-  expect(patchBodies).toHaveLength(1);
+  expect(patchBodies).toHaveLength(2);
   expect(patchBodies[0]).toMatchObject({
     title: "Nghề thủ công truyền thống",
     nominationYear: 2020,
     nominatedAt: "2020-05-15",
     expectedUpdatedAt: initialUpdatedAt,
   });
+  expect(patchBodies[1]).toEqual({
+    title: "Nghề thủ công truyền thống",
+    nominatedAt: "2020-05-15",
+    expectedUpdatedAt: "2026-11-16T04:00:00Z",
+  });
+  expect(persistedRecord.description).toBe(
+    "Mô tả bổ sung từ phiên làm việc khác",
+  );
   await page.screenshot({
     path: info.outputPath("historical-data-manager-save.png"),
   });
@@ -234,6 +254,146 @@ test("data manager saves historical dates and sees persisted edits after reload"
     await page.getByRole("tab", { name: "Thông tin" }).click();
   }
   await expect(page.getByText("15/05/2020", { exact: true })).toBeVisible();
+});
+
+test("staff explicitly links a registered account and sees completed steps", async ({
+  context,
+  page,
+}, info) => {
+  await context.addCookies(
+    (["cns_access", "cns_refresh", "cns_csrf", "cns_e2e_persona"] as const).map(
+      (name) => ({
+        name,
+        value:
+          name === "cns_e2e_persona"
+            ? "data-manager"
+            : name === "cns_access"
+              ? "e2e-access"
+              : name === "cns_refresh"
+                ? "e2e-refresh"
+                : "e2e-csrf",
+        domain: "127.0.0.1",
+        path: "/",
+        sameSite: "Lax" as const,
+      }),
+    ),
+  );
+  const person = {
+    id: "person-1",
+    displayName: "Nghệ nhân Nguyễn An",
+    role: "NOMINEE",
+    organizationName: null,
+    email: null,
+    phone: null,
+    address: null,
+    internalNotes: null,
+    linkedUserId: null as string | null,
+  };
+  let linkCount = 0;
+  await page.route(
+    `**/api/v1/historical-nominations/${recordId}/people`,
+    (route) => route.fulfill({ json: envelope([person]) }),
+  );
+  await page.route(
+    `**/api/v1/historical-nominations/${recordId}/awards`,
+    (route) =>
+      route.fulfill({
+        json: envelope([
+          {
+            id: "award-1",
+            awardName: "Nghệ nhân tiêu biểu",
+            certificateNumber: "THV-1998-01",
+            issuedAt: "1998-11-04",
+            issuedBy: "Trung tâm Tinh Hoa Việt",
+            verificationStatus: "UNVERIFIED",
+            recipientPersonId: "person-1",
+            provenanceNotes: null,
+            updatedAt: initialUpdatedAt,
+          },
+        ]),
+      }),
+  );
+  await page.route(
+    "**/api/v1/historical-nominations/linkable-account?*",
+    (route) =>
+      route.fulfill({
+        json: envelope({ id: "user-1", email: "recipient@example.test" }),
+      }),
+  );
+  await page.route(
+    `**/api/v1/historical-nominations/${recordId}/people/person-1/account`,
+    async (route) => {
+      expect(route.request().method()).toBe("PUT");
+      expect(route.request().postDataJSON()).toEqual({
+        userId: "user-1",
+        reason: "Đã đối chiếu đúng người nhận",
+      });
+      linkCount += 1;
+      person.linkedUserId = "user-1";
+      await route.fulfill({ json: envelope(person) });
+    },
+  );
+  await page.goto(`/data-manager/records/${recordId}`);
+  const overview = page.getByRole("region", {
+    name: "Các bước hoàn thiện hồ sơ",
+  });
+  await expect(
+    overview.getByText("Đã hoàn thành", { exact: true }).first(),
+  ).toBeVisible();
+  if (info.project.name === "mobile-chrome")
+    await page
+      .getByLabel("Chọn mục hồ sơ")
+      .selectOption("Người gửi & liên quan");
+  else await page.getByRole("tab", { name: "Người gửi & liên quan" }).click();
+  await page
+    .getByLabel("Email tài khoản đã đăng ký")
+    .fill("recipient@example.test");
+  await page.getByRole("button", { name: "Tìm tài khoản" }).click();
+  await expect(
+    page.getByText("recipient@example.test", { exact: true }),
+  ).toBeVisible();
+  expect(linkCount).toBe(0);
+  await page.getByLabel("Căn cứ liên kết").fill("Đã đối chiếu đúng người nhận");
+  await page
+    .getByRole("button", { name: "Xác nhận liên kết tài khoản" })
+    .click();
+  await expect(page.getByText(/Đã liên kết tài khoản/)).toBeVisible();
+  expect(linkCount).toBe(1);
+  await page.reload();
+  if (info.project.name === "mobile-chrome")
+    await page
+      .getByLabel("Chọn mục hồ sơ")
+      .selectOption("Người gửi & liên quan");
+  else await page.getByRole("tab", { name: "Người gửi & liên quan" }).click();
+  await expect(page.getByText(/Đã liên kết tài khoản/)).toBeVisible();
+  await page.getByText(/Đã liên kết tài khoản/).scrollIntoViewIfNeeded();
+  await page.screenshot({
+    path: info.outputPath("historical-account-linked.png"),
+  });
+  if (info.project.name === "mobile-chrome")
+    await page.getByLabel("Chọn mục hồ sơ").selectOption("Bằng xác lập");
+  else await page.getByRole("tab", { name: "Bằng xác lập" }).click();
+  await page.getByText("Xem bản trình bày số hóa", { exact: true }).click();
+  const certificate = page.getByRole("region", {
+    name: "Bản trình bày bằng xác lập lịch sử",
+  });
+  await expect(
+    certificate.getByText("Tư liệu lịch sử · Bằng đã cấp"),
+  ).toBeVisible();
+  await expect(certificate.getByText("04/11/1998")).toBeVisible();
+  await certificate
+    .getByRole("heading", { name: "Bằng xác lập", exact: true })
+    .scrollIntoViewIfNeeded();
+  await expect
+    .poll(() =>
+      certificate
+        .getByRole("img", { name: "Biểu trưng Tinh Hoa Việt" })
+        .evaluate((image) => (image as HTMLImageElement).naturalWidth),
+    )
+    .toBeGreaterThan(0);
+  await certificate.screenshot({
+    path: info.outputPath("historical-certificate.png"),
+  });
 });
 
 test("confirms before browser back leaves a dirty historical record", async ({

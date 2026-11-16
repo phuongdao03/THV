@@ -241,6 +241,7 @@ class HistoricalPersonWrite(HistoricalSchema):
 
 
 class HistoricalPersonData(HistoricalSchema):
+    linked_user_id: UUID | None = None
     id: UUID
     display_name: str
     organization_name: str | None
@@ -249,6 +250,40 @@ class HistoricalPersonData(HistoricalSchema):
     address: str | None
     internal_notes: str | None
     role: HistoricalRelatedPersonRole
+
+
+class HistoricalAccountLinkWrite(HistoricalSchema):
+    user_id: UUID
+    reason: Annotated[str, Field(min_length=10, max_length=2000)]
+
+    @field_validator("reason")
+    @classmethod
+    def validate_reason(cls, value: str) -> str:
+        if len(value.strip()) < 10:
+            raise ValueError("Provide a reason of at least 10 non-padding characters.")
+        return value.strip()
+
+
+class HistoricalLinkableAccountData(HistoricalSchema):
+    id: UUID
+    email: str
+
+
+class HistoricalLinkedAwardData(HistoricalSchema):
+    id: UUID
+    award_name: str
+    certificate_number: str | None
+    issued_at: date | None
+    issued_by: str | None
+
+
+class HistoricalLinkedRecordData(HistoricalSchema):
+    id: UUID
+    code: str
+    title: str
+    subject_name: str | None
+    nomination_year: int | None
+    awards: list[HistoricalLinkedAwardData]
 
 
 class HistoricalAwardWrite(HistoricalSchema):
