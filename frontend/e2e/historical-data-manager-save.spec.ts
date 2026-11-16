@@ -153,6 +153,9 @@ test("data manager saves historical dates and sees persisted edits after reload"
     (button) => getComputedStyle(button).backgroundColor,
   );
   expect(lightButtonBackground).not.toBe("rgba(0, 0, 0, 0)");
+  if (info.project.name === "mobile-chrome") {
+    await page.getByRole("button", { name: "Mở điều hướng workspace" }).click();
+  }
   await page.getByRole("button", { name: "Giao diện tối" }).click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   const darkButtonBackground = await savePublicDraftButton.evaluate(
@@ -161,6 +164,12 @@ test("data manager saves historical dates and sees persisted edits after reload"
   expect(darkButtonBackground).not.toBe("rgba(0, 0, 0, 0)");
   await page.getByRole("button", { name: "Giao diện sáng" }).click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  if (info.project.name === "mobile-chrome") {
+    await page
+      .getByRole("dialog", { name: "Điều hướng workspace" })
+      .getByRole("button", { name: "Đóng điều hướng workspace" })
+      .click();
+  }
   if (info.project.name === "mobile-chrome") {
     await page.getByLabel("Chọn mục hồ sơ").selectOption("Bằng xác lập");
     await page.getByLabel("Chọn mục hồ sơ").selectOption("Nội dung công khai");
