@@ -78,7 +78,10 @@ const record: HistoricalNomination = {
   mediaCount: 0,
 };
 
-function renderDetail() {
+function renderDetail(
+  detailRecord: HistoricalNomination = record,
+  onEdit = vi.fn(),
+) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -88,8 +91,8 @@ function renderDetail() {
       <HistoricalRecordDetailComplete
         canEdit
         onArchive={() => undefined}
-        onEdit={() => undefined}
-        record={record}
+        onEdit={onEdit}
+        record={detailRecord}
         submitting={false}
       />
     </QueryClientProvider>,
@@ -100,6 +103,26 @@ function renderDetail() {
 beforeEach(() => {
   api.people.splice(0);
   vi.clearAllMocks();
+});
+
+it("directs an empty record to basic information before publication", async () => {
+  const onEdit = vi.fn();
+  renderDetail(
+    { ...record, title: "Hồ sơ chưa đặt tên", subjectName: null },
+    onEdit,
+  );
+  fireEvent.click(
+    screen.getByRole("button", { name: "Bắt đầu nhập thông tin" }),
+  );
+  expect(onEdit).toHaveBeenCalledOnce();
+  expect(screen.getByText("Cần nhập để bắt đầu")).toBeTruthy();
+  expect(await screen.findByText("0 bằng · Bỏ qua nếu không có")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: /Thêm \/ xem bằng cũ/ }));
+  expect(
+    screen
+      .getByRole("tab", { name: "Bằng xác lập" })
+      .getAttribute("aria-selected"),
+  ).toBe("true");
 });
 
 it("keeps award details when the operator switches to another section", async () => {

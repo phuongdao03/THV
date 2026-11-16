@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
+import { HistoricalCertificatePresentation } from "@/components/certificates/historical-certificate-presentation";
 import { useEffect, useState } from "react";
 
 import { AdaptiveVideo } from "@/components/public/adaptive-video";
@@ -480,6 +481,19 @@ function CertificateArchivePanel({
           Bản scan tư liệu lịch sử. Bản này không có xác thực blockchain.
         </p>
       </div>
+      <HistoricalCertificatePresentation
+        title={archive.awardName || archive.title}
+        recipient={archive.recipientDisplayName}
+        number={archive.certificateNumber}
+        issuer={archive.issuerName}
+        issuedAt={
+          archive.issuedAt
+            ? new Intl.DateTimeFormat("vi-VN").format(
+                new Date(archive.issuedAt),
+              )
+            : archive.issuedYear?.toString()
+        }
+      />
       <dl className="space-y-3 text-sm">
         <DataRow label="Tên bằng" value={archive.title} />
         <DataRow

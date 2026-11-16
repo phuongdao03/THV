@@ -296,8 +296,24 @@ async function parseResponse<Data>(
     | ErrorEnvelope;
   if (!response.ok || !payload.success) {
     const error = payload.success ? undefined : payload.error;
+    const validationErrors = error?.details?.errors;
+    const validationMessage = Array.isArray(validationErrors)
+      ? validationErrors
+          .filter((item): item is Record<string, unknown> =>
+            Boolean(item && typeof item === "object"),
+          )
+          .map((item) => {
+            const location = Array.isArray(item.location)
+              ? item.location.filter((part) => part !== "body").join(".")
+              : "";
+            return `${location}: ${String(item.message ?? "Dữ liệu không hợp lệ")}`;
+          })
+          .join("; ")
+      : "";
     throw new ApiError(
-      error?.message ?? "Yêu cầu không thành công. Vui lòng thử lại.",
+      validationMessage ||
+        error?.message ||
+        "Yêu cầu không thành công. Vui lòng thử lại.",
       error?.code ?? "REQUEST_FAILED",
       response.status,
       error?.request_id ?? response.headers.get("X-Request-Id") ?? undefined,

@@ -29,6 +29,28 @@ import {
   taskAdminApi,
 } from "@/lib/api/client";
 
+it("shows the rejected field when historical draft validation fails", async () => {
+  const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response(
+      JSON.stringify({
+        success: false,
+        error: {
+          code: "VALIDATION_ERROR",
+          message: "Request validation failed.",
+          details: {
+            errors: [{ location: ["body", "slug"], message: "Invalid slug" }],
+          },
+        },
+      }),
+      { status: 422 },
+    ),
+  );
+  await expect(historicalNominationApi.get("record-1")).rejects.toThrow(
+    "slug: Invalid slug",
+  );
+  fetchMock.mockRestore();
+});
+
 it("bypasses the browser cache when reading the historical record version", async () => {
   const fetchMock = vi
     .spyOn(globalThis, "fetch")

@@ -29,6 +29,7 @@ import type {
 import { categoryLabels } from "@/lib/categories";
 import { formatDateInput } from "@/lib/dates";
 import { uploadMedia } from "@/lib/media/upload";
+import { HistoricalCertificatePresentation } from "@/components/certificates/historical-certificate-presentation";
 
 import { HistoricalDateField } from "./historical-date-field";
 
@@ -431,6 +432,19 @@ export function HistoricalRecordDetailComplete({
   }
 
   const status = publicationStatusLabel(record.publicationStatus);
+  const hasBasicInfo = Boolean(
+    record.subjectName?.trim() &&
+      record.title?.trim() &&
+      record.title !== "Hồ sơ chưa đặt tên",
+  );
+  const hasPublicDraft = Boolean(draft.data?.title && draft.data?.slug);
+  const sourceKindLabels: Record<string, string> = {
+    ARCHIVE: "Lưu trữ",
+    OFFICIAL_RECORD: "Hồ sơ chính thức",
+    ORGANIZATION_RECORD: "Hồ sơ tổ chức",
+    PERSONAL_RECORD: "Tài liệu cá nhân",
+    OTHER: "Khác / chưa rõ",
+  };
   const mediaLinks = media.data ?? [];
   const editingAward = awards.data?.find(
     (award) => award.id === editingAwardId,
@@ -451,7 +465,7 @@ export function HistoricalRecordDetailComplete({
       <header className="flex flex-wrap items-start justify-between gap-3 border-b border-[var(--theme-border)] pb-4">
         <div className="min-w-0">
           <p className="text-xs font-medium uppercase tracking-wide text-[var(--theme-muted)]">
-            {record.code} · {status}
+            {status}
           </p>
           <h2
             className="mt-1 truncate text-xl font-semibold"
@@ -462,6 +476,9 @@ export function HistoricalRecordDetailComplete({
           <p className="mt-1 text-sm text-[var(--theme-muted)]">
             {record.subjectName || "Chưa có đối tượng ghi nhận"} ·{" "}
             {record.nominationYear ?? "Chưa rõ năm"}
+          </p>
+          <p className="mt-2 break-all text-xs text-[var(--theme-muted)]">
+            Mã hồ sơ: {record.code}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -488,6 +505,120 @@ export function HistoricalRecordDetailComplete({
         </div>
       </header>
 
+      <section
+        aria-label="Các bước hoàn thiện hồ sơ"
+        className="overflow-hidden rounded-xl border border-[var(--theme-border)] bg-[var(--theme-surface)]"
+      >
+        <div className="flex flex-col gap-4 border-b border-[var(--theme-border)] p-5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="max-w-2xl">
+            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--theme-accent)]">
+              {record.publicationStatus === "PUBLISHED"
+                ? "Quản lý hồ sơ đã công khai"
+                : "Hoàn thiện hồ sơ"}
+            </p>
+            <h3 className="mt-2 text-lg font-semibold">
+              {!hasBasicInfo
+                ? "Bắt đầu bằng tên hồ sơ và đối tượng được đề cử"
+                : !hasPublicDraft
+                  ? "Thông tin đã có. Tiếp theo, chuẩn bị nội dung công khai"
+                  : "Bản nháp đã có. Xem lại trước khi xuất bản"}
+            </h3>
+            <p className="mt-2 text-sm leading-6 text-[var(--theme-muted)]">
+              Lưu từng phần để tiếp tục sau. Bạn có thể bổ sung người liên quan,
+              tư liệu và bằng cũ khi có thông tin.
+            </p>
+          </div>
+          {canEdit ? (
+            <button
+              className="min-h-11 shrink-0 rounded-lg bg-primary-700 px-5 py-3 text-sm font-semibold text-white hover:bg-primary-800 disabled:opacity-60"
+              disabled={submitting}
+              onClick={
+                !hasBasicInfo
+                  ? onEdit
+                  : () => selectSection("Nội dung công khai")
+              }
+              type="button"
+            >
+              {!hasBasicInfo
+                ? "Bắt đầu nhập thông tin"
+                : !hasPublicDraft
+                  ? "Soạn nội dung công khai"
+                  : "Xem lại bản nháp"}
+            </button>
+          ) : null}
+        </div>
+        <ol className="grid divide-y divide-[var(--theme-border)] lg:grid-cols-4 lg:divide-x lg:divide-y-0">
+          {[
+            {
+              title: "Thông tin hồ sơ",
+              description: "Tên hồ sơ, đối tượng, thời gian và nguồn.",
+              state: hasBasicInfo
+                ? "Đã có tên và đối tượng"
+                : "Cần nhập để bắt đầu",
+              action: "Nhập / sửa thông tin",
+              run: onEdit,
+            },
+            {
+              title: "Người & tư liệu",
+              description: "Thêm người liên quan, ảnh và tài liệu nguồn.",
+              state:
+                people.isPending || media.isPending
+                  ? "Đang tải…"
+                  : `${people.data?.length ?? 0} người · ${media.data?.length ?? 0} tệp · Bổ sung khi có`,
+              action: "Bổ sung tư liệu",
+              run: () => selectSection("Hình ảnh & tài liệu"),
+            },
+            {
+              title: "Bằng xác lập cũ",
+              description: "Nhập thông tin bằng, tải ảnh chụp hoặc bản scan.",
+              state: awards.isPending
+                ? "Đang tải…"
+                : `${awards.data?.length ?? 0} bằng · Bỏ qua nếu không có`,
+              action: "Thêm / xem bằng cũ",
+              run: () => selectSection("Bằng xác lập"),
+            },
+            {
+              title: "Nội dung & xuất bản",
+              description:
+                "Soạn bài, chọn tệp công khai và xem lại trước khi đăng.",
+              state:
+                record.publicationStatus === "PUBLISHED"
+                  ? "Đang công khai"
+                  : draft.isPending
+                    ? "Đang tải…"
+                    : hasPublicDraft
+                      ? "Đã có bản nháp"
+                      : "Chưa có nội dung công khai",
+              action: "Soạn và xem trước",
+              run: () => selectSection("Nội dung công khai"),
+            },
+          ].map((step, index) => (
+            <li className="flex flex-col items-start p-5" key={step.title}>
+              <span className="mb-3 grid h-7 w-7 place-items-center rounded-full border border-[var(--theme-border)] text-xs font-semibold text-[var(--theme-accent)]">
+                {index + 1}
+              </span>
+              <h4 className="font-semibold">{step.title}</h4>
+              <p className="mt-2 text-sm leading-6 text-[var(--theme-muted)]">
+                {step.description}
+              </p>
+              <p className="mb-4 mt-3 text-xs text-[var(--theme-muted)]">
+                {step.state}
+              </p>
+              {canEdit ? (
+                <button
+                  className="mt-auto min-h-10 text-sm font-semibold text-[var(--theme-accent)] underline-offset-4 hover:underline disabled:opacity-60"
+                  disabled={submitting}
+                  onClick={step.run}
+                  type="button"
+                >
+                  {step.action} →
+                </button>
+              ) : null}
+            </li>
+          ))}
+        </ol>
+      </section>
+
       <label className="block sm:hidden">
         <span className="sr-only">Chọn mục hồ sơ</span>
         <select
@@ -508,7 +639,7 @@ export function HistoricalRecordDetailComplete({
 
       <nav
         aria-label="Các phần trong hồ sơ"
-        className="hidden gap-1 pb-1 sm:flex"
+        className="hidden flex-wrap gap-1 border-b border-[var(--theme-border)] pb-2 sm:flex"
         role="tablist"
       >
         {sections.map((item) => (
@@ -524,35 +655,6 @@ export function HistoricalRecordDetailComplete({
           </button>
         ))}
       </nav>
-
-      <section
-        aria-label="Hướng dẫn công bố"
-        className="flex flex-col gap-3 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-surface)] p-4 sm:flex-row sm:items-center sm:justify-between"
-      >
-        <div className="min-w-0">
-          <p className="text-sm font-semibold">
-            {record.publicationStatus === "PUBLISHED"
-              ? "Nội dung đang công khai"
-              : record.publicationStatus === "HIDDEN"
-                ? "Nội dung đang ẩn"
-                : "Hồ sơ nguồn được lưu riêng tư"}
-          </p>
-          <p className="mt-1 text-sm text-[var(--theme-muted)]">
-            {record.publicationStatus === "PUBLISHED"
-              ? "Chỉnh sửa và lưu sẽ tạo bản nháp riêng. Bấm Xuất bản để áp dụng thay đổi lên trang công khai."
-              : "Thêm hồ sơ chỉ lưu dữ liệu nguồn, chưa đăng lên website. Vào Nội dung công khai, soạn và lưu bản nháp; xem lại rồi bấm Xuất bản để mọi người có thể xem."}
-          </p>
-        </div>
-        <button
-          className="inline-flex min-h-10 shrink-0 items-center justify-center rounded-md bg-primary-700 px-3 text-sm font-semibold text-white hover:bg-primary-800"
-          onClick={() => selectSection("Nội dung công khai")}
-          type="button"
-        >
-          {record.publicationStatus === "PUBLISHED"
-            ? "Chỉnh sửa nội dung công khai"
-            : "Soạn nội dung công khai"}
-        </button>
-      </section>
 
       {visitedSections.has("Thông tin") ? (
         <div
@@ -583,7 +685,7 @@ export function HistoricalRecordDetailComplete({
           />
           <Info
             label="Nguồn lưu trữ"
-            value={`${record.sourceKind} · ${record.sourceLabel ?? "Chưa ghi nhận"}`}
+            value={`${sourceKindLabels[record.sourceKind] ?? "Khác / chưa rõ"} · ${record.sourceLabel ?? "Chưa ghi nhận"}`}
           />
           <Info
             label="Mã hồ sơ cũ / tham chiếu"
@@ -1375,6 +1477,8 @@ function PublicContentDraftEditor({
                 defaultValue={draft?.slug ?? ""}
                 maxLength={180}
                 name="slug"
+                pattern="[a-z0-9]+(-[a-z0-9]+)*"
+                title="Dùng chữ thường không dấu, số và dấu gạch ngang; ví dụ nghe-nhan-nguyen-an"
                 placeholder="nghe-nhan-nguyen-an"
               />
             </label>
@@ -1724,54 +1828,16 @@ function HistoricalAwardPresentation({
   recipientName: string | null;
   subjectName: string | null;
 }) {
-  const valueOrUnknown = (value: string | null | undefined) =>
-    value?.trim() || "Chưa ghi nhận";
-
   return (
-    <div className="space-y-5 border-t border-[var(--theme-border)] p-4 sm:p-6">
-      <div className="rounded-lg border border-amber-700/25 bg-amber-700/5 p-4">
-        <p className="text-xs font-semibold uppercase tracking-wide text-amber-900">
-          Thông tin số hóa · tư liệu lịch sử
-        </p>
-        <p className="mt-2 text-sm text-[var(--theme-muted)]">
-          Đây là phần trình bày lại thông tin của bằng đã cấp, không phải chứng
-          nhận điện tử hoặc bằng mới; không có chữ ký hay xác nhận blockchain.
-        </p>
-      </div>
-      <dl className="grid gap-3 sm:grid-cols-2">
-        <div className="sm:col-span-2">
-          <dt className="text-xs text-[var(--theme-muted)]">Tên bằng</dt>
-          <dd className="mt-1 text-lg font-semibold">
-            {valueOrUnknown(award.awardName)}
-          </dd>
-        </div>
-        <div>
-          <dt className="text-xs text-[var(--theme-muted)]">Đối tượng</dt>
-          <dd className="mt-1 text-sm">{valueOrUnknown(subjectName)}</dd>
-        </div>
-        <div>
-          <dt className="text-xs text-[var(--theme-muted)]">Người được cấp</dt>
-          <dd className="mt-1 text-sm">{valueOrUnknown(recipientName)}</dd>
-        </div>
-        <div>
-          <dt className="text-xs text-[var(--theme-muted)]">Số hiệu</dt>
-          <dd className="mt-1 break-words text-sm">
-            {valueOrUnknown(award.certificateNumber)}
-          </dd>
-        </div>
-        <div>
-          <dt className="text-xs text-[var(--theme-muted)]">Ngày cấp</dt>
-          <dd className="mt-1 text-sm">
-            {award.issuedAt ? formatDateInput(award.issuedAt) : "Chưa ghi nhận"}
-          </dd>
-        </div>
-        <div className="sm:col-span-2">
-          <dt className="text-xs text-[var(--theme-muted)]">Đơn vị cấp</dt>
-          <dd className="mt-1 break-words text-sm">
-            {valueOrUnknown(award.issuedBy)}
-          </dd>
-        </div>
-      </dl>
+    <div className="border-t border-[var(--theme-border)] p-4 sm:p-6">
+      <HistoricalCertificatePresentation
+        title={award.awardName}
+        subject={subjectName}
+        recipient={recipientName}
+        number={award.certificateNumber}
+        issuedAt={award.issuedAt ? formatDateInput(award.issuedAt) : null}
+        issuer={award.issuedBy}
+      />
     </div>
   );
 }
