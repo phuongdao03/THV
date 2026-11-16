@@ -104,8 +104,11 @@ test("data manager saves historical dates and sees persisted edits after reload"
     .click();
   await expect(page.getByText(recordCode)).toBeVisible();
   await expect(
-    page.getByRole("region", { name: "Hướng dẫn công bố" }),
-  ).toContainText("Thêm hồ sơ chỉ lưu dữ liệu nguồn, chưa đăng lên website.");
+    page.getByRole("region", { name: "Các bước hoàn thiện hồ sơ" }),
+  ).toContainText("Lưu từng phần để tiếp tục sau.");
+  await expect(
+    page.getByRole("button", { name: "Soạn nội dung công khai", exact: true }),
+  ).toBeVisible();
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= window.innerWidth,
@@ -121,7 +124,9 @@ test("data manager saves historical dates and sees persisted edits after reload"
     ).toBeVisible();
     await sectionPicker.selectOption("Thông tin");
   }
-  await page.getByRole("button", { name: "Sửa thông tin" }).click();
+  await page
+    .getByRole("button", { name: "Sửa thông tin", exact: true })
+    .click();
 
   await page.getByLabel("Tên hồ sơ đề cử").fill("Nghề thủ công truyền thống");
   await expect(page.getByLabel("Năm đề cử (nếu chỉ biết năm)")).toHaveCount(0);
@@ -289,7 +294,9 @@ test("confirms before browser back leaves a dirty historical record", async ({
   await page
     .getByRole("link", { name: /Gìn giữ nghề thủ công truyền thống/ })
     .click();
-  await page.getByRole("button", { name: "Sửa thông tin" }).click();
+  await page
+    .getByRole("button", { name: "Sửa thông tin", exact: true })
+    .click();
   await page.getByLabel("Tên hồ sơ đề cử").fill("Thay đổi chưa lưu");
 
   await page.goBack();
@@ -309,7 +316,9 @@ test("confirms before browser back leaves a dirty historical record", async ({
   await page
     .getByRole("link", { name: /Gìn giữ nghề thủ công truyền thống/ })
     .click();
-  await page.getByRole("button", { name: "Sửa thông tin" }).click();
+  await page
+    .getByRole("button", { name: "Sửa thông tin", exact: true })
+    .click();
   await page.getByLabel("Tên hồ sơ đề cử").fill("Thay đổi sẽ bỏ");
   await page.goBack();
   await expect(page.getByRole("alertdialog")).toBeVisible();
