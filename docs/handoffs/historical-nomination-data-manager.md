@@ -151,3 +151,29 @@ made.
   uses the local mock API; it does not write to production. The saved-state
   screenshot is a local ignored artifact under `frontend/test-results/`.
 - No production migration, commit, push, or deployment was made.
+
+## DATA_MANAGER intake and navigation follow-up
+
+- The historical records area now opens directly at a compact, searchable list.
+  Filters cover status, year, and dossier type; cards show media, document, and
+  award counts. Public content editing remains on its own route with existing
+  public scan and certificate utilities.
+- New source records receive unique `THV-LS-{year}-{uuid}` codes. Existing
+  `HIST-` codes remain searchable aliases. Create requests accept an idempotency
+  key, so retries return the same source record.
+- Draft source records can be soft-deleted only while unpublished and
+  unassociated with a published work. Deletion checks the record version and
+  records an audit event. Evidence and awards are retained.
+- Detail pages warn before leaving unsaved edits, including browser Back.
+  Mobile uses a section selector instead of overflowing detail tabs. Historical
+  award entry is collapsed until requested; its digitized presentation stays
+  distinct from the original attached scan.
+- Migration 0176 is additive and was exercised against a temporary SQLite
+  database only. It has not been applied to production. Month-level date
+  precision remains unavailable pending migration approval; unknown,
+  year-only, and exact dates are preserved without inventing a day.
+- Verification: 11 focused backend tests, 25 focused frontend tests, direct
+  TypeScript, targeted ESLint/Prettier, Ruff check/format, and DATA_MANAGER save
+  E2E (4 desktop/mobile tests) passed. Next type generation still hits Windows
+  `EPERM` writing `.next/types/routes.d.ts`; direct
+  `tsc --noEmit --incremental false` passed. No commit, push, or deployment.

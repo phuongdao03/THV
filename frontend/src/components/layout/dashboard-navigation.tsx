@@ -10,6 +10,7 @@ import {
   Clock3,
   FileCheck2,
   FileText,
+  Eye,
   Gauge,
   CircleHelp,
   House,
@@ -390,8 +391,13 @@ function sectionsFor(
         items: [
           {
             href: "/data-manager",
-            label: "Quản lý dữ liệu",
-            icon: Database,
+            label: "Hồ sơ đề cử",
+            icon: BookOpen,
+          },
+          {
+            href: "/data-manager/content",
+            label: "Nội dung công bố",
+            icon: Eye,
           },
         ],
       },
@@ -521,6 +527,9 @@ function sectionsFor(
 }
 
 function isActive(pathname: string, href: string) {
+  if (href === "/data-manager") {
+    return pathname === href || pathname.startsWith("/data-manager/records/");
+  }
   if (href === "/workspace")
     return pathname === href || pathname === "/dashboard";
   if (href === "/") return pathname === href;
@@ -537,7 +546,7 @@ function mobileItemsFor(
     USER: ["/workspace", "/dossiers", "/community", "/wallet"],
     MODERATOR: ["/reviews", "/attendance", "/community", "/work-allocations"],
     SUPER_ADMIN: ["/workspace", "/community", "/works"],
-    DATA_MANAGER: ["/data-manager"],
+    DATA_MANAGER: ["/data-manager", "/data-manager/content"],
   };
   const byHref = new globalThis.Map(items.map((item) => [item.href, item]));
   const prioritized = [

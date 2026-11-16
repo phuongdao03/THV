@@ -4,7 +4,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.audit.models import AuditLog
@@ -159,7 +160,8 @@ class HistoricalNominationService:
     ) -> HistoricalDashboardSummary:
         _require_manager(principal, "historical.records.read")
         active_filter = (
-            HistoricalNomination.archive_status == HistoricalArchiveStatus.ACTIVE
+            HistoricalNomination.archive_status == HistoricalArchiveStatus.ACTIVE,
+            HistoricalNomination.deleted_at.is_(None),
         )
         async with self._session.begin():
             grouped_counts = await self._session.execute(
@@ -167,7 +169,7 @@ class HistoricalNominationService:
                     HistoricalNomination.verification_status,
                     func.count(HistoricalNomination.id),
                 )
-                .where(active_filter)
+                .where(*active_filter)
                 .group_by(HistoricalNomination.verification_status)
             )
             counts = {status: int(count) for status, count in grouped_counts}
@@ -175,7 +177,7 @@ class HistoricalNominationService:
             published_count = int(
                 await self._session.scalar(
                     select(func.count(HistoricalNomination.id)).where(
-                        active_filter,
+                        *active_filter,
                         HistoricalNomination.publication_status
                         == HistoricalNominationPublicationStatus.PUBLISHED,
                     )
@@ -204,7 +206,8 @@ class HistoricalNominationService:
                     record.id: record
                     for record in await self._session.scalars(
                         select(HistoricalNomination).where(
-                            HistoricalNomination.id.in_(activity_ids)
+                            HistoricalNomination.id.in_(activity_ids),
+                            HistoricalNomination.deleted_at.is_(None),
                         )
                     )
                 }
@@ -257,7 +260,8 @@ class HistoricalNominationService:
     ) -> tuple[list[HistoricalNomination], int]:
         _require_manager(principal, "historical.records.read")
         filters = [
-            HistoricalNomination.archive_status == HistoricalArchiveStatus.ACTIVE
+            HistoricalNomination.archive_status == HistoricalArchiveStatus.ACTIVE,
+            HistoricalNomination.deleted_at.is_(None),
         ]
         if status is not None:
             filters.append(HistoricalNomination.verification_status == status)
@@ -277,6 +281,7 @@ class HistoricalNominationService:
                 HistoricalNomination.subject_name.ilike(pattern)
                 | HistoricalNomination.title.ilike(pattern)
                 | HistoricalNomination.code.ilike(pattern)
+                | HistoricalNomination.legacy_code.ilike(pattern)
             )
         async with self._session.begin():
             total = int(
@@ -298,24 +303,74 @@ class HistoricalNominationService:
             )
         return records, total
 
-    async def media_counts(
+    async def workspace_counts(
         self,
         principal: AuthPrincipal,
         record_ids: list[UUID],
-    ) -> dict[UUID, int]:
+    ) -> dict[UUID, dict[str, int]]:
         _require_manager(principal, "historical.records.read")
         if not record_ids:
             return {}
+        counts = {
+            record_id: {
+                "media_count": 0,
+                "photo_video_count": 0,
+                "document_count": 0,
+                "award_count": 0,
+            }
+            for record_id in record_ids
+        }
         async with self._session.begin():
-            rows = await self._session.execute(
+            media_rows = await self._session.execute(
                 select(
                     HistoricalMediaLink.nomination_id,
                     func.count(HistoricalMediaLink.id),
+                    func.sum(
+                        case(
+                            (
+                                HistoricalMediaLink.media_kind.in_(
+                                    [
+                                        HistoricalMediaKind.PHOTO,
+                                        HistoricalMediaKind.VIDEO,
+                                    ]
+                                ),
+                                1,
+                            ),
+                            else_=0,
+                        )
+                    ),
+                    func.sum(
+                        case(
+                            (
+                                HistoricalMediaLink.media_kind.in_(
+                                    [
+                                        HistoricalMediaKind.SCANNED_DOCUMENT,
+                                        HistoricalMediaKind.SUPPORTING_DOCUMENT,
+                                    ]
+                                ),
+                                1,
+                            ),
+                            else_=0,
+                        )
+                    ),
                 )
                 .where(HistoricalMediaLink.nomination_id.in_(record_ids))
                 .group_by(HistoricalMediaLink.nomination_id)
             )
-            return {record_id: int(count) for record_id, count in rows}
+            for record_id, media, photo_video, documents in media_rows:
+                counts[record_id].update(
+                    media_count=int(media or 0),
+                    photo_video_count=int(photo_video or 0),
+                    document_count=int(documents or 0),
+                )
+            award_rows = await self._session.execute(
+                select(HistoricalAward.nomination_id, func.count(HistoricalAward.id))
+                .where(HistoricalAward.nomination_id.in_(record_ids))
+                .group_by(HistoricalAward.nomination_id)
+            )
+            for record_id, awards in award_rows:
+                counts[record_id]["award_count"] = int(awards or 0)
+        return counts
 
     async def get_record(
         self,
@@ -328,6 +383,7 @@ class HistoricalNominationService:
             if (
                 record is None
                 or record.archive_status is HistoricalArchiveStatus.ARCHIVED
+                or record.deleted_at is not None
             ):
                 raise HistoricalNominationNotFoundError()
             return record
@@ -336,6 +392,8 @@ class HistoricalNominationService:
         self,
         principal: AuthPrincipal,
         payload: HistoricalNominationWrite,
+        *,
+        creation_request_id: UUID | None = None,
     ) -> HistoricalNomination:
         _require_manager(principal, "historical.records.manage")
         values = payload.model_dump(by_alias=False)
@@ -348,19 +406,101 @@ class HistoricalNominationService:
                 values["category_id"] = dossier_type.category_id
             else:
                 await self._validate_category(values["category_id"])
+            if creation_request_id is not None:
+                existing_result = await self._session.execute(
+                    select(HistoricalNomination).where(
+                        HistoricalNomination.created_by_user_id == principal.user_id,
+                        HistoricalNomination.creation_request_id == creation_request_id,
+                    )
+                )
+                existing = existing_result.scalar_one_or_none()
+                if existing is not None:
+                    if existing.deleted_at is not None:
+                        raise HistoricalNominationStateError(
+                            "This create request already belongs to a deleted draft."
+                        )
+                    return existing
+
+            record_id = uuid4()
             record = HistoricalNomination(
-                id=uuid4(),
-                code=f"HIST-{uuid4().hex[:16].upper()}",
+                id=record_id,
+                code=f"THV-LS-{datetime.now(UTC).year}-{record_id.hex.upper()}",
+                creation_request_id=creation_request_id,
                 **values,
                 created_by_user_id=principal.user_id,
             )
-            self._session.add(record)
+            try:
+                async with self._session.begin_nested():
+                    self._session.add(record)
+                    await self._session.flush()
+            except IntegrityError:
+                if creation_request_id is None:
+                    raise
+                existing_result = await self._session.execute(
+                    select(HistoricalNomination).where(
+                        HistoricalNomination.created_by_user_id == principal.user_id,
+                        HistoricalNomination.creation_request_id == creation_request_id,
+                    )
+                )
+                existing = existing_result.scalar_one_or_none()
+                if existing is None or existing.deleted_at is not None:
+                    raise
+                return existing
             self._audit.record(
                 actor_user_id=principal.user_id,
                 action="historical_nomination.created",
                 resource_type="historical_nomination",
                 resource_id=str(record.id),
                 after={"code": record.code, "status": "DRAFT"},
+            )
+            await self._session.flush()
+            return record
+
+    async def delete_draft(
+        self,
+        principal: AuthPrincipal,
+        record_id: UUID,
+        *,
+        expected_updated_at: datetime,
+    ) -> HistoricalNomination:
+        _require_manager(principal, "historical.records.manage")
+        async with self._session.begin():
+            record = await self._active_record(record_id, for_update=True)
+            _assert_expected_version(record, expected_updated_at)
+            if (
+                record.verification_status is not HistoricalNominationStatus.DRAFT
+                or record.publication_status
+                not in {
+                    HistoricalNominationPublicationStatus.PRIVATE,
+                    HistoricalNominationPublicationStatus.PENDING_PUBLICATION,
+                }
+                or record.published_at is not None
+            ):
+                raise HistoricalNominationStateError(
+                    "Only an unpublished historical draft can be deleted."
+                )
+            work = await self._session.scalar(
+                select(PublicWork)
+                .where(PublicWork.historical_nomination_id == record.id)
+                .with_for_update()
+            )
+            if work is not None and (
+                work.publication_status is not PublicationStatus.DRAFT
+                or work.published_at is not None
+            ):
+                raise HistoricalNominationStateError(
+                    "Hide or archive the public page before deleting this draft."
+                )
+
+            record.deleted_at = datetime.now(UTC)
+            record.updated_by_user_id = principal.user_id
+            self._audit.record(
+                actor_user_id=principal.user_id,
+                action="historical_nomination.draft_deleted",
+                resource_type="historical_nomination",
+                resource_id=str(record.id),
+                before={"code": record.code, "status": "DRAFT"},
+                after={"deleted": True},
             )
             await self._session.flush()
             return record
@@ -567,6 +707,7 @@ class HistoricalNominationService:
         _require_admin(principal)
         filters = (
             HistoricalNomination.archive_status == HistoricalArchiveStatus.ACTIVE,
+            HistoricalNomination.deleted_at.is_(None),
             HistoricalNomination.verification_status.in_(
                 (
                     HistoricalNominationStatus.SUBMITTED,
@@ -1520,7 +1661,8 @@ class HistoricalNominationService:
     ) -> tuple[list[tuple[HistoricalMediaLink, MediaAsset, HistoricalNomination]], int]:
         _require_manager(principal, "historical.documents.manage")
         filters = [
-            HistoricalNomination.archive_status == HistoricalArchiveStatus.ACTIVE
+            HistoricalNomination.archive_status == HistoricalArchiveStatus.ACTIVE,
+            HistoricalNomination.deleted_at.is_(None),
         ]
         if media_kind is not None:
             filters.append(HistoricalMediaLink.media_kind == media_kind)
@@ -1529,6 +1671,7 @@ class HistoricalNominationService:
             filters.append(
                 MediaAsset.original_filename.ilike(pattern)
                 | HistoricalNomination.code.ilike(pattern)
+                | HistoricalNomination.legacy_code.ilike(pattern)
                 | HistoricalNomination.title.ilike(pattern)
                 | HistoricalNomination.subject_name.ilike(pattern)
             )
@@ -1626,7 +1769,8 @@ class HistoricalNominationService:
     ) -> tuple[list[tuple[HistoricalAward, HistoricalNomination]], int]:
         _require_manager(principal, "historical.records.read")
         filters = [
-            HistoricalNomination.archive_status == HistoricalArchiveStatus.ACTIVE
+            HistoricalNomination.archive_status == HistoricalArchiveStatus.ACTIVE,
+            HistoricalNomination.deleted_at.is_(None),
         ]
         if query and query.strip():
             pattern = f"%{query.strip()}%"
@@ -1636,6 +1780,7 @@ class HistoricalNominationService:
                 | HistoricalAward.issued_by.ilike(pattern)
                 | HistoricalNomination.subject_name.ilike(pattern)
                 | HistoricalNomination.code.ilike(pattern)
+                | HistoricalNomination.legacy_code.ilike(pattern)
             )
         async with self._session.begin():
             total = int(
@@ -1678,6 +1823,7 @@ class HistoricalNominationService:
         query = select(HistoricalNomination).where(
             HistoricalNomination.id == record_id,
             HistoricalNomination.archive_status == HistoricalArchiveStatus.ACTIVE,
+            HistoricalNomination.deleted_at.is_(None),
         )
         if for_update:
             query = query.with_for_update()

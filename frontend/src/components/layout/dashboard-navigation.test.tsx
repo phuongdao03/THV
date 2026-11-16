@@ -45,10 +45,13 @@ describe("DashboardNavigation work-allocation migration", () => {
     );
 
     expect(
-      screen
-        .getByRole("link", { name: "Quản lý dữ liệu" })
-        .getAttribute("href"),
+      screen.getByRole("link", { name: "Hồ sơ đề cử" }).getAttribute("href"),
     ).toBe("/data-manager");
+    expect(
+      screen
+        .getByRole("link", { name: "Nội dung công bố" })
+        .getAttribute("href"),
+    ).toBe("/data-manager/content");
     expect(view.container.querySelector('a[href="/admin"]')).toBeNull();
     expect(
       view.container.querySelector('a[href="/admin/payments"]'),

@@ -4,7 +4,7 @@ from sqlite3 import Connection
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import event, select
+from sqlalchemy import event, func, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.db.base import Base
@@ -14,12 +14,15 @@ from app.modules.auth.models import User, UserStatus
 from app.modules.auth.session_service import AuthPrincipal
 from app.modules.historical_nominations.errors import (
     HistoricalNominationForbiddenError,
+    HistoricalNominationNotFoundError,
     HistoricalNominationStateError,
 )
 from app.modules.historical_nominations.models import (
     HistoricalArchiveStatus,
     HistoricalAward,
     HistoricalAwardVerificationStatus,
+    HistoricalMediaKind,
+    HistoricalMediaLink,
     HistoricalNomination,
     HistoricalNominationPublicationStatus,
     HistoricalNominationStatus,
@@ -29,10 +32,258 @@ from app.modules.historical_nominations.models import (
 from app.modules.historical_nominations.schemas import (
     HistoricalAwardPatch,
     HistoricalNominationPatch,
+    HistoricalNominationWrite,
     HistoricalPublicContentDraftWrite,
 )
 from app.modules.historical_nominations.service import HistoricalNominationService
+from app.modules.media.models import MediaAsset
 from app.modules.public.models import PublicWork
+
+
+def test_historical_record_code_is_thv_and_creation_is_idempotent() -> None:
+    async def scenario() -> None:
+        engine = create_async_engine("sqlite+aiosqlite://")
+        factory = async_sessionmaker(engine, expire_on_commit=False)
+        async with engine.begin() as connection:
+            await connection.run_sync(Base.metadata.create_all)
+
+        user_id = uuid4()
+        manager = AuthPrincipal(
+            user_id=user_id,
+            session_id=uuid4(),
+            email="manager@example.test",
+            roles=("DATA_MANAGER",),
+            permissions=("historical.records.manage", "historical.records.read"),
+        )
+        first_key = uuid4()
+        async with factory() as session:
+            session.add(
+                User(
+                    id=user_id,
+                    email=manager.email,
+                    password_hash="unused",
+                    status=UserStatus.ACTIVE,
+                )
+            )
+            await session.commit()
+
+            service = HistoricalNominationService(session)
+            first = await service.create_record(
+                manager,
+                HistoricalNominationWrite(),
+                creation_request_id=first_key,
+            )
+            retry = await service.create_record(
+                manager,
+                HistoricalNominationWrite(),
+                creation_request_id=first_key,
+            )
+            second = await service.create_record(
+                manager,
+                HistoricalNominationWrite(),
+                creation_request_id=uuid4(),
+            )
+
+            assert first.code.startswith(f"THV-LS-{first.created_at.year}-")
+            assert first.legacy_code is None
+            assert retry.id == first.id
+            assert retry.code == first.code
+            assert second.id != first.id
+            assert second.code != first.code
+            count = await session.scalar(select(func.count(HistoricalNomination.id)))
+            assert count == 2
+
+        await engine.dispose()
+
+    asyncio.run(scenario())
+
+
+def test_deleting_historical_draft_hides_only_the_source_record() -> None:
+    async def scenario() -> None:
+        engine = create_async_engine("sqlite+aiosqlite://")
+        factory = async_sessionmaker(engine, expire_on_commit=False)
+        async with engine.begin() as connection:
+            await connection.run_sync(Base.metadata.create_all)
+
+        user_id = uuid4()
+        manager = AuthPrincipal(
+            user_id=user_id,
+            session_id=uuid4(),
+            email="manager@example.test",
+            roles=("DATA_MANAGER",),
+            permissions=("historical.records.manage", "historical.records.read"),
+        )
+        record = HistoricalNomination(
+            id=uuid4(),
+            code="THV-LS-2026-0123456789ABCDEF",
+            subject_type=HistoricalSubjectType.PERSON,
+            subject_name=None,
+            title="Hồ sơ chưa đặt tên",
+            source_kind=HistoricalSourceKind.OTHER,
+            created_by_user_id=user_id,
+        )
+        award = HistoricalAward(
+            id=uuid4(),
+            nomination_id=record.id,
+            award_name="Bằng xác lập cũ",
+            created_by_user_id=user_id,
+        )
+        published = HistoricalNomination(
+            id=uuid4(),
+            code="THV-LS-2026-0123456789ABCDE0",
+            subject_type=HistoricalSubjectType.PERSON,
+            title="Đã công bố",
+            source_kind=HistoricalSourceKind.OTHER,
+            verification_status=HistoricalNominationStatus.VERIFIED,
+            publication_status=HistoricalNominationPublicationStatus.PUBLISHED,
+            published_by_user_id=user_id,
+            published_at=datetime.now(UTC),
+            created_by_user_id=user_id,
+        )
+        published_id = published.id
+        async with factory() as session:
+            session.add_all(
+                [
+                    User(
+                        id=user_id,
+                        email=manager.email,
+                        password_hash="unused",
+                        status=UserStatus.ACTIVE,
+                    ),
+                    record,
+                    award,
+                    published,
+                ]
+            )
+            await session.commit()
+            saved_at = record.updated_at
+            published_updated_at = published.updated_at
+
+            deleted = await HistoricalNominationService(session).delete_draft(
+                manager,
+                record.id,
+                expected_updated_at=saved_at,
+            )
+            assert deleted.deleted_at is not None
+            assert await session.get(HistoricalAward, award.id) is not None
+            deleted_audit = await session.scalar(
+                select(AuditLog).where(
+                    AuditLog.resource_id == str(record.id),
+                    AuditLog.action == "historical_nomination.draft_deleted",
+                )
+            )
+            assert deleted_audit is not None
+            await session.commit()
+            visible, total = await HistoricalNominationService(session).list_records(
+                manager
+            )
+            assert [item.id for item in visible] == [published.id]
+            assert total == 1
+            with pytest.raises(HistoricalNominationNotFoundError):
+                await HistoricalNominationService(session).get_record(
+                    manager, record.id
+                )
+            with pytest.raises(HistoricalNominationStateError):
+                await HistoricalNominationService(session).delete_draft(
+                    manager,
+                    published_id,
+                    expected_updated_at=published_updated_at,
+                )
+
+        await engine.dispose()
+
+    asyncio.run(scenario())
+
+
+def test_historical_workspace_counts_media_and_awards_by_record() -> None:
+    async def scenario() -> None:
+        engine = create_async_engine("sqlite+aiosqlite://")
+        factory = async_sessionmaker(engine, expire_on_commit=False)
+        async with engine.begin() as connection:
+            await connection.run_sync(Base.metadata.create_all)
+
+        user_id = uuid4()
+        manager = AuthPrincipal(
+            user_id=user_id,
+            session_id=uuid4(),
+            email="manager@example.test",
+            roles=("DATA_MANAGER",),
+            permissions=("historical.records.read",),
+        )
+        record = HistoricalNomination(
+            id=uuid4(),
+            code="THV-LS-2026-0000000000000001",
+            subject_type=HistoricalSubjectType.PERSON,
+            title="Hồ sơ lưu trữ",
+            source_kind=HistoricalSourceKind.ARCHIVE,
+            created_by_user_id=user_id,
+        )
+        award = HistoricalAward(
+            id=uuid4(),
+            nomination_id=record.id,
+            award_name="Bằng lịch sử",
+            created_by_user_id=user_id,
+        )
+        media_kinds = [
+            HistoricalMediaKind.PHOTO,
+            HistoricalMediaKind.SUPPORTING_DOCUMENT,
+            HistoricalMediaKind.AWARD_SCAN,
+        ]
+        assets = [
+            MediaAsset(
+                id=uuid4(),
+                owner_user_id=user_id,
+                cloudinary_public_id=f"historical-{uuid4().hex}",
+                resource_type="image",
+                access_mode="authenticated",
+                original_filename=f"scan-{index}.png",
+                mime_type="image/png",
+                bytes=10,
+            )
+            for index in range(len(media_kinds))
+        ]
+        links = [
+            HistoricalMediaLink(
+                id=uuid4(),
+                nomination_id=record.id,
+                media_asset_id=asset.id,
+                award_id=award.id if kind is HistoricalMediaKind.AWARD_SCAN else None,
+                media_kind=kind,
+                attached_by_user_id=user_id,
+            )
+            for asset, kind in zip(assets, media_kinds, strict=True)
+        ]
+        async with factory() as session:
+            session.add_all(
+                [
+                    User(
+                        id=user_id,
+                        email=manager.email,
+                        password_hash="unused",
+                        status=UserStatus.ACTIVE,
+                    ),
+                    record,
+                    award,
+                    *assets,
+                    *links,
+                ]
+            )
+            await session.commit()
+            counts = await HistoricalNominationService(session).workspace_counts(
+                manager,
+                [record.id],
+            )
+
+            assert counts[record.id] == {
+                "media_count": 3,
+                "photo_video_count": 1,
+                "document_count": 1,
+                "award_count": 1,
+            }
+
+        await engine.dispose()
+
+    asyncio.run(scenario())
 
 
 def test_data_manager_save_persists_canonical_fields_and_updates_old_award() -> None:

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
 
 import { DataManagerContentWorkspace } from "@/components/historical-nominations/data-manager-content-workspace";
@@ -27,53 +27,26 @@ vi.mock("@/components/certificates/certificate-archive-workspace", () => ({
   CertificateArchiveWorkspace: () => <div />,
 }));
 vi.mock("@/components/admin/public-work-editor", () => ({
-  PublicWorkEditor: () => <div />,
+  PublicWorkEditor: () => <div>Trình biên tập nội dung công bố</div>,
 }));
 
-it("separates legacy source records from publication-ready content", () => {
+it("opens directly on the historical record list without nested tabs", () => {
   render(<DataManagerContentWorkspace />);
 
-  expect(screen.getByRole("tab", { name: "Hồ sơ lịch sử" })).toBeTruthy();
-  expect(
-    screen
-      .getByRole("tab", { name: "Hồ sơ lịch sử" })
-      .getAttribute("aria-selected"),
-  ).toBe("true");
-  expect(
-    screen.getByRole("heading", { name: "Bổ sung hồ sơ cũ" }),
-  ).toBeTruthy();
-  fireEvent.click(screen.getByRole("tab", { name: "Hồ sơ lịch sử" }));
   expect(screen.getByRole("region", { name: "Hồ sơ lịch sử" })).toBeTruthy();
-
-  fireEvent.click(screen.getByRole("tab", { name: "Nội dung công bố" }));
-  expect(screen.getByRole("region", { name: "Nội dung công bố" })).toBeTruthy();
+  expect(screen.queryByRole("tab")).toBeNull();
 });
 
-it("explains the next action in every data management area", () => {
-  render(<DataManagerContentWorkspace />);
+it("keeps publication editing and certificate tools inside the publication area", () => {
+  render(<DataManagerContentWorkspace initialTab="public-content" />);
 
-  expect(screen.getByText("Tạo hồ sơ nguồn")).toBeTruthy();
-  fireEvent.click(screen.getByRole("tab", { name: "Nội dung công bố" }));
-  expect(
-    screen.getByRole("heading", { name: "Biên tập nội dung công khai" }),
-  ).toBeTruthy();
-  fireEvent.click(screen.getByRole("tab", { name: "Bằng số" }));
-  expect(
-    screen.getByRole("heading", { name: "Quản lý nội dung bằng số" }),
-  ).toBeTruthy();
-  fireEvent.click(screen.getByRole("tab", { name: "Bằng scan công khai" }));
-  expect(
-    screen.getByRole("heading", { name: "Bổ sung bằng xác lập scan cũ" }),
-  ).toBeTruthy();
+  expect(screen.getByText("Trình biên tập nội dung công bố")).toBeTruthy();
+  expect(screen.getByText("Quản lý bằng số và scan lưu trữ")).toBeTruthy();
+  expect(screen.queryByRole("tab")).toBeNull();
 });
 
-it("opens the legacy records area when returning from a source record", () => {
+it("opens the historical records route when returning from a source record", () => {
   render(<DataManagerContentWorkspace initialTab="historical-records" />);
 
-  expect(
-    screen
-      .getByRole("tab", { name: "Hồ sơ lịch sử" })
-      .getAttribute("aria-selected"),
-  ).toBe("true");
   expect(screen.getByRole("region", { name: "Hồ sơ lịch sử" })).toBeTruthy();
 });

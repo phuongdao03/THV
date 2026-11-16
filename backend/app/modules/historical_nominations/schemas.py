@@ -100,6 +100,10 @@ class HistoricalArchiveRequest(HistoricalSchema):
         return value.strip() if isinstance(value, str) else value
 
 
+class HistoricalDraftDelete(HistoricalSchema):
+    expected_updated_at: datetime
+
+
 class HistoricalPublicContentApproval(HistoricalSchema):
     expected_updated_at: datetime
     slug: Annotated[
@@ -414,6 +418,9 @@ class HistoricalNominationData(HistoricalSchema):
     created_at: datetime
     updated_at: datetime
     media_count: int = 0
+    photo_video_count: int = 0
+    document_count: int = 0
+    award_count: int = 0
 
 
 class HistoricalNominationListData(HistoricalSchema):

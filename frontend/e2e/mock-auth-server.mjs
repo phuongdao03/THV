@@ -61,7 +61,7 @@ const dataManagerUser = {
 };
 const historicalNominationPreview = {
   id: "e57912cc-714c-4ab5-9fd9-1c5b38cd902b",
-  code: "HSLS-2024-001",
+  code: "THV-LS-2026-0000000000000001",
   subjectType: "PERSON",
   subjectName: "Nghệ nhân Nguyễn An",
   title: "Gìn giữ nghề thủ công truyền thống",
@@ -87,6 +87,9 @@ const historicalNominationPreview = {
   createdAt: "2026-11-14T00:00:00Z",
   updatedAt: "2026-11-14T00:00:00Z",
   mediaCount: 0,
+  photoVideoCount: 0,
+  documentCount: 0,
+  awardCount: 0,
 };
 const adminUser = {
   id: "b57912cc-714c-4ab5-9fd9-1c5b38cd902b",

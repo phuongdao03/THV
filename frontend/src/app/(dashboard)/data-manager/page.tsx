@@ -1,4 +1,5 @@
 import { FileCheck2 } from "lucide-react";
+import { redirect } from "next/navigation";
 
 import { WorkspacePageHeader } from "@/components/layout/workspace-page-header";
 import { DataManagerContentWorkspace } from "@/components/historical-nominations/data-manager-content-workspace";
@@ -9,18 +10,17 @@ export default async function DataManagerPage({
   searchParams: Promise<{ area?: string | string[] }>;
 }) {
   const { area } = await searchParams;
-  const initialTab: "historical-records" | "public-content" =
-    area === "public-content" ? area : "historical-records";
+  if (area === "public-content") redirect("/data-manager/content");
 
   return (
     <div className="mx-auto max-w-7xl space-y-7 pb-8">
       <WorkspacePageHeader
-        section="Không gian dữ liệu"
-        title="Hồ sơ lịch sử & nội dung công bố"
-        description="Bổ sung hồ sơ cũ, người gửi, tài liệu và bằng scan; biên tập, xem trước và đăng nội dung lên trang công khai khi sẵn sàng."
+        section="Quản lý dữ liệu"
+        title="Hồ sơ đề cử lịch sử"
+        description="Tìm hồ sơ cũ, tiếp tục nhập thông tin và bổ sung tài liệu lưu trữ."
         icon={FileCheck2}
       />
-      <DataManagerContentWorkspace initialTab={initialTab} />
+      <DataManagerContentWorkspace initialTab="historical-records" />
     </div>
   );
 }

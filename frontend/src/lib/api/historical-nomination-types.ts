@@ -64,6 +64,9 @@ export interface HistoricalNomination {
   createdAt: string;
   updatedAt: string;
   mediaCount: number;
+  photoVideoCount?: number;
+  documentCount?: number;
+  awardCount?: number;
 }
 
 export type HistoricalNominationInput = Partial<

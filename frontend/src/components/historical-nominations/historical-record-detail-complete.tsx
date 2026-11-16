@@ -87,6 +87,7 @@ export function HistoricalRecordDetailComplete({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editingAwardId, setEditingAwardId] = useState<string | null>(null);
+  const [awardFormOpen, setAwardFormOpen] = useState(false);
   const [awardFormRevision, setAwardFormRevision] = useState(0);
   const people = useQuery({
     queryKey: ["historical-nomination-people", record.id],
@@ -190,6 +191,7 @@ export function HistoricalRecordDetailComplete({
       }
       form.reset();
       setEditingAwardId(null);
+      setAwardFormOpen(false);
       setAwardFormRevision((revision) => revision + 1);
       await queryClient.invalidateQueries({
         queryKey: ["historical-nomination-awards", record.id],
@@ -457,9 +459,25 @@ export function HistoricalRecordDetailComplete({
         </div>
       </header>
 
+      <label className="block sm:hidden">
+        <span className="sr-only">Chọn mục hồ sơ</span>
+        <select
+          aria-label="Chọn mục hồ sơ"
+          className={`${fieldClass} min-h-11`}
+          onChange={(event) => setSection(event.currentTarget.value as Section)}
+          value={section}
+        >
+          {sections.map((item) => (
+            <option key={item} value={item}>
+              {item}
+            </option>
+          ))}
+        </select>
+      </label>
+
       <nav
         aria-label="Các phần trong hồ sơ"
-        className="-mx-1 flex gap-1 overflow-x-auto px-1 pb-1"
+        className="hidden gap-1 pb-1 sm:flex"
         role="tablist"
       >
         {sections.map((item) => (
@@ -726,7 +744,10 @@ export function HistoricalRecordDetailComplete({
                     <button
                       className="min-h-10 rounded-md border border-[var(--theme-border)] px-3 text-sm"
                       disabled={busy}
-                      onClick={() => setEditingAwardId(award.id)}
+                      onClick={() => {
+                        setEditingAwardId(award.id);
+                        setAwardFormOpen(true);
+                      }}
                       type="button"
                     >
                       Sửa thông tin
@@ -739,9 +760,6 @@ export function HistoricalRecordDetailComplete({
                   </summary>
                   <HistoricalAwardPresentation
                     award={award}
-                    media={mediaLinks.filter(
-                      (item) => item.awardId === award.id,
-                    )}
                     recipientName={
                       people.data?.find(
                         (person) => person.id === award.recipientPersonId,
@@ -751,6 +769,12 @@ export function HistoricalRecordDetailComplete({
                   />
                 </details>
                 <div className="grid gap-2 sm:grid-cols-2">
+                  {mediaLinks.filter((item) => item.awardId === award.id)
+                    .length ? (
+                    <h4 className="text-sm font-semibold sm:col-span-2">
+                      Bản gốc / scan đính kèm
+                    </h4>
+                  ) : null}
                   {mediaLinks
                     .filter((item) => item.awardId === award.id)
                     .map((item) => (
@@ -817,91 +841,112 @@ export function HistoricalRecordDetailComplete({
             ) : null}
           </ul>
           {canEdit ? (
-            <form
-              className="grid gap-3 rounded-lg bg-[var(--theme-surface-muted)] p-4 sm:grid-cols-2"
-              key={`${editingAward?.id ?? "new-award"}-${awardFormRevision}`}
-              onSubmit={saveAward}
-            >
-              <h3 className="font-semibold sm:col-span-2">
-                {editingAward ? "Sửa thông tin bằng cũ" : "Thêm bằng cũ"}
-              </h3>
-              <label className="space-y-1 text-sm sm:col-span-2">
-                <span>Tên bằng xác lập / giải thưởng</span>
-                <input
-                  className={fieldClass}
-                  defaultValue={editingAward?.awardName ?? ""}
-                  maxLength={255}
-                  name="awardName"
-                />
-              </label>
-              <label className="space-y-1 text-sm">
-                <span>Số hiệu bằng</span>
-                <input
-                  className={fieldClass}
-                  defaultValue={editingAward?.certificateNumber ?? ""}
-                  maxLength={128}
-                  name="certificateNumber"
-                />
-              </label>
-              <HistoricalDateField
-                initialDate={editingAward?.issuedAt}
-                label="Ngày cấp (nếu biết đầy đủ)"
-                name="issuedAt"
-              />
-              <label className="space-y-1 text-sm">
-                <span>Đơn vị cấp</span>
-                <input
-                  className={fieldClass}
-                  defaultValue={editingAward?.issuedBy ?? ""}
-                  maxLength={255}
-                  name="issuedBy"
-                />
-              </label>
-              <label className="space-y-1 text-sm">
-                <span>Người được cấp</span>
-                <select
-                  className={fieldClass}
-                  defaultValue={editingAward?.recipientPersonId ?? ""}
-                  name="recipientPersonId"
-                >
-                  <option value="">Chưa liên kết</option>
-                  {people.data?.map((person) => (
-                    <option key={person.id} value={person.id}>
-                      {person.displayName}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="space-y-1 text-sm sm:col-span-2">
-                <span>Nguồn đối chiếu / ghi chú</span>
-                <textarea
-                  className={`${fieldClass} min-h-16`}
-                  defaultValue={editingAward?.provenanceNotes ?? ""}
-                  maxLength={10_000}
-                  name="awardNotes"
-                />
-              </label>
-              {editingAward ? (
+            <div className="space-y-3">
+              {!awardFormOpen ? (
                 <button
-                  className="min-h-10 rounded-md border border-[var(--theme-border)] px-3 text-sm"
-                  onClick={() => setEditingAwardId(null)}
+                  className="inline-flex min-h-10 items-center gap-2 rounded-md bg-primary-700 px-3 text-sm font-semibold text-white"
+                  onClick={() => {
+                    setEditingAwardId(null);
+                    setAwardFormRevision((revision) => revision + 1);
+                    setAwardFormOpen(true);
+                  }}
                   type="button"
                 >
-                  Hủy sửa
+                  <Plus aria-hidden className="h-4 w-4" />
+                  Thêm bằng cũ
                 </button>
               ) : null}
-              <button
-                className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-[var(--theme-border)] px-3 text-sm font-medium disabled:opacity-60 sm:col-span-2 sm:justify-self-end"
-                disabled={busy}
-              >
-                <Plus aria-hidden className="h-4 w-4" />
-                {busy
-                  ? "Đang lưu…"
-                  : editingAward
-                    ? "Lưu thay đổi"
-                    : "Lưu bằng cũ"}
-              </button>
-            </form>
+              {awardFormOpen ? (
+                <form
+                  className="grid gap-3 rounded-lg bg-[var(--theme-surface-muted)] p-4 sm:grid-cols-2"
+                  key={`${editingAward?.id ?? "new-award"}-${awardFormRevision}`}
+                  onSubmit={saveAward}
+                >
+                  <h3 className="font-semibold sm:col-span-2">
+                    {editingAward ? "Sửa thông tin bằng cũ" : "Thêm bằng cũ"}
+                  </h3>
+                  <label className="space-y-1 text-sm sm:col-span-2">
+                    <span>Tên bằng xác lập / giải thưởng</span>
+                    <input
+                      className={fieldClass}
+                      defaultValue={editingAward?.awardName ?? ""}
+                      maxLength={255}
+                      name="awardName"
+                    />
+                  </label>
+                  <label className="space-y-1 text-sm">
+                    <span>Số hiệu bằng</span>
+                    <input
+                      className={fieldClass}
+                      defaultValue={editingAward?.certificateNumber ?? ""}
+                      maxLength={128}
+                      name="certificateNumber"
+                    />
+                  </label>
+                  <HistoricalDateField
+                    initialDate={editingAward?.issuedAt}
+                    label="Ngày cấp (nếu biết đầy đủ)"
+                    name="issuedAt"
+                  />
+                  <label className="space-y-1 text-sm">
+                    <span>Đơn vị cấp</span>
+                    <input
+                      className={fieldClass}
+                      defaultValue={editingAward?.issuedBy ?? ""}
+                      maxLength={255}
+                      name="issuedBy"
+                    />
+                  </label>
+                  <label className="space-y-1 text-sm">
+                    <span>Người được cấp</span>
+                    <select
+                      className={fieldClass}
+                      defaultValue={editingAward?.recipientPersonId ?? ""}
+                      name="recipientPersonId"
+                    >
+                      <option value="">Chưa liên kết</option>
+                      {people.data?.map((person) => (
+                        <option key={person.id} value={person.id}>
+                          {person.displayName}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="space-y-1 text-sm sm:col-span-2">
+                    <span>Nguồn đối chiếu / ghi chú</span>
+                    <textarea
+                      className={`${fieldClass} min-h-16`}
+                      defaultValue={editingAward?.provenanceNotes ?? ""}
+                      maxLength={10_000}
+                      name="awardNotes"
+                    />
+                  </label>
+                  <button
+                    className="min-h-10 rounded-md border border-[var(--theme-border)] px-3 text-sm"
+                    disabled={busy}
+                    onClick={() => {
+                      setEditingAwardId(null);
+                      setAwardFormOpen(false);
+                      setAwardFormRevision((revision) => revision + 1);
+                    }}
+                    type="button"
+                  >
+                    Hủy
+                  </button>
+                  <button
+                    className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md border border-[var(--theme-border)] px-3 text-sm font-medium disabled:opacity-60 sm:col-span-2 sm:justify-self-end"
+                    disabled={busy}
+                  >
+                    <Plus aria-hidden className="h-4 w-4" />
+                    {busy
+                      ? "Đang lưu…"
+                      : editingAward
+                        ? "Lưu thay đổi"
+                        : "Lưu bằng cũ"}
+                  </button>
+                </form>
+              ) : null}
+            </div>
           ) : null}
         </div>
       ) : null}
@@ -1584,14 +1629,10 @@ function Info({ label, value }: { label: string; value: string }) {
 
 function HistoricalAwardPresentation({
   award,
-  media,
   recipientName,
   subjectName,
 }: {
   award: HistoricalAward;
-  media: NonNullable<
-    Awaited<ReturnType<typeof historicalNominationApi.listMedia>>
-  >;
   recipientName: string | null;
   subjectName: string | null;
 }) {
@@ -1602,12 +1643,11 @@ function HistoricalAwardPresentation({
     <div className="space-y-5 border-t border-[var(--theme-border)] p-4 sm:p-6">
       <div className="rounded-lg border border-amber-700/25 bg-amber-700/5 p-4">
         <p className="text-xs font-semibold uppercase tracking-wide text-amber-900">
-          Bản trình bày số hóa · tư liệu lịch sử
+          Thông tin số hóa · tư liệu lịch sử
         </p>
         <p className="mt-2 text-sm text-[var(--theme-muted)]">
-          Hiển thị thông tin đã lưu và bản scan được gắn với hồ sơ. Đây không
-          phải chứng nhận điện tử hoặc bằng mới; không có chữ ký hay xác nhận
-          blockchain.
+          Đây là phần trình bày lại thông tin của bằng đã cấp, không phải chứng
+          nhận điện tử hoặc bằng mới; không có chữ ký hay xác nhận blockchain.
         </p>
       </div>
       <dl className="grid gap-3 sm:grid-cols-2">
@@ -1644,27 +1684,6 @@ function HistoricalAwardPresentation({
           </dd>
         </div>
       </dl>
-      <div className="space-y-2">
-        <h4 className="text-sm font-semibold">Bản scan gắn với bằng</h4>
-        {media.length ? (
-          <div className="grid gap-3 sm:grid-cols-2">
-            {media.map((item) => (
-              <HistoricalMediaEntry
-                busy={false}
-                canEdit={false}
-                item={item}
-                key={item.id}
-                onUnlink={() => undefined}
-              />
-            ))}
-          </div>
-        ) : (
-          <p className="rounded-md bg-[var(--theme-surface-muted)] p-3 text-sm text-[var(--theme-muted)]">
-            Chưa có bản scan được liên kết. Các thông tin chưa biết được để
-            trống, không tự tạo số hiệu hoặc ngày cấp.
-          </p>
-        )}
-      </div>
     </div>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import type { FormEvent } from "react";
+import type { FormEvent, RefObject } from "react";
 
 import { dossierApi } from "@/lib/api/client";
 import type {
@@ -30,12 +30,16 @@ export function HistoricalRecordFormComplete({
   error,
   onSave,
   onCancel,
+  onDirtyChange,
+  formRef,
 }: {
   record?: HistoricalNomination | null;
   busy: boolean;
   error: string | null;
   onSave: (input: HistoricalNominationInput) => void;
   onCancel: () => void;
+  onDirtyChange: () => void;
+  formRef: RefObject<HTMLFormElement | null>;
 }) {
   const dossierTypes = useQuery({
     queryKey: ["historical-record-dossier-types"],
@@ -72,7 +76,12 @@ export function HistoricalRecordFormComplete({
   }
 
   return (
-    <form className="space-y-6" onSubmit={submit}>
+    <form
+      className="space-y-6"
+      onChange={onDirtyChange}
+      onSubmit={submit}
+      ref={formRef}
+    >
       <header className="border-b border-[var(--theme-border)] pb-4">
         <p className="text-xs font-medium uppercase tracking-wide text-[var(--theme-muted)]">
           Hồ sơ nguồn · lưu riêng tư

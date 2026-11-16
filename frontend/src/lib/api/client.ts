@@ -1857,9 +1857,12 @@ export const historicalNominationApi = {
       `/historical-nominations/${encodeURIComponent(id)}`,
     );
   },
-  create(input: HistoricalNominationInput) {
+  create(input: HistoricalNominationInput, idempotencyKey?: string) {
     return request<HistoricalNomination>("/historical-nominations", {
       method: "POST",
+      headers: idempotencyKey
+        ? { "Idempotency-Key": idempotencyKey }
+        : undefined,
       body: JSON.stringify(input),
     });
   },
@@ -1974,6 +1977,15 @@ export const historicalNominationApi = {
       {
         method: "POST",
         body: JSON.stringify({ reason, expectedUpdatedAt }),
+      },
+    );
+  },
+  deleteDraft(id: string, expectedUpdatedAt: string) {
+    return request<{ deleted: boolean }>(
+      `/historical-nominations/${encodeURIComponent(id)}`,
+      {
+        method: "DELETE",
+        body: JSON.stringify({ expectedUpdatedAt }),
       },
     );
   },

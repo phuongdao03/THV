@@ -22,6 +22,7 @@ const pageTitles: Record<string, string> = {
   "/vouchers": "Ưu đãi của tôi",
   "/workspace": "Không gian cá nhân",
   "/data-manager": "Quản lý dữ liệu",
+  "/data-manager/content": "Nội dung công bố",
   "/dashboard": "Tổng quan",
   "/account": "Tài khoản",
   "/membership": "Thẻ thành viên",

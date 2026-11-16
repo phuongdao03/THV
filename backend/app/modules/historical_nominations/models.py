@@ -160,6 +160,17 @@ class HistoricalNomination(UtcTimestampMixin, Base):
             name="archived_requires_timestamp",
         ),
         Index(
+            "uq_historical_nomination_create_request",
+            "created_by_user_id",
+            "creation_request_id",
+            unique=True,
+        ),
+        Index(
+            "uq_historical_nominations_legacy_code",
+            "legacy_code",
+            unique=True,
+        ),
+        Index(
             "ix_historical_nominations_verification_created",
             "verification_status",
             "created_at",
@@ -172,7 +183,9 @@ class HistoricalNomination(UtcTimestampMixin, Base):
     )
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
-    code: Mapped[str] = mapped_column(String(40), nullable=False, unique=True)
+    code: Mapped[str] = mapped_column(String(48), nullable=False, unique=True)
+    legacy_code: Mapped[str | None] = mapped_column(String(64))
+    creation_request_id: Mapped[UUID | None] = mapped_column(Uuid)
     subject_type: Mapped[HistoricalSubjectType] = mapped_column(
         _enum(HistoricalSubjectType, "historical_subject_type"),
         nullable=False,
@@ -278,6 +291,7 @@ class HistoricalNomination(UtcTimestampMixin, Base):
     )
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     archive_reason: Mapped[str | None] = mapped_column(Text)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class HistoricalRelatedPerson(UtcTimestampMixin, Base):

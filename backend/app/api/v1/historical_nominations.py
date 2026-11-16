@@ -38,6 +38,7 @@ from app.modules.historical_nominations.schemas import (
     HistoricalAwardPatch,
     HistoricalAwardVerificationRequest,
     HistoricalAwardWrite,
+    HistoricalDraftDelete,
     HistoricalImportPreviewData,
     HistoricalImportPreviewRequest,
     HistoricalImportResultData,
@@ -272,13 +273,17 @@ async def list_historical_nominations(
         category_id=category_id,
         dossier_type_id=dossier_type_id,
     )
-    media_counts = await service.media_counts(
+    workspace_counts = await service.workspace_counts(
         principal,
         [record.id for record in records],
     )
     items = [HistoricalNominationData.model_validate(record) for record in records]
     for item in items:
-        item.media_count = media_counts.get(item.id, 0)
+        counts = workspace_counts.get(item.id, {})
+        item.media_count = counts.get("media_count", 0)
+        item.photo_video_count = counts.get("photo_video_count", 0)
+        item.document_count = counts.get("document_count", 0)
+        item.award_count = counts.get("award_count", 0)
     return PaginatedSuccessEnvelope(
         data=items,
         meta=ListResponseMeta(
@@ -407,10 +412,40 @@ async def create_historical_nomination(
     request: Request,
     principal: CsrfProtectedPrincipalDependency,
     service: HistoricalNominationServiceDependency,
+    creation_request_id: Annotated[
+        UUID | None,
+        Header(alias="Idempotency-Key"),
+    ] = None,
 ) -> SuccessEnvelope[HistoricalNominationData]:
-    record = await service.create_record(principal, payload)
+    record = await service.create_record(
+        principal,
+        payload,
+        creation_request_id=creation_request_id,
+    )
     return SuccessEnvelope(
         data=HistoricalNominationData.model_validate(record),
+        meta=ResponseMeta(request_id=request.state.request_id),
+    )
+
+
+@router.delete(
+    "/{record_id}",
+    response_model=SuccessEnvelope[dict[str, bool]],
+)
+async def delete_historical_nomination_draft(
+    record_id: UUID,
+    payload: HistoricalDraftDelete,
+    request: Request,
+    principal: CsrfProtectedPrincipalDependency,
+    service: HistoricalNominationServiceDependency,
+) -> SuccessEnvelope[dict[str, bool]]:
+    await service.delete_draft(
+        principal,
+        record_id,
+        expected_updated_at=payload.expected_updated_at,
+    )
+    return SuccessEnvelope(
+        data={"deleted": True},
         meta=ResponseMeta(request_id=request.state.request_id),
     )
 
