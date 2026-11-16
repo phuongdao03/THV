@@ -68,6 +68,14 @@ describe("THV identity theme", () => {
     expect(stylesheet).toContain("color: var(--theme-text)");
   });
 
+  it("defines every semantic token used by dashboard workspaces", () => {
+    expect(stylesheet).toContain("--theme-foreground: var(--theme-text);");
+    expect(stylesheet).toContain("--theme-surface-muted: color-mix(");
+    expect(stylesheet).toContain("--theme-danger: #b54343;");
+    expect(stylesheet).toContain('html[data-theme="dark"] .dashboard-shell');
+    expect(stylesheet).toContain("--theme-danger: #ff8a80;");
+  });
+
   it("keeps editorial labels legible on the light audience surface", () => {
     expect(stylesheet).toContain(".home-audiences .registry-section-label");
     expect(stylesheet).toContain("color: var(--thv-red-dark);");

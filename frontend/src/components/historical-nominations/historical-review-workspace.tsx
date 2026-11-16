@@ -256,7 +256,7 @@ export function HistoricalReviewWorkspace() {
             <li key={item.id}>
               <button
                 aria-current={selectedId === item.id ? "true" : undefined}
-                className="w-full rounded-md border border-transparent p-3 text-left hover:border-[var(--theme-border)] aria-current:border-[var(--theme-primary)] aria-current:bg-[var(--theme-surface-muted)]"
+                className="w-full rounded-md border border-transparent p-3 text-left hover:border-[var(--theme-border)] aria-current:border-[var(--theme-accent)] aria-current:bg-[var(--theme-surface-muted)]"
                 onClick={() => {
                   setSelectedId(item.id);
                   setApprovedWork(null);
@@ -453,7 +453,7 @@ export function HistoricalReviewWorkspace() {
                 </label>
                 <div className="flex flex-wrap gap-2">
                   <button
-                    className="rounded-md bg-[var(--theme-primary)] px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
+                    className="rounded-md bg-primary-700 px-3 py-2 text-sm font-medium text-white hover:bg-primary-800 disabled:opacity-60"
                     disabled={busy}
                     onClick={() => void review("VERIFY")}
                     type="button"
@@ -620,7 +620,7 @@ export function HistoricalReviewWorkspace() {
                     />
                   </label>
                   <button
-                    className="w-fit rounded-md bg-[var(--theme-primary)] px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+                    className="w-fit rounded-md bg-primary-700 px-4 py-2 text-sm font-medium text-white hover:bg-primary-800 disabled:opacity-60"
                     disabled={busy || !categories.data?.length}
                     type="submit"
                   >

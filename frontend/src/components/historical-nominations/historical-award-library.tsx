@@ -107,7 +107,7 @@ export function HistoricalAwardLibrary({
                 </td>
                 <td className="px-4 py-3">
                   <button
-                    className="font-medium text-[var(--theme-primary)] underline-offset-2 hover:underline"
+                    className="font-medium text-[var(--theme-accent)] underline-offset-2 hover:underline"
                     onClick={() => onOpenRecord(award.recordId)}
                     type="button"
                   >

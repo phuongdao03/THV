@@ -274,6 +274,34 @@ button visibility is not an authorization control.
 4. Update role/migration and UI coverage for the new boundary, then preview the
    DataManager page.
 
+## Record-entry UX follow-up
+
+- Capture nomination time in one field. Accept either a year or an exact
+  `dd/mm/yyyy` date and map them to the existing `nominationYear` and
+  `nominatedAt` API fields; do not add month-only precision or change the
+  schema.
+- Preserve unfinished form values when moving between record sections. Keep a
+  visible save action on each editable section and retain the existing explicit
+  save-before-publish boundary.
+- Link an old award recipient to a person already recorded on that nomination.
+  When no person is available, explain where to add one and let the operator
+  move there without discarding award fields.
+- Explain that creating a historical record stores private source data. To
+  publish, the operator prepares and saves a separate public-content draft,
+  reviews it, then explicitly publishes it.
+- Use colors defined by the current theme in both light and dark mode. Avoid
+  undefined CSS custom properties for buttons, selected tabs, errors, and
+  section backgrounds.
+
+### Follow-up implementation plan
+
+1. Extend the existing date field and add focused tests for year-only and exact
+   dates.
+2. Preserve visited record sections, clarify award-person linking, and show the
+   private-record-to-publication steps.
+3. Correct broken theme-token use in the data-manager record flow and verify
+   focused frontend tests, lint, typecheck, and browser appearance.
+
 ## Acceptance criteria
 
 - DATA_MANAGER can create/edit/preview/publish/hide/archive public works from

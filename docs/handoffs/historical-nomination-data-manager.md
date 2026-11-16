@@ -177,3 +177,28 @@ made.
   E2E (4 desktop/mobile tests) passed. Next type generation still hits Windows
   `EPERM` writing `.next/types/routes.d.ts`; direct
   `tsc --noEmit --incremental false` passed. No commit, push, or deployment.
+
+## Record-entry clarity and theme follow-up
+
+- Record entry now uses one `Thời gian đề cử` control for a year-only value or
+  an exact `dd/mm/yyyy` date. The UI maps to the existing `nominationYear` and
+  `nominatedAt` fields; no API or database change. Date parsing and calendar
+  navigation handle years below 100 without JavaScript's `Date.UTC` 1900 offset;
+  calendar navigation and selection stay within years 1–2200.
+- Detail sections stay mounted after first visit, so unsaved form values remain
+  when switching tabs. Each section still has an explicit save action.
+- Award recipient options come from `Người gửi & liên quan`. The form explains
+  this and links to add a person when the list is empty.
+- The detail view now explains that the source record remains private and links
+  to `Nội dung công khai`, where a draft is saved and reviewed before the
+  explicit publish action makes it public.
+- Filled missing dashboard theme tokens for foreground, muted surface, and
+  danger colors in light and dark mode; replaced invalid primary utilities in
+  the historical nomination workspaces.
+- Verification: repository and frontend tests passed (10 root tests; 254
+  frontend files / 1,128 tests), frontend lint and typecheck passed, and the
+  root format check plus Ruff format check passed. Backend tests could not
+  collect because the local Python environment lacks `openpyxl`. The E2E run
+  rendered the save/reload flow, then hung in the separate browser Back
+  confirmation case and was stopped; full E2E status remains unverified.
+- No commit, push, deployment, API change, or database migration.

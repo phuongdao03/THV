@@ -84,6 +84,9 @@ export function HistoricalRecordDetailComplete({
 }) {
   const queryClient = useQueryClient();
   const [section, setSection] = useState<Section>("Thông tin");
+  const [visitedSections, setVisitedSections] = useState<Set<Section>>(
+    () => new Set(["Thông tin"]),
+  );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editingAwardId, setEditingAwardId] = useState<string | null>(null);
@@ -123,6 +126,14 @@ export function HistoricalRecordDetailComplete({
     queryFn: () => historicalNominationApi.recordActivity(record.id),
     enabled: section === "Lịch sử chỉnh sửa",
   });
+
+  function selectSection(nextSection: Section) {
+    setSection(nextSection);
+    setVisitedSections((current) => {
+      if (current.has(nextSection)) return current;
+      return new Set(current).add(nextSection);
+    });
+  }
 
   async function addPerson(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -464,7 +475,9 @@ export function HistoricalRecordDetailComplete({
         <select
           aria-label="Chọn mục hồ sơ"
           className={`${fieldClass} min-h-11`}
-          onChange={(event) => setSection(event.currentTarget.value as Section)}
+          onChange={(event) =>
+            selectSection(event.currentTarget.value as Section)
+          }
           value={section}
         >
           {sections.map((item) => (
@@ -483,9 +496,9 @@ export function HistoricalRecordDetailComplete({
         {sections.map((item) => (
           <button
             aria-selected={section === item}
-            className="min-h-10 shrink-0 rounded-md px-3 text-sm text-[var(--theme-muted)] hover:bg-[var(--theme-surface-muted)] aria-selected:bg-[var(--theme-surface-muted)] aria-selected:font-semibold aria-selected:text-[var(--theme-foreground)]"
+            className="min-h-10 shrink-0 rounded-md px-3 text-sm text-[var(--theme-muted)] hover:bg-[color-mix(in_srgb,var(--theme-surface)_94%,var(--theme-border))] aria-selected:bg-[color-mix(in_srgb,var(--theme-surface)_94%,var(--theme-border))] aria-selected:font-semibold aria-selected:text-[var(--theme-text)]"
             key={item}
-            onClick={() => setSection(item)}
+            onClick={() => selectSection(item)}
             role="tab"
             type="button"
           >
@@ -494,8 +507,40 @@ export function HistoricalRecordDetailComplete({
         ))}
       </nav>
 
-      {section === "Thông tin" ? (
-        <div className="grid gap-3 sm:grid-cols-2">
+      <section
+        aria-label="Hướng dẫn công bố"
+        className="flex flex-col gap-3 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-surface)] p-4 sm:flex-row sm:items-center sm:justify-between"
+      >
+        <div className="min-w-0">
+          <p className="text-sm font-semibold">
+            {record.publicationStatus === "PUBLISHED"
+              ? "Nội dung đang công khai"
+              : record.publicationStatus === "HIDDEN"
+                ? "Nội dung đang ẩn"
+                : "Hồ sơ nguồn được lưu riêng tư"}
+          </p>
+          <p className="mt-1 text-sm text-[var(--theme-muted)]">
+            {record.publicationStatus === "PUBLISHED"
+              ? "Chỉnh sửa và lưu sẽ tạo bản nháp riêng. Bấm Xuất bản để áp dụng thay đổi lên trang công khai."
+              : "Thêm hồ sơ chỉ lưu dữ liệu nguồn, chưa đăng lên website. Vào Nội dung công khai, soạn và lưu bản nháp; xem lại rồi bấm Xuất bản để mọi người có thể xem."}
+          </p>
+        </div>
+        <button
+          className="inline-flex min-h-10 shrink-0 items-center justify-center rounded-md bg-primary-700 px-3 text-sm font-semibold text-white hover:bg-primary-800"
+          onClick={() => selectSection("Nội dung công khai")}
+          type="button"
+        >
+          {record.publicationStatus === "PUBLISHED"
+            ? "Chỉnh sửa nội dung công khai"
+            : "Soạn nội dung công khai"}
+        </button>
+      </section>
+
+      {visitedSections.has("Thông tin") ? (
+        <div
+          hidden={section !== "Thông tin"}
+          className="grid gap-3 sm:grid-cols-2"
+        >
           <Info
             label="Đối tượng"
             value={record.subjectType === "PERSON" ? "Cá nhân" : "Tổ chức"}
@@ -545,8 +590,8 @@ export function HistoricalRecordDetailComplete({
         </div>
       ) : null}
 
-      {section === "Người gửi & liên quan" ? (
-        <div className="space-y-4">
+      {visitedSections.has("Người gửi & liên quan") ? (
+        <div hidden={section !== "Người gửi & liên quan"} className="space-y-4">
           <ul className="divide-y divide-[var(--theme-border)] rounded-lg border border-[var(--theme-border)]">
             {people.data?.map((person) => (
               <li
@@ -581,7 +626,7 @@ export function HistoricalRecordDetailComplete({
           </ul>
           {canEdit ? (
             <form
-              className="grid gap-3 rounded-lg bg-[var(--theme-surface-muted)] p-4 sm:grid-cols-2"
+              className="grid gap-3 rounded-lg bg-[color-mix(in_srgb,var(--theme-surface)_94%,var(--theme-border))] p-4 sm:grid-cols-2"
               onSubmit={addPerson}
             >
               <h3 className="font-semibold sm:col-span-2">
@@ -660,8 +705,8 @@ export function HistoricalRecordDetailComplete({
         </div>
       ) : null}
 
-      {section === "Hình ảnh & tài liệu" ? (
-        <div className="space-y-4">
+      {visitedSections.has("Hình ảnh & tài liệu") ? (
+        <div hidden={section !== "Hình ảnh & tài liệu"} className="space-y-4">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
               <h3 className="font-semibold">Tài liệu nguồn và hồ sơ đề cử</h3>
@@ -710,8 +755,8 @@ export function HistoricalRecordDetailComplete({
         </div>
       ) : null}
 
-      {section === "Bằng xác lập" ? (
-        <div className="space-y-4">
+      {visitedSections.has("Bằng xác lập") ? (
+        <div hidden={section !== "Bằng xác lập"} className="space-y-4">
           <div>
             <h3 className="font-semibold">Bằng xác lập đã cấp</h3>
             <p className="mt-1 text-sm text-[var(--theme-muted)]">
@@ -858,7 +903,7 @@ export function HistoricalRecordDetailComplete({
               ) : null}
               {awardFormOpen ? (
                 <form
-                  className="grid gap-3 rounded-lg bg-[var(--theme-surface-muted)] p-4 sm:grid-cols-2"
+                  className="grid gap-3 rounded-lg bg-[color-mix(in_srgb,var(--theme-surface)_94%,var(--theme-border))] p-4 sm:grid-cols-2"
                   key={`${editingAward?.id ?? "new-award"}-${awardFormRevision}`}
                   onSubmit={saveAward}
                 >
@@ -898,13 +943,15 @@ export function HistoricalRecordDetailComplete({
                     />
                   </label>
                   <label className="space-y-1 text-sm">
-                    <span>Người được cấp</span>
+                    <span>Người nhận ghi trên bằng</span>
                     <select
+                      aria-describedby={`award-recipient-help-${record.id}`}
                       className={fieldClass}
                       defaultValue={editingAward?.recipientPersonId ?? ""}
+                      id={`award-recipient-${record.id}`}
                       name="recipientPersonId"
                     >
-                      <option value="">Chưa liên kết</option>
+                      <option value="">Chưa liên kết người nhận</option>
                       {people.data?.map((person) => (
                         <option key={person.id} value={person.id}>
                           {person.displayName}
@@ -912,6 +959,24 @@ export function HistoricalRecordDetailComplete({
                       ))}
                     </select>
                   </label>
+                  <div className="text-xs text-[var(--theme-muted)] sm:col-span-2">
+                    <p id={`award-recipient-help-${record.id}`}>
+                      {people.isLoading
+                        ? "Đang tải danh sách người liên quan…"
+                        : people.data?.length
+                          ? "Chọn tên đã thêm ở tab Người gửi & liên quan."
+                          : "Chưa có người để liên kết. Thêm người ở tab “Người gửi & liên quan”, rồi quay lại chọn tên."}
+                    </p>
+                    {people.data?.length === 0 ? (
+                      <button
+                        className="mt-1 font-medium text-[var(--theme-accent)] underline underline-offset-2"
+                        onClick={() => selectSection("Người gửi & liên quan")}
+                        type="button"
+                      >
+                        Thêm người để liên kết
+                      </button>
+                    ) : null}
+                  </div>
                   <label className="space-y-1 text-sm sm:col-span-2">
                     <span>Nguồn đối chiếu / ghi chú</span>
                     <textarea
@@ -951,24 +1016,26 @@ export function HistoricalRecordDetailComplete({
         </div>
       ) : null}
 
-      {section === "Nội dung công khai" ? (
-        <PublicContentSection
-          canEdit={canEdit}
-          busy={busy}
-          categories={categories.data ?? []}
-          draft={draft.data ?? null}
-          draftLoading={draft.isLoading}
-          media={mediaLinks}
-          publication={publication.data ?? null}
-          publicationLoading={publication.isLoading}
-          onHide={hidePublicDraft}
-          onPublish={publishPublicDraft}
-          onSave={(event) => void savePublicDraft(event)}
-        />
+      {visitedSections.has("Nội dung công khai") ? (
+        <div hidden={section !== "Nội dung công khai"}>
+          <PublicContentSection
+            canEdit={canEdit}
+            busy={busy}
+            categories={categories.data ?? []}
+            draft={draft.data ?? null}
+            draftLoading={draft.isLoading}
+            media={mediaLinks}
+            publication={publication.data ?? null}
+            publicationLoading={publication.isLoading}
+            onHide={hidePublicDraft}
+            onPublish={publishPublicDraft}
+            onSave={(event) => void savePublicDraft(event)}
+          />
+        </div>
       ) : null}
 
-      {section === "Lịch sử chỉnh sửa" ? (
-        <div className="space-y-6">
+      {visitedSections.has("Lịch sử chỉnh sửa") ? (
+        <div hidden={section !== "Lịch sử chỉnh sửa"} className="space-y-6">
           <section
             className="space-y-3"
             aria-labelledby="historical-activity-heading"
@@ -982,7 +1049,10 @@ export function HistoricalRecordDetailComplete({
               </p>
             ) : null}
             {activity.error ? (
-              <p role="alert" className="text-sm text-[var(--theme-danger)]">
+              <p
+                role="alert"
+                className="text-sm text-red-700 dark:text-red-300"
+              >
                 {activity.error.message}
               </p>
             ) : null}
@@ -1023,7 +1093,7 @@ export function HistoricalRecordDetailComplete({
 
       {error ? (
         <p
-          className="rounded-md border border-[var(--theme-danger)] p-3 text-sm text-[var(--theme-danger)]"
+          className="rounded-md border border-red-700 p-3 text-sm text-red-700 dark:border-red-400 dark:text-red-300"
           role="alert"
         >
           {error}
@@ -1083,7 +1153,7 @@ function HistoricalMediaEntry({
 
   return (
     <article className="overflow-hidden rounded-lg border border-[var(--theme-border)]">
-      <div className="flex aspect-[16/9] items-center justify-center overflow-hidden bg-[var(--theme-surface-muted)]">
+      <div className="flex aspect-[16/9] items-center justify-center overflow-hidden bg-[color-mix(in_srgb,var(--theme-surface)_94%,var(--theme-border))]">
         {delivery.data && isImage ? (
           <Image
             alt={item.filename ?? "Ảnh tư liệu"}
@@ -1143,7 +1213,7 @@ function HistoricalMediaEntry({
           </button>
           {canEdit ? (
             <button
-              className="min-h-9 rounded-md px-3 text-xs text-[var(--theme-danger)] disabled:opacity-50"
+              className="min-h-9 rounded-md px-3 text-xs text-red-700 disabled:opacity-50 dark:text-red-300"
               disabled={busy}
               onClick={onUnlink}
               type="button"
@@ -1460,7 +1530,7 @@ function PublicContentDraftEditor({
                 : "Chưa có bản nháp nội dung"}
             </span>
             <button
-              className="min-h-11 rounded-md bg-[var(--theme-primary)] px-4 text-sm font-semibold text-white disabled:opacity-60"
+              className="min-h-11 rounded-md bg-primary-700 px-4 text-sm font-semibold text-white hover:bg-primary-800 disabled:opacity-60"
               disabled={busy}
             >
               {busy ? "Đang lưu…" : "Lưu nội dung dự kiến"}
@@ -1560,7 +1630,7 @@ function PublicContentDraftEditor({
             </button>
           ) : (
             <button
-              className="min-h-10 rounded-md bg-[var(--theme-primary)] px-4 text-sm font-semibold text-white disabled:opacity-60"
+              className="min-h-10 rounded-md bg-primary-700 px-4 text-sm font-semibold text-white hover:bg-primary-800 disabled:opacity-60"
               disabled={
                 busy ||
                 publicationLoading ||
@@ -1611,7 +1681,7 @@ function PrivateCoverPreview({
   ) : (
     <div
       aria-busy="true"
-      className="flex aspect-video items-center justify-center bg-[var(--theme-surface-muted)] text-sm text-[var(--theme-muted)]"
+      className="flex aspect-video items-center justify-center bg-[color-mix(in_srgb,var(--theme-surface)_94%,var(--theme-border))] text-sm text-[var(--theme-muted)]"
     >
       Đang tải ảnh bìa…
     </div>

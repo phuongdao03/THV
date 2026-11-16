@@ -178,7 +178,7 @@ export function HistoricalRecordDetail({
               Chỉnh sửa
             </button>
             <button
-              className="rounded-md bg-[var(--theme-primary)] px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
+              className="rounded-md bg-primary-700 px-3 py-2 text-sm font-medium text-white hover:bg-primary-800 disabled:opacity-60"
               disabled={submitting}
               onClick={onSubmit}
               type="button"

@@ -151,7 +151,7 @@ export function HistoricalWorkspaceOverview({
       </section>
 
       <button
-        className="inline-flex items-center gap-2 text-sm font-medium text-[var(--theme-primary)]"
+        className="inline-flex items-center gap-2 text-sm font-medium text-[var(--theme-accent)]"
         onClick={onOpenRecords}
         type="button"
       >

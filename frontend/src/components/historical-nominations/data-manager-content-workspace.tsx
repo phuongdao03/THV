@@ -72,7 +72,7 @@ function DataManagerIssuedCertificateCorrections() {
       {certificateId ? (
         <div className="space-y-4 rounded-xl border border-[var(--theme-border)] p-4">
           <button
-            className="min-h-10 text-sm font-semibold text-[var(--theme-primary)] underline"
+            className="min-h-10 text-sm font-semibold text-[var(--theme-accent)] underline"
             onClick={() => setCertificateId(null)}
             type="button"
           >

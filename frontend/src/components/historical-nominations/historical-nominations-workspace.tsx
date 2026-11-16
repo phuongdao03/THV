@@ -119,7 +119,7 @@ export function HistoricalNominationsWorkspace() {
         </div>
         {tab === "records" ? (
           <button
-            className="inline-flex items-center gap-2 rounded-md bg-[var(--theme-primary)] px-4 py-2 text-sm font-medium text-white"
+            className="inline-flex items-center gap-2 rounded-md bg-primary-700 px-4 py-2 text-sm font-medium text-white hover:bg-primary-800"
             onClick={() => {
               setSelectedId(null);
               setEditing(true);
@@ -254,7 +254,7 @@ function RecordButton({
     <li>
       <button
         aria-current={selected ? "true" : undefined}
-        className="w-full rounded-md border border-transparent p-3 text-left hover:border-[var(--theme-border)] aria-current:border-[var(--theme-primary)] aria-current:bg-[var(--theme-surface-muted)]"
+        className="w-full rounded-md border border-transparent p-3 text-left hover:border-[var(--theme-border)] aria-current:border-[var(--theme-accent)] aria-current:bg-[var(--theme-surface-muted)]"
         onClick={onSelect}
         type="button"
       >

@@ -103,6 +103,9 @@ test("data manager saves historical dates and sees persisted edits after reload"
     .getByRole("link", { name: /Gìn giữ nghề thủ công truyền thống/ })
     .click();
   await expect(page.getByText(recordCode)).toBeVisible();
+  await expect(
+    page.getByRole("region", { name: "Hướng dẫn công bố" }),
+  ).toContainText("Thêm hồ sơ chỉ lưu dữ liệu nguồn, chưa đăng lên website.");
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= window.innerWidth,
@@ -121,7 +124,8 @@ test("data manager saves historical dates and sees persisted edits after reload"
   await page.getByRole("button", { name: "Sửa thông tin" }).click();
 
   await page.getByLabel("Tên hồ sơ đề cử").fill("Nghề thủ công truyền thống");
-  await page.getByLabel("Ngày đề cử (nếu biết đầy đủ)").fill("15/05/2020");
+  await expect(page.getByLabel("Năm đề cử (nếu chỉ biết năm)")).toHaveCount(0);
+  await page.getByLabel("Thời gian đề cử").fill("15/05/2020");
   await page.getByRole("button", { name: "Lưu bản nháp" }).click();
 
   const saveStatus = page.getByRole("status");
@@ -134,6 +138,38 @@ test("data manager saves historical dates and sees persisted edits after reload"
   await expect(
     page.getByRole("heading", { name: "Nghề thủ công truyền thống" }),
   ).toBeVisible();
+
+  await page.getByRole("button", { name: "Soạn nội dung công khai" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Nội dung dự kiến công bố" }),
+  ).toBeVisible();
+  const publicTitle = page.getByLabel("Tiêu đề công khai");
+  await publicTitle.fill("Nghề thủ công truyền thống");
+  const savePublicDraftButton = page.getByRole("button", {
+    name: "Lưu nội dung dự kiến",
+  });
+  await expect(savePublicDraftButton).toBeVisible();
+  const lightButtonBackground = await savePublicDraftButton.evaluate(
+    (button) => getComputedStyle(button).backgroundColor,
+  );
+  expect(lightButtonBackground).not.toBe("rgba(0, 0, 0, 0)");
+  await page.getByRole("button", { name: "Giao diện tối" }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  const darkButtonBackground = await savePublicDraftButton.evaluate(
+    (button) => getComputedStyle(button).backgroundColor,
+  );
+  expect(darkButtonBackground).not.toBe("rgba(0, 0, 0, 0)");
+  await page.getByRole("button", { name: "Giao diện sáng" }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  if (info.project.name === "mobile-chrome") {
+    await page.getByLabel("Chọn mục hồ sơ").selectOption("Bằng xác lập");
+    await page.getByLabel("Chọn mục hồ sơ").selectOption("Nội dung công khai");
+  } else {
+    await page.getByRole("tab", { name: "Bằng xác lập" }).click();
+    await page.getByRole("tab", { name: "Nội dung công khai" }).click();
+  }
+  await expect(publicTitle).toHaveValue("Nghề thủ công truyền thống");
+
   if (info.project.name === "mobile-chrome") {
     await page.getByLabel("Chọn mục hồ sơ").selectOption("Bằng xác lập");
   } else {
@@ -146,7 +182,17 @@ test("data manager saves historical dates and sees persisted edits after reload"
     page.getByLabel("Tên bằng xác lập / giải thưởng"),
   ).not.toBeVisible();
   await page.getByRole("button", { name: "Thêm bằng cũ" }).click();
-  await expect(page.getByLabel("Tên bằng xác lập / giải thưởng")).toBeVisible();
+  const awardName = page.getByLabel("Tên bằng xác lập / giải thưởng");
+  await expect(awardName).toBeVisible();
+  await awardName.fill("Bằng xác lập năm 1998");
+  if (info.project.name === "mobile-chrome") {
+    await page.getByLabel("Chọn mục hồ sơ").selectOption("Thông tin");
+    await page.getByLabel("Chọn mục hồ sơ").selectOption("Bằng xác lập");
+  } else {
+    await page.getByRole("tab", { name: "Thông tin" }).click();
+    await page.getByRole("tab", { name: "Bằng xác lập" }).click();
+  }
+  await expect(awardName).toHaveValue("Bằng xác lập năm 1998");
   await page.getByRole("button", { name: "Hủy" }).click();
   if (info.project.name === "mobile-chrome") {
     await page.getByLabel("Chọn mục hồ sơ").selectOption("Thông tin");

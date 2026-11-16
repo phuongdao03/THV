@@ -9052,11 +9052,18 @@ html[data-theme="dark"] .public-library-page {
   --theme-elevated: var(--thv-white);
   --theme-text: var(--thv-text);
   --theme-ink: var(--thv-text);
+  --theme-foreground: var(--theme-text);
   --theme-muted: var(--thv-text-secondary);
+  --theme-surface-muted: color-mix(
+    in srgb,
+    var(--theme-surface) 90%,
+    var(--theme-accent)
+  );
   --theme-border: var(--thv-border);
   --theme-line: var(--thv-border);
   --theme-accent: var(--thv-red);
   --theme-accent-contrast: #ffffff;
+  --theme-danger: #b54343;
   background: var(--thv-bg-warm);
 }
 
@@ -9071,6 +9078,7 @@ html[data-theme="dark"] .dashboard-shell {
   --theme-line: #4c2424;
   --theme-accent: #f6c515;
   --theme-accent-contrast: #241515;
+  --theme-danger: #ff8a80;
   background: var(--theme-bg);
 }
 

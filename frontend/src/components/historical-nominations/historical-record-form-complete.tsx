@@ -104,7 +104,7 @@ export function HistoricalRecordFormComplete({
         ) : null}
         {error ? (
           <p
-            className="mt-3 rounded-lg border border-[var(--theme-danger)] bg-[var(--theme-surface)] p-3 text-sm text-[var(--theme-danger)]"
+            className="mt-3 rounded-lg border border-red-700 bg-[var(--theme-surface)] p-3 text-sm text-red-700 dark:border-red-400 dark:text-red-300"
             role="alert"
           >
             {error}
@@ -151,7 +151,7 @@ export function HistoricalRecordFormComplete({
               ))}
             </select>
             {dossierTypes.error ? (
-              <span className="block text-xs text-[var(--theme-danger)]">
+              <span className="block text-xs text-red-700 dark:text-red-300">
                 Không tải được các loại hồ sơ.
               </span>
             ) : null}
@@ -179,21 +179,12 @@ export function HistoricalRecordFormComplete({
               name="title"
             />
           </label>
-          <label className="space-y-1.5 text-sm">
-            <span>Năm đề cử (nếu chỉ biết năm)</span>
-            <input
-              className={fieldClass}
-              defaultValue={record?.nominationYear ?? ""}
-              max="2200"
-              min="1"
-              name="nominationYear"
-              type="number"
-            />
-          </label>
           <HistoricalDateField
             initialDate={record?.nominatedAt}
-            label="Ngày đề cử (nếu biết đầy đủ)"
+            initialYear={record?.nominationYear}
+            label="Thời gian đề cử"
             name="nominatedAt"
+            yearName="nominationYear"
           />
           <label className="space-y-1.5 text-sm sm:col-span-2">
             <span>Tóm tắt</span>

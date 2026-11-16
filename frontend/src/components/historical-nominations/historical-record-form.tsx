@@ -187,7 +187,7 @@ export function HistoricalRecordForm({
           Hủy
         </button>
         <button
-          className="rounded-md bg-[var(--theme-primary)] px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+          className="rounded-md bg-primary-700 px-4 py-2 text-sm font-medium text-white hover:bg-primary-800 disabled:opacity-60"
           disabled={busy}
           type="submit"
         >
