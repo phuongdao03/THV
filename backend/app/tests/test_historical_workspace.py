@@ -37,12 +37,100 @@ from app.modules.historical_nominations.schemas import (
     HistoricalAwardWrite,
     HistoricalNominationPatch,
     HistoricalNominationWrite,
+    HistoricalPersonData,
     HistoricalPersonWrite,
+    HistoricalPublicContentDraftData,
     HistoricalPublicContentDraftWrite,
 )
 from app.modules.historical_nominations.service import HistoricalNominationService
 from app.modules.media.models import MediaAsset
 from app.modules.public.models import PublicWork
+
+
+@pytest.mark.parametrize("write_kind", ["person", "draft_update"])
+def test_historical_writes_serialize_with_foreign_keys_enabled(write_kind: str) -> None:
+    async def scenario() -> None:
+        engine = create_async_engine("sqlite+aiosqlite://")
+
+        @event.listens_for(engine.sync_engine, "connect")
+        def _enable_foreign_keys(connection: Connection, _record: object) -> None:
+            cursor = connection.cursor()
+            cursor.execute("PRAGMA foreign_keys=ON")
+            cursor.close()
+
+        factory = async_sessionmaker(engine, expire_on_commit=False)
+        async with engine.begin() as connection:
+            await connection.run_sync(Base.metadata.create_all)
+        manager = AuthPrincipal(
+            user_id=uuid4(),
+            session_id=uuid4(),
+            email="manager@example.test",
+            roles=("DATA_MANAGER",),
+            permissions=("historical.records.manage",),
+        )
+        async with factory() as session:
+            session.add(
+                User(
+                    id=manager.user_id,
+                    email=manager.email,
+                    password_hash="unused",
+                    status=UserStatus.ACTIVE,
+                )
+            )
+            await session.commit()
+            record = await HistoricalNominationService(session).create_record(
+                manager,
+                HistoricalNominationWrite(title="Historical source"),
+                creation_request_id=uuid4(),
+            )
+            record_id = record.id
+        if write_kind == "person":
+            async with factory() as session:
+                person, role = await HistoricalNominationService(session).add_person(
+                    manager,
+                    record_id,
+                    HistoricalPersonWrite(
+                        display_name="Người gửi",
+                        role=HistoricalRelatedPersonRole.NOMINATOR,
+                    ),
+                )
+                response = HistoricalPersonData(
+                    id=person.id,
+                    display_name=person.display_name,
+                    linked_user_id=person.linked_user_id,
+                    organization_name=person.organization_name,
+                    email=person.email,
+                    phone=person.phone,
+                    address=person.address,
+                    internal_notes=person.internal_notes,
+                    role=role,
+                )
+                assert response.display_name == "Người gửi"
+        else:
+            async with factory() as session:
+                draft = await HistoricalNominationService(
+                    session
+                ).save_public_content_draft(
+                    manager,
+                    record_id,
+                    HistoricalPublicContentDraftWrite(title="First draft"),
+                )
+                first = HistoricalPublicContentDraftData.model_validate(draft)
+            async with factory() as session:
+                draft = await HistoricalNominationService(
+                    session
+                ).save_public_content_draft(
+                    manager,
+                    record_id,
+                    HistoricalPublicContentDraftWrite(
+                        title="Updated draft", expected_updated_at=first.updated_at
+                    ),
+                )
+                response = HistoricalPublicContentDraftData.model_validate(draft)
+                assert response.title == "Updated draft" and response.revision == 2
+        await engine.dispose()
+
+    asyncio.run(scenario())
 
 
 def test_staff_explicitly_links_registered_recipient_without_granting_management() -> (

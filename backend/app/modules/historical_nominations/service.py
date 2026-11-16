@@ -1220,6 +1220,7 @@ class HistoricalNominationService:
                 after={"revision": draft.revision},
             )
             await self._session.flush()
+            await self._session.refresh(draft)
             return draft
 
     async def submit_public_content_draft(
@@ -1537,6 +1538,9 @@ class HistoricalNominationService:
                 **values,
                 created_by_user_id=principal.user_id,
             )
+            self._session.add(person)
+            # Persist the person before inserting the role's foreign key.
+            await self._session.flush()
             relation = HistoricalNominationPartyRole(
                 id=uuid4(),
                 nomination_id=record.id,
@@ -1544,7 +1548,7 @@ class HistoricalNominationService:
                 role=payload.role,
                 assigned_by_user_id=principal.user_id,
             )
-            self._session.add_all((person, relation))
+            self._session.add(relation)
             record.updated_by_user_id = principal.user_id
             self._audit.record(
                 actor_user_id=principal.user_id,

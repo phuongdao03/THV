@@ -5,6 +5,26 @@ Implemented from the
 remains excluded. No production database migration, deployment, or commit was
 made.
 
+## 2026-11-16: HTTP 500 fixes for people and repeated draft saves
+
+- Reproduced `POST /{recordId}/people` failing a foreign key: the pending party
+  role could be inserted before the new related person. Flush the person before
+  adding its role, within the same transaction so failures still roll back both.
+- Reproduced repeated `PUT /{recordId}/public-content-draft` failing response
+  serialization: the database-generated `updated_at` expired on UPDATE and
+  Pydantic attempted implicit async I/O (`MissingGreenlet`). Explicitly refresh
+  the saved draft before returning it. A successful database write could
+  previously be followed by a 500 while rendering its response.
+- Added two regressions with foreign keys enabled and DTO serialization after
+  each write. Both failed before the fix. Added an HTTP test using actual
+  service/database transactions and separate request sessions for adding a
+  person, saving/updating the draft, then publishing with a category and cover.
+- No API/schema, authorization, publication policy, or migration changes.
+- Validation: 18 focused backend tests passed, including the real HTTP
+  save/update/publish flow; all 1,144 frontend tests and 10 root tests passed.
+  Backend lint, format check, and typecheck passed. The complete backend suite
+  remains subject to the local missing `openpyxl` dependency noted below.
+
 ## 2026-11-16: save recovery, progress, account linking, certificate preview
 
 - User clarified the account flow: staff enters old nominations, invites the
