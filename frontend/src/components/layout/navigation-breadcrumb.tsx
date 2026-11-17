@@ -11,6 +11,7 @@ const parents: Record<string, string> = {
   "/work-allocations": "Công việc",
   "/certificates": "Bằng xác lập",
   "/admin/reviews": "Tiếp nhận hồ sơ",
+  "/admin/nomination-records": "Kho hồ sơ đề cử",
   "/admin/work-allocations": "Phân công công việc",
   "/admin/attendance": "Chấm công",
   "/admin/payments": "Quản lý phí hồ sơ",

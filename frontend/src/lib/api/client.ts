@@ -2201,6 +2201,29 @@ export const organizationApi = {
   },
 };
 
+export const nominationArchiveApi = {
+  list(filters: Record<string, string> = {}) {
+    return requestPaginated<import("./nomination-archive").ArchiveRecord[]>(
+      `/admin/nomination-records?${new URLSearchParams(filters)}`,
+    );
+  },
+  get(source: import("./nomination-archive").ArchiveSource, id: string) {
+    return request<import("./nomination-archive").ArchiveRecord>(
+      `/admin/nomination-records/${source}/${encodeURIComponent(id)}`,
+    );
+  },
+  section(
+    source: import("./nomination-archive").ArchiveSource,
+    id: string,
+    section: import("./nomination-archive").ArchiveSection,
+    page = 1,
+  ) {
+    return requestPaginated<import("./nomination-archive").ArchiveEntry[]>(
+      `/admin/nomination-records/${source}/${encodeURIComponent(id)}/${section}?page=${page}&page_size=25`,
+    );
+  },
+};
+
 export const dossierApi = {
   getPreparation() {
     return request<import("./types").DossierPreparationState>(

@@ -122,6 +122,12 @@ const employeeItems: NavigationItem[] = reviewerItems.slice(2);
 
 const adminItems: NavigationItem[] = [
   {
+    href: "/admin/nomination-records",
+    label: "Hồ sơ đề cử",
+    icon: FileText,
+    allowedRoles: ["SUPER_ADMIN"],
+  },
+  {
     href: "/admin/promotions",
     label: "Tiếp thị & khuyến mại",
     icon: Ticket,

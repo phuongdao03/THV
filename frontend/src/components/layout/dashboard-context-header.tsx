@@ -40,6 +40,7 @@ const pageTitles: Record<string, string> = {
   "/admin/work-allocations": "Phân công công việc",
   "/admin/payroll": "Bảng lương",
   "/admin/reviews": "Phân công thẩm định",
+  "/admin/nomination-records": "Kho hồ sơ đề cử",
   "/admin/content": "Quản trị nội dung",
   "/admin/staff": "Nhân sự",
   "/admin/employees": "Nhân sự",
