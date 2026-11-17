@@ -1,5 +1,63 @@
 # DataManager legacy records, public content, and certificates
 
+## Unified nomination archive: implementation brief (2026-11-17)
+
+User supplied the MASTER TASK P0 brief expanding this feature into long-term
+CURRENT and LEGACY record management. Publication is a projection, not storage.
+Do not push, merge, deploy, migrate production, change payments, or send chain
+transactions during this task.
+
+### Verified architecture and gaps
+
+- CURRENT records: `Dossier`, `DossierVersion.snapshot_json`,
+  `DossierEvidence.dossier_version_id`, and `DossierStatusHistory` already retain
+  source data and submission snapshots. Applicant `/dossiers` APIs are scoped
+  to owner/organization; they cannot serve as an unrestricted admin archive.
+- Review assignments/reports and the admin review snapshot already exist.
+  `ReviewReportDetails` and `EvidenceViewer` are reusable read surfaces.
+- LEGACY records retain people, private media, award metadata, public drafts,
+  content versions and audit events. Current list/detail services exclude
+  archived records, and no historical restore action has been verified.
+  Do not promise restoration in UI until implemented and tested.
+- Certificates and their versions, archival scans, and publication revisions
+  remain separate aggregates; preserve their original source relationships.
+- Main gap: a unified admin discovery/detail surface and access to retained
+  data outside the active intake queue. Do not infer lost files from missing UI.
+
+### Ordered implementation and acceptance
+
+1. Clarify source provenance labels with examples; keep stored enum/field names.
+   Rename record edit action and move stop-processing into secondary actions.
+   Never describe stopping work as saving data or as revoking publication.
+2. Audit retained records, documents, review/decision snapshots, certificates,
+   publication history, and existing read permissions before designing queries.
+3. Build an admin archive list/detail using existing source identifiers and
+   separate business/publication/archive statuses. Reuse existing viewers.
+4. Expose versioned documents, supplements, reviews, decisions, certificates,
+   publication revisions and history without mutation controls in read views.
+   Show retrieval errors separately from empty metadata; never expose private
+   delivery URLs without the existing media authorization checks.
+5. Verify owner/reviewer/data-manager boundaries and preservation across
+   publication/hiding, then desktop/mobile flows and screenshots.
+
+### Boundaries and validation
+
+The user separately approved SUPER_ADMIN-only read access across completed and
+archived CURRENT/LEGACY records, plus navigation to the existing publication
+editor for the exact work. Implemented archive routes are read-only; other roles
+retain existing scopes. No approval extends to source restoration, new decisions,
+issuance, schema changes or production operations. See the linked handoff for
+implementation evidence and remaining operational gaps.
+
+Use current module ownership and DTO conventions; no duplicate source records
+or copied files. Source: `backend/app/modules/`, frontend feature components and
+App Router routes. Tests: backend centralized, frontend colocated, browser E2E.
+Run root `npm test`, relevant `npm run lint`, `npm run typecheck`, and
+`npm run test:e2e` with npm.cmd on Windows. Record blocked checks honestly.
+New authorization behavior, decision/issuance changes, and schema migrations
+need a separate concrete proposal and approval. Implement safe read-only UI
+and compatible relationships first; the supplied brief authorizes that work.
+
 ## Staff account linking (2026-11-16, user-approved workflow)
 
 - Internal staff enters old nominations, invites recipients to register, then

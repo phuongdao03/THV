@@ -5,6 +5,101 @@ Implemented from the
 remains excluded. No production database migration, deployment, or commit was
 made.
 
+## 2026-11-17: unified archive audit and safe terminology changes
+
+The MASTER TASK P0 brief supersedes the previous push instruction: do not push,
+merge, or deploy this work. Existing uncommitted UX evidence images are unrelated
+and must be preserved. This revision does not claim the unified archive is done.
+
+### Delivered safe UI slice
+
+- Source provenance now asks "Thông tin được lấy từ đâu?", explains internal
+  use and optional unknown facts, and supplies examples for provider/reference
+  and notes. Existing field/enum values remain compatible. The date remains
+  when information was recorded in the source; it is not a certificate date.
+- Header distinguishes the nominated person/organization from the record title.
+  "Chỉnh sửa hồ sơ" opens editing; existing records use "Lưu thay đổi".
+- Stop-processing is a secondary action under "Thao tác khác", with explicit
+  reason confirmation. It is not saving edits or hiding published content.
+  No restoration promise: the audit did not find an existing historical restore
+  endpoint, and existing historical queries exclude archived records.
+
+### Verified code architecture (not a live production inventory)
+
+| Domain | Existing source and retained relationships | Archive gap / required work |
+| --- | --- | --- |
+| New nominations | `dossiers/models.py`: Dossier, stable ID, owner/category/type; DossierVersion includes snapshot, canonical hash, submitter and timestamp | Owner API is not an admin archive; do not reuse it by bypassing ownership |
+| Submitted files | DossierEvidence references dossier and submitted version; MediaAsset stores metadata/hash/status; `dossiers/service.py:_require_editable_evidence` blocks edits to versioned evidence | Admin needs version selection and a document inventory beyond active intake |
+| Supplements | `supplements/models.py`: request points to dossier/requested version; responses belong to request | Join each response and its attachments to the actual submission/version; never invent a missing link |
+| Reviews | ReviewAssignment points to dossier/version/reviewer; Review retains criteria, evidence references, recommendation and submission time | Admin review API restricts `ADMIN_REVIEW_DOSSIER_STATUSES`; it is not post-decision discovery |
+| Work allocation | WorkAllocation points to dossier/version; WorkScope and members retain scoped assignments; generic tasks also have attachments/activity | Aggregate existing relationships; do not equate task comments with official review reports |
+| Decisions | CouncilCase points to dossier and decision; CouncilVote records vote/reason; DossierStatusHistory records transitions | Confirm canonical final-decision source and immutable document/snapshot rules before changing decision contracts |
+| Issued certificates | `blockchain/models.py`: Certificate → dossier; CertificateVersion → dossier version, metadata hash, predecessor/reason/status; existing certificate API exposes versions | Integrate this read view into the source workspace, never reissue from APPROVED automatically |
+| PDF retention | `certificates/storage.py` uploads authenticated PDFs with overwrite=false and records version/bytes/SHA-256 | Existing file durability and accessibility need an authorized object-store inventory, not assumptions from UI |
+| Historical awards | HistoricalAward → nomination/recipient; HistoricalMediaLink → nomination/award/MediaAsset; certificate_archives is a separate scanned-public-work aggregate | Display source correctly; no invented live proof, official number, signature or seal |
+| Publication | PublicWork references CURRENT dossier or historical nomination; PublicWorkMedia references original assets and safe derivatives; slug history and audit events remain | Current and historical revision mechanisms differ; do not assert all editorial snapshots are complete without verification |
+| Historical revisions | HistoricalNominationContentVersion stores draft/publish snapshots independently of private source facts | Restore/read archived source requires an explicit approved read contract |
+| Access and downloads | Existing owner/org scope, assigned review scope, admin policies, and signed media delivery remain authoritative; EvidenceViewer supports preview/error paths | Metadata-present/object-missing must be a delivery error, not an empty file list; do not expose raw authenticated storage URLs |
+
+No production DB or object store was inspected. No backfill, deletion, invented
+historical event, new database table, wallet operation, or blockchain transaction
+has been performed.
+
+### Approved and implemented archive slice
+
+User explicitly approved a read-only SUPER_ADMIN archive spanning
+all CURRENT/LEGACY lifecycle states, including rejected/published/archived.
+Existing admin intake reads explicitly filter completed states and owner reads
+explicitly reject unrelated users. Broadening those reads is a privacy boundary.
+
+Implemented additive contracts under `/api/v1`: `GET /admin/nomination-records` with paginated
+source/query/category/year/business-status/publication/archive filters;
+`GET /admin/nomination-records/{source}/{id}` for source facts;
+separate paginated version/document/review/decision/certificate/publication/
+history resources. Keep CURRENT and LEGACY identifiers and status domains
+separate; use explicit DTOs and existing signed-delivery authorization.
+
+Implemented `/admin/nomination-records` and source-specific detail
+routes with overview/documents/reviews/decisions/certificates/publication/history
+navigation and a mobile section picker. Reuses EvidenceViewer and
+ReviewReportDetails, with independent loading/error/empty states. Existing URLs
+are preserved. A second explicit user approval authorizes opening the existing
+`/admin/content?workId=...` editor from publication metadata, with a return link;
+navigation does not save or publish anything.
+
+Archive projections retain source/editorial versions separately, exact review
+snapshots, supplement responses, final transitions/council decisions, issued
+certificate lineage, scanned revisions and audit history. Missing asset metadata
+does not remove the inventory entry. Only actual SUPER_ADMIN receives the added
+signed-delivery read grant for issued PDFs and scan pages. Owner version history
+also reuses the existing owner-scoped file viewer without a new permission.
+
+Validation this revision: 8 focused backend tests pass. Root structure tests
+(10) and the complete frontend suite (259 files / 1,149 tests) pass; the final
+archive viewer adjustment also passes its 4 focused frontend tests. Frontend/
+backend typecheck, frontend ESLint, repository Prettier, backend Ruff check/
+format and diff whitespace checks pass. Desktop archive E2E passed in the
+preceding run. Mobile rendered list/documents, passed the overflow assertion
+and produced screenshots, but its process hung later and was stopped; full
+mobile completion is unverified. Local E2E screenshots live under ignored
+`frontend/test-results/`; existing tracked UX evidence was not changed.
+Certificate metadata hashes remain visible as references but are not used as
+PDF byte checksums in EvidenceViewer.
+
+Remaining scope: no production object-store inventory, no orphan/backfill repair,
+no new source restore workflow, no schema or decision/issuance changes. Existing
+supplement responses have no direct file association; the archive exposes the
+recorded request/version and response, without inventing attachment ownership.
+Full backend collection is blocked by missing local `openpyxl`; no passing full
+backend result is claimed. No commit,
+push, merge, production migration or deployment was performed for this slice.
+
+Tests must cover forbidden PUBLIC/USER/REVIEWER/DATA_MANAGER archive reads,
+post-decision reads, old versions and supplements, missing storage objects,
+published/hidden preservation, certificate lineage, and desktop/mobile flows.
+Archive/restore CURRENT state, final decision immutability changes, issuance,
+and any backfill/migration need separate proposals if the audit finds gaps.
+
 ## 2026-11-16: HTTP 500 fixes for people and repeated draft saves
 
 - Reproduced `POST /{recordId}/people` failing a foreign key: the pending party
