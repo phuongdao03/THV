@@ -21,6 +21,10 @@ const statusLabels: Record<string, string> = {
   HIDDEN: "Đã ẩn",
   ACTIVE: "Đang quản lý",
   ARCHIVED: "Đã lưu trữ",
+  APPROVE: "Tán thành",
+  REJECT: "Không tán thành",
+  ABSTAIN: "Không biểu quyết",
+  REQUEST_MORE_INFO: "Yêu cầu bổ sung",
 };
 export function archiveStatusLabel(status: string | null) {
   return status
@@ -29,6 +33,13 @@ export function archiveStatusLabel(status: string | null) {
         status)
     : "Chưa có trạng thái riêng";
 }
+
+function formatArchiveDate(value: string) {
+  return new Intl.DateTimeFormat("vi-VN", { dateStyle: "medium" }).format(
+    new Date(value),
+  );
+}
+
 export function NominationArchive() {
   const [filters, setFilters] = useState<Record<string, string>>({
     page: "1",
@@ -64,7 +75,7 @@ export function NominationArchive() {
         <p className="text-xs font-semibold uppercase text-[var(--theme-accent)]">
           Kho hồ sơ nguồn
         </p>
-        <h1 className="mt-2 text-3xl font-semibold">Hồ sơ đề cử</h1>
+        <h1 className="mt-2 text-3xl font-semibold">Kho hồ sơ đề cử</h1>
         <p className="mt-2 text-sm text-[var(--theme-muted)]">
           Tra cứu hồ sơ mới và lịch sử, kể cả sau khi ra quyết định hoặc công
           bố. Tài liệu nội bộ chỉ hiển thị theo quyền.
@@ -98,6 +109,24 @@ export function NominationArchive() {
             min={1}
             max={2200}
             className={field}
+          />
+        </label>
+        <label className="text-sm">
+          Từ ngày
+          <input
+            aria-label="Từ ngày"
+            className={field}
+            name="recorded_from"
+            type="date"
+          />
+        </label>
+        <label className="text-sm">
+          Đến ngày
+          <input
+            aria-label="Đến ngày"
+            className={field}
+            name="recorded_to"
+            type="date"
           />
         </label>
         <label className="text-sm">
@@ -181,7 +210,10 @@ export function NominationArchive() {
           </p>
           <ul className="divide-y divide-[var(--theme-border)] border-y border-[var(--theme-border)]">
             {records.data.data.map((record) => (
-              <li key={`${record.source}-${record.id}`} className="py-4">
+              <li
+                key={`${record.source}-${record.id}`}
+                className="grid gap-3 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
+              >
                 <div className="flex flex-wrap gap-2 text-xs text-[var(--theme-muted)]">
                   <span>
                     {record.source === "CURRENT"
@@ -189,6 +221,9 @@ export function NominationArchive() {
                       : "Hồ sơ lịch sử"}
                   </span>
                   <span>{archiveStatusLabel(record.businessStatus)}</span>
+                  {record.categoryName ? (
+                    <span>{record.categoryName}</span>
+                  ) : null}
                   {record.publicationStatus ? (
                     <span>
                       · {archiveStatusLabel(record.publicationStatus)}
@@ -210,8 +245,58 @@ export function NominationArchive() {
                 </p>
                 <p className="mt-1 break-words text-sm text-[var(--theme-muted)]">
                   {record.source === "CURRENT" ? "Người nộp" : "Đối tượng"}:{" "}
-                  {record.subject || "Chưa ghi nhận"}
+                  {record.source === "CURRENT" ? (
+                    <>
+                      {record.ownerName ? (
+                        <span className="font-semibold text-[var(--theme-text)]">
+                          {record.ownerName}
+                        </span>
+                      ) : null}
+                      {record.ownerEmail || record.subject ? (
+                        <span>
+                          {record.ownerName ? " · " : ""}
+                          {record.ownerEmail || record.subject}
+                        </span>
+                      ) : null}
+                      {!record.ownerName &&
+                      !record.ownerEmail &&
+                      !record.subject
+                        ? "Chưa ghi nhận"
+                        : null}
+                    </>
+                  ) : (
+                    record.subject || "Chưa ghi nhận"
+                  )}
                 </p>
+                <p className="mt-1 text-xs text-[var(--theme-muted)]">
+                  Ghi nhận {formatArchiveDate(record.recordedAt)}
+                  {record.versionNo ? ` · phiên bản ${record.versionNo}` : ""}
+                  {record.updatedAt
+                    ? ` · cập nhật ${formatArchiveDate(record.updatedAt)}`
+                    : ""}
+                </p>
+                <p className="mt-1 text-sm">
+                  {record.documentCount} tài liệu · {record.imageCount} ảnh ·{" "}
+                  {record.videoCount} video
+                  {record.certificateCount > 0 ? (
+                    <span className="text-[var(--theme-muted)]">
+                      {" "}
+                      ·{" "}
+                      {record.source === "CURRENT"
+                        ? "Bằng xác lập"
+                        : "Ghi nhận lịch sử"}
+                      {record.certificateReference
+                        ? `: ${record.certificateReference}`
+                        : ` (${record.certificateCount})`}
+                    </span>
+                  ) : null}
+                </p>
+                <Link
+                  className="inline-flex min-h-11 items-center justify-center rounded-md border border-[var(--theme-border)] px-3 text-sm font-semibold text-[var(--theme-accent)] hover:bg-[var(--theme-elevated)] sm:col-start-2 sm:row-start-1"
+                  href={archiveRecordPath(record.source, record.id)}
+                >
+                  Xem bộ hồ sơ
+                </Link>
               </li>
             ))}
           </ul>

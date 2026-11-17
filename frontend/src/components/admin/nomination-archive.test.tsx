@@ -7,7 +7,7 @@ import {
   within,
 } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
-import { NominationArchive } from "./nomination-archive";
+import { archiveStatusLabel, NominationArchive } from "./nomination-archive";
 import { NominationArchiveDetail } from "./nomination-archive-detail";
 
 const api = vi.hoisted(() => ({
@@ -26,11 +26,22 @@ const record = {
   code: "CNS-2020-OLD",
   title: "Hồ sơ đã kết thúc",
   subject: "owner@example.test",
+  ownerUserId: "user-1",
+  ownerName: "Nguyen Van An",
+  ownerEmail: "owner@example.test",
   year: 2020,
   categoryId: null,
+  categoryName: "Văn hóa",
+  recordedAt: "2026-11-16T10:00:00Z",
+  versionNo: 2,
   businessStatus: "REJECTED",
   publicationStatus: "HIDDEN",
   archiveStatus: null,
+  documentCount: 3,
+  imageCount: 1,
+  videoCount: 1,
+  certificateCount: 1,
+  certificateReference: "THV-2026-001",
   updatedAt: "2026-11-17T00:00:00Z",
 };
 function show(component: React.ReactNode) {
@@ -71,6 +82,34 @@ it("discovers completed records and searches without conflating status dimension
       expect.objectContaining({
         query: "THV-2020-OLD",
         archive_status: "ARCHIVED",
+      }),
+    ),
+  );
+});
+
+it("shows account, retained material counts, certificate and date filters", async () => {
+  api.list.mockResolvedValue({ data: [record], meta: { total: 1 } });
+  show(<NominationArchive />);
+
+  expect(await screen.findByText("Nguyen Van An")).toBeTruthy();
+  expect(screen.getByText("3 tài liệu · 1 ảnh · 1 video")).toBeTruthy();
+  expect(screen.getByText(/Bằng xác lập: THV-2026-001/)).toBeTruthy();
+  expect(screen.getByLabelText("Từ ngày")).toBeTruthy();
+  expect(screen.getByLabelText("Đến ngày")).toBeTruthy();
+  expect(screen.getByRole("link", { name: "Xem bộ hồ sơ" })).toBeTruthy();
+
+  fireEvent.change(screen.getByLabelText("Từ ngày"), {
+    target: { value: "2026-11-01" },
+  });
+  fireEvent.change(screen.getByLabelText("Đến ngày"), {
+    target: { value: "2026-11-30" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Tra cứu hồ sơ" }));
+  await waitFor(() =>
+    expect(api.list).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        recorded_from: "2026-11-01",
+        recorded_to: "2026-11-30",
       }),
     ),
   );
@@ -129,4 +168,11 @@ it("opens the existing publication editor with a source return link", async () =
   expect(
     screen.queryByRole("button", { name: /Xuất bản|Lưu thay đổi/ }),
   ).toBeNull();
+});
+
+it("translates council vote outcomes for archive readers", () => {
+  expect(archiveStatusLabel("APPROVE")).toBe("Tán thành");
+  expect(archiveStatusLabel("REJECT")).toBe("Không tán thành");
+  expect(archiveStatusLabel("ABSTAIN")).toBe("Không biểu quyết");
+  expect(archiveStatusLabel("REQUEST_MORE_INFO")).toBe("Yêu cầu bổ sung");
 });

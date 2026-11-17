@@ -272,7 +272,10 @@ class PublicMediaService:
                 work = await self._repository.get_work(work_id, for_update=True)
                 if work is None:
                     raise PublicWorkNotFoundError()
-                asset = await self._repository.get_asset(data.media_asset_id)
+                asset = await self._repository.get_asset(
+                    data.media_asset_id,
+                    for_update=True,
+                )
                 editorial = (
                     asset is not None
                     and is_editorial_cover(asset)

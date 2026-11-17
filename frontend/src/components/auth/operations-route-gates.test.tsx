@@ -1,9 +1,24 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
+import NominationArchivePage from "@/app/(dashboard)/admin/nomination-records/page";
+import NominationArchiveRecordPage from "@/app/(dashboard)/admin/nomination-records/[source]/[id]/page";
 import ReviewsLayout from "@/app/(dashboard)/reviews/layout";
 import DataManagerLayout from "@/app/(dashboard)/data-manager/layout";
 import { AuthUserProvider } from "@/lib/auth/user-context";
+
+vi.mock("@/components/admin/nomination-archive", () => ({
+  NominationArchive: () => <p>Nomination archive list</p>,
+}));
+vi.mock("@/components/admin/nomination-archive-detail", () => ({
+  NominationArchiveDetail: ({
+    source,
+    recordId,
+  }: {
+    source: string;
+    recordId: string;
+  }) => <p>{`${source}:${recordId}`}</p>,
+}));
 
 function userWith(roles: string[]) {
   return {
@@ -62,5 +77,25 @@ describe("operations route gates", () => {
       </AuthUserProvider>,
     );
     expect(screen.getByText("Historical data workspace")).toBeDefined();
+  });
+
+  it("opens both read-only archive routes for a data manager", async () => {
+    const listPage = render(
+      <AuthUserProvider user={userWith(["DATA_MANAGER"])}>
+        <NominationArchivePage />
+      </AuthUserProvider>,
+    );
+    expect(screen.getByText("Nomination archive list")).toBeDefined();
+    listPage.unmount();
+
+    const detailPage = await NominationArchiveRecordPage({
+      params: Promise.resolve({ source: "CURRENT", id: "record-1" }),
+    });
+    render(
+      <AuthUserProvider user={userWith(["DATA_MANAGER"])}>
+        {detailPage}
+      </AuthUserProvider>,
+    );
+    expect(screen.getByText("CURRENT:record-1")).toBeDefined();
   });
 });

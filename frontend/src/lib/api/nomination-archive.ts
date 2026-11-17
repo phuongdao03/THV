@@ -18,11 +18,22 @@ export interface ArchiveRecord {
   code: string;
   title: string;
   subject: string | null;
+  ownerUserId: string | null;
+  ownerName: string | null;
+  ownerEmail: string | null;
   year: number | null;
   categoryId: string | null;
+  categoryName: string | null;
+  recordedAt: string;
+  versionNo: number | null;
   businessStatus: string;
   publicationStatus: string | null;
   archiveStatus: string | null;
+  documentCount: number;
+  imageCount: number;
+  videoCount: number;
+  certificateCount: number;
+  certificateReference: string | null;
   updatedAt: string;
 }
 export interface ArchiveEntry {
@@ -32,6 +43,7 @@ export interface ArchiveEntry {
   occurredAt: string | null;
   actor: string | null;
   versionId: string | null;
+  versionNo: number | null;
   mediaId: string | null;
   mimeType: string | null;
   bytes: number | null;

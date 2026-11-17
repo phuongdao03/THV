@@ -3,7 +3,7 @@ import { NominationArchive } from "@/components/admin/nomination-archive";
 
 export default function NominationArchivePage() {
   return (
-    <RoleGate allowed={["SUPER_ADMIN"]}>
+    <RoleGate allowed={["SUPER_ADMIN", "DATA_MANAGER"]}>
       <NominationArchive />
     </RoleGate>
   );

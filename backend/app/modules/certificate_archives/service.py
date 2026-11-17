@@ -597,7 +597,9 @@ class CertificateArchiveService:
         assets = tuple(
             (
                 await self._session.scalars(
-                    select(MediaAsset).where(MediaAsset.id.in_(media_asset_ids))
+                    select(MediaAsset)
+                    .where(MediaAsset.id.in_(media_asset_ids))
+                    .with_for_update()
                 )
             ).all()
         )

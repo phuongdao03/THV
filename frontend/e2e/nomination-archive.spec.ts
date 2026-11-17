@@ -9,11 +9,22 @@ const record = {
   code: "CNS-2020-ARCHIVE",
   title: "Bộ hồ sơ được bảo toàn sau công bố",
   subject: "owner@example.test",
+  ownerUserId: "4fb1fd62-5815-417c-8ddc-b755dc1bf52e",
+  ownerName: "Nguyễn Văn Chủ Hồ Sơ",
+  ownerEmail: "owner@example.test",
   year: 2020,
   categoryId: null,
+  categoryName: "Di sản",
+  recordedAt: "2020-05-15T00:00:00Z",
+  versionNo: 2,
   businessStatus: "PUBLISHED",
   publicationStatus: "HIDDEN",
   archiveStatus: null,
+  documentCount: 1,
+  imageCount: 2,
+  videoCount: 1,
+  certificateCount: 1,
+  certificateReference: "THV-2020-001",
   updatedAt: "2026-11-17T00:00:00Z",
 };
 const envelope = (data: unknown, total = 1) => ({
@@ -28,6 +39,7 @@ const entry = {
   occurredAt: "2020-05-15T00:00:00Z",
   actor: "Người nộp hồ sơ",
   versionId: id,
+  versionNo: 2,
   mediaId,
   mimeType: "application/pdf",
   bytes: 1024,
@@ -123,7 +135,7 @@ test("admin browses a retained source and keeps missing-file errors separate fro
   );
   await page.goto("/admin/nomination-records");
   await expect(
-    page.getByRole("heading", { name: "Hồ sơ đề cử", exact: true }),
+    page.getByRole("heading", { name: "Kho hồ sơ đề cử", exact: true }),
   ).toBeVisible();
   await page.getByLabel("Tìm hồ sơ").fill("THV-2020-ARCHIVE");
   await page

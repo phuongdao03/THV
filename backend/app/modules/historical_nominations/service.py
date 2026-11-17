@@ -1736,7 +1736,9 @@ class HistoricalNominationService:
         _require_manager(principal, "historical.documents.manage")
         async with self._session.begin():
             record = await self._editable_record(record_id)
-            asset = await self._session.get(MediaAsset, media_id)
+            asset = await self._session.scalar(
+                select(MediaAsset).where(MediaAsset.id == media_id).with_for_update()
+            )
             if (
                 asset is None
                 or asset.owner_user_id != principal.user_id

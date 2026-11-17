@@ -401,6 +401,11 @@ function sectionsFor(
             icon: BookOpen,
           },
           {
+            href: "/admin/nomination-records",
+            label: "Kho hồ sơ đề cử",
+            icon: FileText,
+          },
+          {
             href: "/data-manager/content",
             label: "Nội dung công bố",
             icon: Eye,

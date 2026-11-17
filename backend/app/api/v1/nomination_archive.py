@@ -1,5 +1,6 @@
 """Approved SUPER_ADMIN read surface for retained nomination source records."""
 
+from datetime import date
 from typing import Annotated
 from uuid import UUID
 
@@ -37,6 +38,9 @@ async def list_nomination_archive(
     business_status: Annotated[str | None, Query(max_length=64)] = None,
     publication_status: Annotated[str | None, Query(max_length=64)] = None,
     archive_status: Annotated[str | None, Query(max_length=64)] = None,
+    owner_user_id: UUID | None = None,
+    recorded_from: date | None = None,
+    recorded_to: date | None = None,
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=100)] = 25,
 ) -> PaginatedSuccessEnvelope[list[ArchiveRecord]]:
@@ -49,6 +53,9 @@ async def list_nomination_archive(
         business_status=business_status,
         publication_status=publication_status,
         archive_status=archive_status,
+        owner_user_id=owner_user_id,
+        recorded_from=recorded_from,
+        recorded_to=recorded_to,
         page=page,
         page_size=page_size,
     )

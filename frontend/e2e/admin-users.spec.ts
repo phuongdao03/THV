@@ -21,7 +21,9 @@ test.beforeEach(async ({ context }) => {
   ]);
 });
 
-test("admin users remains operable on desktop and mobile", async ({ page }) => {
+test("admin users remains operable on desktop and mobile", async ({
+  page,
+}, info) => {
   const userId = "b57912cc-714c-4ab5-9fd9-1c5b38cd902b";
   let exemptionEnabled = false;
   const userData = () => ({
@@ -73,6 +75,49 @@ test("admin users remains operable on desktop and mobile", async ({ page }) => {
   await page.route("**/api/v1/admin/audit?**", (route) =>
     route.fulfill({ json: envelope([]) }),
   );
+  await page.route("**/api/v1/admin/nomination-records**", async (route) => {
+    const requestUrl = new URL(route.request().url());
+    expect(requestUrl.searchParams.get("owner_user_id")).toBe(userId);
+    expect(requestUrl.searchParams.get("page")).toBe("1");
+    expect(requestUrl.searchParams.get("page_size")).toBe("25");
+    await route.fulfill({
+      json: {
+        success: true,
+        data: [
+          {
+            id: "archive-dossier-1",
+            source: "CURRENT",
+            code: "CNS-2026-USER-001",
+            title: "Hồ sơ của Nguyễn Văn An",
+            subject: "an@example.com",
+            ownerUserId: userId,
+            ownerName: "Nguyễn Văn An",
+            ownerEmail: "an@example.com",
+            year: 2026,
+            categoryId: null,
+            categoryName: "Văn hóa",
+            recordedAt: "2026-08-20T09:00:00Z",
+            versionNo: 1,
+            businessStatus: "SUBMITTED",
+            publicationStatus: null,
+            archiveStatus: null,
+            documentCount: 2,
+            imageCount: 1,
+            videoCount: 0,
+            certificateCount: 0,
+            certificateReference: null,
+            updatedAt: "2026-08-20T09:00:00Z",
+          },
+        ],
+        meta: {
+          request_id: "user-dossiers",
+          page: 1,
+          page_size: 25,
+          total: 1,
+        },
+      },
+    });
+  });
   await page.route(
     "**/api/v1/admin/test-applicant-invitations",
     async (route) => {
@@ -113,6 +158,32 @@ test("admin users remains operable on desktop and mobile", async ({ page }) => {
   await expect(
     page.getByRole("dialog", { name: "Chi tiết tài khoản" }),
   ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Hồ sơ đề cử của tài khoản" }),
+  ).toBeVisible();
+  await expect(page.getByText("Hồ sơ của Nguyễn Văn An")).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Xem bộ hồ sơ" }),
+  ).toHaveAttribute(
+    "href",
+    "/admin/nomination-records/CURRENT/archive-dossier-1",
+  );
+  for (const width of [375, 390, 768, 1024, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBe(true);
+  }
+  await page.setViewportSize({
+    width: mobile ? 390 : 1440,
+    height: mobile ? 844 : 900,
+  });
+  await page.screenshot({
+    path: info.outputPath("admin-user-dossiers.png"),
+    fullPage: true,
+  });
   await expect(page.getByText("Tài khoản thật")).toBeVisible();
   await expect(page.getByText(/không đổi phân loại tài khoản/)).toBeVisible();
   await page.getByRole("button", { name: "Bật kiểm thử miễn phí" }).click();

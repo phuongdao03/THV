@@ -8,13 +8,14 @@ from sqlalchemy import Select, String, Uuid, cast, func, literal, or_, select, u
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.audit.models import AuditLog
+from app.modules.auth.models import User
 from app.modules.blockchain.models import Certificate, CertificateVersion
 from app.modules.certificate_archives.models import (
     CertificateArchive,
     CertificateArchivePage,
     CertificateArchiveRevision,
 )
-from app.modules.council.models import CouncilCase, CouncilSession
+from app.modules.council.models import CouncilCase, CouncilSession, CouncilVote
 from app.modules.dossiers.archive_schemas import (
     ArchiveEntry,
     ArchiveSection,
@@ -40,6 +41,7 @@ from app.modules.reviews.models import Review, ReviewAssignment
 from app.modules.reviews.schemas import ReviewData
 from app.modules.reviews.service import ReviewService
 from app.modules.supplements.models import SupplementRequest, SupplementResponse
+from app.modules.users.models import UserProfile
 
 
 async def read_archive_section(
@@ -77,11 +79,17 @@ async def read_archive_section(
         owner = model.nomination_id if source == "LEGACY" else model.dossier_id
         media_key = model.media_asset_id
         stmt = (
-            select(model, MediaAsset)
+            select(model, MediaAsset, UserProfile.full_name)
             .outerjoin(MediaAsset, MediaAsset.id == media_key)
+            .outerjoin(UserProfile, UserProfile.user_id == MediaAsset.owner_user_id)
             .where(owner == record_id)
             .order_by(model.id)
         )
+        if source == "CURRENT":
+            stmt = stmt.add_columns(DossierVersion.version_no).outerjoin(
+                DossierVersion,
+                DossierVersion.id == DossierEvidence.dossier_version_id,
+            )
     elif section == "versions":
         if source == "CURRENT":
             stmt = (
@@ -255,8 +263,9 @@ async def read_archive_section(
                 entry.mime_type = media.mime_type if media else None
                 entry.bytes = media.bytes if media else None
                 entry.checksum = media.sha256 if media else None
-                entry.actor = str(media.owner_user_id) if media else None
+                entry.actor = (row[2] or str(media.owner_user_id)) if media else None
                 entry.occurred_at = media.created_at if media else None
+                entry.version_no = row[3] if source == "CURRENT" else None
                 entry.facts = _facts(
                     obj,
                     (
@@ -483,20 +492,29 @@ async def _legacy_versions(
 async def _decisions(
     session: AsyncSession, record_id: UUID, page: int, page_size: int
 ) -> tuple[list[ArchiveEntry], int]:
-    transitions = select(
-        DossierStatusHistory.id.label("id"),
-        literal("Quyết định xử lý hồ sơ").label("title"),
-        cast(DossierStatusHistory.to_status, String).label("status"),
-        DossierStatusHistory.created_at.label("occurred_at"),
-        cast(DossierStatusHistory.actor_user_id, String).label("actor"),
-        literal(None, Uuid).label("version_id"),
-        DossierStatusHistory.note.label("note"),
-        DossierStatusHistory.reason_code.label("reason"),
-    ).where(
-        DossierStatusHistory.dossier_id == record_id,
-        DossierStatusHistory.to_status.in_(
-            ["APPROVED", "REJECTED", "REVOKED", "CANCELLED"]
-        ),
+    transitions = (
+        select(
+            DossierStatusHistory.id.label("id"),
+            literal("Quyết định xử lý hồ sơ").label("title"),
+            cast(DossierStatusHistory.to_status, String).label("status"),
+            DossierStatusHistory.created_at.label("occurred_at"),
+            func.coalesce(
+                UserProfile.full_name,
+                User.email,
+                cast(DossierStatusHistory.actor_user_id, String),
+            ).label("actor"),
+            literal(None, Uuid).label("version_id"),
+            DossierStatusHistory.note.label("note"),
+            DossierStatusHistory.reason_code.label("reason"),
+        )
+        .join(User, User.id == DossierStatusHistory.actor_user_id)
+        .outerjoin(UserProfile, UserProfile.user_id == User.id)
+        .where(
+            DossierStatusHistory.dossier_id == record_id,
+            DossierStatusHistory.to_status.in_(
+                ["APPROVED", "REJECTED", "REVOKED", "CANCELLED"]
+            ),
+        )
     )
     council = (
         select(
@@ -512,7 +530,28 @@ async def _decisions(
         .join(CouncilSession, CouncilSession.id == CouncilCase.session_id)
         .where(CouncilCase.dossier_id == record_id, CouncilCase.decision.is_not(None))
     )
-    records = union_all(transitions, council).subquery()
+    votes = (
+        select(
+            CouncilVote.id.label("id"),
+            literal("Phiếu biểu quyết hội đồng").label("title"),
+            cast(CouncilVote.choice, String).label("status"),
+            CouncilVote.voted_at.label("occurred_at"),
+            func.coalesce(
+                UserProfile.full_name,
+                User.email,
+                cast(CouncilVote.member_user_id, String),
+            ).label("actor"),
+            CouncilCase.dossier_version_id.label("version_id"),
+            CouncilSession.title.label("note"),
+            CouncilVote.reason.label("reason"),
+        )
+        .join(CouncilCase, CouncilCase.id == CouncilVote.case_id)
+        .join(CouncilSession, CouncilSession.id == CouncilCase.session_id)
+        .join(User, User.id == CouncilVote.member_user_id)
+        .outerjoin(UserProfile, UserProfile.user_id == User.id)
+        .where(CouncilCase.dossier_id == record_id)
+    )
+    records = union_all(transitions, council, votes).subquery()
     async with session.begin():
         total = int(
             await session.scalar(select(func.count()).select_from(records)) or 0

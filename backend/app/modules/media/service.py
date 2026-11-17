@@ -8,12 +8,17 @@ from typing import Protocol
 from uuid import UUID, uuid4
 
 from cryptography.exceptions import InvalidTag
+from sqlalchemy import exists, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.audit.service import AuditService
 from app.modules.auth.authorization import AuthorizationPolicy, PolicyRequirement
 from app.modules.auth.session_service import AuthPrincipal
+from app.modules.blockchain.models import Certificate, CertificateVersion
+from app.modules.certificate_archives.models import CertificateArchivePage
+from app.modules.dossiers.models import DossierEvidence
+from app.modules.historical_nominations.models import HistoricalMediaLink
 from app.modules.media.encryption import (
     DocumentEncryptionConfigurationError,
     DocumentEncryptionKeyring,
@@ -52,6 +57,7 @@ from app.modules.media.types import (
     UploadIntent,
     UploadSignatureView,
 )
+from app.modules.public.models import PublicWorkMedia
 
 
 class MediaDeliveryAccessPolicy(Protocol):
@@ -655,8 +661,24 @@ class MediaService:
         media_id: UUID,
     ) -> None:
         async with self._session.begin():
-            asset = await self._owned_asset(principal, media_id)
+            asset = await self._owned_asset(principal, media_id, for_update=True)
             if asset.status is MediaStatus.DELETED:
+                raise MediaInvalidStateError()
+            is_retained = await self._session.scalar(
+                select(
+                    or_(
+                        exists().where(DossierEvidence.media_asset_id == media_id),
+                        exists().where(HistoricalMediaLink.media_asset_id == media_id),
+                        exists().where(Certificate.pdf_media_id == media_id),
+                        exists().where(CertificateVersion.pdf_media_id == media_id),
+                        exists().where(
+                            CertificateArchivePage.media_asset_id == media_id
+                        ),
+                        exists().where(PublicWorkMedia.media_asset_id == media_id),
+                    )
+                )
+            )
+            if is_retained:
                 raise MediaInvalidStateError()
             public_id = asset.cloudinary_public_id
             resource_type = asset.resource_type
@@ -666,14 +688,12 @@ class MediaService:
             ):
                 public_id = asset.encrypted_object_public_id
                 resource_type = "raw"
-        await self._gateway.delete_asset(
-            public_id=public_id,
-            resource_type=resource_type,
-        )
-        async with self._session.begin():
-            asset = await self._owned_asset(principal, media_id, for_update=True)
-            if asset.status is MediaStatus.DELETED:
-                raise MediaInvalidStateError()
+            # Attach flows lock this row before checking ACTIVE status, so the
+            # retention check cannot race a new dossier/media reference.
+            await self._gateway.delete_asset(
+                public_id=public_id,
+                resource_type=resource_type,
+            )
             asset.status = MediaStatus.DELETED
             asset.deleted_at = self._clock()
             self._audit(

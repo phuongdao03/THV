@@ -10,7 +10,7 @@ export default async function NominationArchiveRecordPage({
   const { source, id } = await params;
   if (source !== "CURRENT" && source !== "LEGACY") notFound();
   return (
-    <RoleGate allowed={["SUPER_ADMIN"]}>
+    <RoleGate allowed={["SUPER_ADMIN", "DATA_MANAGER"]}>
       <NominationArchiveDetail source={source} recordId={id} />
     </RoleGate>
   );

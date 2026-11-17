@@ -16,6 +16,12 @@ from app.db.base import Base
 from app.modules.audit.models import AuditLog
 from app.modules.auth.models import User, UserStatus
 from app.modules.auth.session_service import AuthPrincipal
+from app.modules.dossiers.models import (
+    Category,
+    Dossier,
+    DossierEvidence,
+    DossierVersion,
+)
 from app.modules.media.encryption import DocumentEncryptionKeyring
 from app.modules.media.errors import (
     MediaForbiddenError,
@@ -312,6 +318,73 @@ def test_signed_upload_completion_delivery_and_delete() -> None:
                 "media.delivery_signed",
                 "media.deleted",
             ]
+
+        await service.close()
+        await engine.dispose()
+
+    asyncio.run(exercise())
+
+
+def test_linked_dossier_evidence_cannot_be_deleted_from_media_service() -> None:
+    async def exercise() -> None:
+        service, gateway, session_factory, engine, users = await _build_service()
+        owner = users["owner"]
+        media_id = uuid4()
+        dossier_id = uuid4()
+        version_id = uuid4()
+        category = Category(
+            id=uuid4(), code="retention", slug="retention", name="Retention"
+        )
+        dossier = Dossier(
+            id=dossier_id,
+            code="CNS-RETENTION-TEST",
+            title="Submitted source",
+            owner_user_id=owner.id,
+            category_id=category.id,
+            current_version_no=1,
+        )
+        media = MediaAsset(
+            id=media_id,
+            owner_user_id=owner.id,
+            purpose=MediaPurpose.DOSSIER_EVIDENCE.value,
+            cloudinary_public_id="retained-source-object",
+            resource_type="raw",
+            access_mode="authenticated",
+            original_filename="original.pdf",
+            mime_type="application/pdf",
+            bytes=1_024,
+            status=MediaStatus.ACTIVE,
+        )
+        version = DossierVersion(
+            id=version_id,
+            dossier_id=dossier.id,
+            version_no=1,
+            snapshot_json={"title": dossier.title},
+            canonical_hash="a" * 64,
+            submitted_by=owner.id,
+            submitted_at=NOW,
+        )
+        evidence = DossierEvidence(
+            id=uuid4(),
+            dossier_id=dossier.id,
+            dossier_version_id=version.id,
+            media_asset_id=media.id,
+            evidence_type="SOURCE",
+            title="Original submitted PDF",
+        )
+        async with session_factory() as session:
+            session.add_all([category, dossier, media, version, evidence])
+            await session.commit()
+
+        with pytest.raises(MediaInvalidStateError):
+            await service.delete_asset(_principal(owner), media.id)
+
+        assert gateway.deleted == []
+        async with session_factory() as session:
+            retained = await session.get(MediaAsset, media.id)
+            assert retained is not None
+            assert retained.status is MediaStatus.ACTIVE
+            assert retained.deleted_at is None
 
         await service.close()
         await engine.dispose()

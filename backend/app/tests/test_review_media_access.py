@@ -201,6 +201,17 @@ def test_delivery_requires_acknowledged_owned_assignment() -> None:
             bytes=2_048,
             status=MediaStatus.ACTIVE,
         )
+        unlinked_asset = MediaAsset(
+            id=uuid4(),
+            owner_user_id=owner.id,
+            cloudinary_public_id="ip-certificate/local/evidence/unlinked",
+            resource_type="image",
+            access_mode="authenticated",
+            original_filename="unlinked.png",
+            mime_type="image/png",
+            bytes=2_048,
+            status=MediaStatus.ACTIVE,
+        )
         evidence = DossierEvidence(
             id=uuid4(),
             dossier_id=dossier.id,
@@ -239,6 +250,7 @@ def test_delivery_requires_acknowledged_owned_assignment() -> None:
                     comparison_version,
                     asset,
                     admin_only_asset,
+                    unlinked_asset,
                     evidence,
                     admin_only_evidence,
                     assignment,
@@ -279,6 +291,20 @@ def test_delivery_requires_acknowledged_owned_assignment() -> None:
             admin_only_asset.id,
         )
         assert "expires_at=" in admin_delivery.url
+
+        manager_principal = _principal(other, "DATA_MANAGER")
+        manager_delivery = await service.create_signed_url(
+            manager_principal,
+            asset.id,
+        )
+        assert "expires_at=" in manager_delivery.url
+        manager_admin_evidence_delivery = await service.create_signed_url(
+            manager_principal,
+            admin_only_asset.id,
+        )
+        assert "expires_at=" in manager_admin_evidence_delivery.url
+        with pytest.raises(MediaForbiddenError):
+            await service.create_signed_url(manager_principal, unlinked_asset.id)
 
         with pytest.raises(MediaForbiddenError):
             await service.create_signed_url(

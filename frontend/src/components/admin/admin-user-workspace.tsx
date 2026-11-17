@@ -9,13 +9,20 @@ import {
   Users,
 } from "lucide-react";
 import { type FormEvent, useState } from "react";
+import Link from "next/link";
 
 import {
   adminUsersApi,
   auditApi,
   ApiError,
+  nominationArchiveApi,
   staffInvitationsApi,
 } from "@/lib/api/client";
+import {
+  archiveRecordPath,
+  archiveStatusLabel,
+} from "@/components/admin/nomination-archive";
+import { displayCnsDossierCode } from "@/lib/brand/identifiers";
 import type {
   AdminUser,
   AdminUserStatus,
@@ -118,6 +125,7 @@ export function AdminUserWorkspace() {
   );
   const [target, setTarget] = useState<AdminUser | null>(null);
   const [detailUser, setDetailUser] = useState<AdminUser | null>(null);
+  const [dossierPage, setDossierPage] = useState(1);
   const [pendingExemptionChange, setPendingExemptionChange] = useState<
     boolean | null
   >(null);
@@ -133,6 +141,8 @@ export function AdminUserWorkspace() {
   const canReadAudit =
     authUser?.roles.includes("SUPER_ADMIN") === true ||
     (authUser?.permissions?.includes("audit.read") ?? false);
+  const canReadDossierArchive =
+    authUser?.roles.includes("SUPER_ADMIN") === true;
   const users = useQuery({
     queryKey: ["admin", "users", page, search, status, sortBy],
     queryFn: () =>
@@ -149,6 +159,16 @@ export function AdminUserWorkspace() {
     queryKey: ["admin", "user", detailUser?.id],
     queryFn: () => adminUsersApi.detail(detailUser!.id),
     enabled: detailUser !== null,
+  });
+  const accountDossiers = useQuery({
+    queryKey: ["admin", "user-dossiers", detailUser?.id, dossierPage],
+    queryFn: () =>
+      nominationArchiveApi.list({
+        owner_user_id: detailUser!.id,
+        page: String(dossierPage),
+        page_size: "25",
+      }),
+    enabled: detailUser !== null && canReadDossierArchive,
   });
   const userHistory = useQuery({
     queryKey: ["admin", "audit", "user", detailUser?.id],
@@ -218,6 +238,11 @@ export function AdminUserWorkspace() {
   const pageCount = Math.max(1, Math.ceil(total / 20));
   const displayedUser = selectedUser.data ?? detailUser;
   const historyEntries = userHistory.data?.data ?? [];
+
+  function openUserDetails(user: AdminUser) {
+    setDossierPage(1);
+    setDetailUser(user);
+  }
 
   function submitSearch(event: FormEvent) {
     event.preventDefault();
@@ -468,7 +493,7 @@ export function AdminUserWorkspace() {
                       <div className="flex justify-end gap-2">
                         <button
                           className="min-h-10 rounded-xl border border-[var(--theme-border)] px-3 text-sm font-semibold text-[var(--theme-text)]"
-                          onClick={() => setDetailUser(user)}
+                          onClick={() => openUserDetails(user)}
                           type="button"
                         >
                           Xem chi tiết
@@ -527,7 +552,7 @@ export function AdminUserWorkspace() {
                 <div className="mt-4 flex flex-wrap gap-2">
                   <button
                     className="min-h-11 rounded-xl border border-[var(--theme-border)] px-3 text-sm font-semibold text-[var(--theme-text)]"
-                    onClick={() => setDetailUser(user)}
+                    onClick={() => openUserDetails(user)}
                     type="button"
                   >
                     Xem chi tiết
@@ -671,6 +696,124 @@ export function AdminUserWorkspace() {
                     ? "Tài khoản này có cờ TEST riêng. Quyền miễn phí nộp bên dưới chỉ áp dụng cho phí nộp hồ sơ."
                     : "Quyền miễn phí nộp bên dưới không đổi phân loại tài khoản, lịch sử hoặc thao tác ví."}
                 </p>
+                {canReadDossierArchive ? (
+                  <section
+                    aria-labelledby="user-dossiers-title"
+                    className="space-y-3"
+                  >
+                    <div className="flex flex-wrap items-baseline justify-between gap-2">
+                      <h3 className="font-bold" id="user-dossiers-title">
+                        Hồ sơ đề cử của tài khoản
+                      </h3>
+                      <span className="text-xs text-[var(--theme-muted)]">
+                        {accountDossiers.data?.meta.total ?? 0} hồ sơ
+                      </span>
+                    </div>
+                    {accountDossiers.isPending ? (
+                      <p aria-busy="true" className="text-sm" role="status">
+                        Đang tải hồ sơ đề cử…
+                      </p>
+                    ) : accountDossiers.isError ? (
+                      <div className="space-y-2 text-sm" role="alert">
+                        <p>Không thể tải hồ sơ đề cử của tài khoản.</p>
+                        <button
+                          className="min-h-11 rounded-xl border border-[var(--theme-border)] px-3 font-semibold"
+                          onClick={() => void accountDossiers.refetch()}
+                          type="button"
+                        >
+                          Thử tải lại
+                        </button>
+                      </div>
+                    ) : (accountDossiers.data?.data.length ?? 0) === 0 ? (
+                      <p className="rounded-xl border border-[var(--theme-border)] p-3 text-sm text-[var(--theme-muted)]">
+                        Chưa có hồ sơ đề cử được ghi nhận cho tài khoản này.
+                      </p>
+                    ) : (
+                      <>
+                        <ul className="divide-y divide-[var(--theme-border)] rounded-xl border border-[var(--theme-border)] px-3">
+                          {accountDossiers.data!.data.map((dossier) => (
+                            <li className="space-y-2 py-3" key={dossier.id}>
+                              <p className="font-semibold">{dossier.title}</p>
+                              <p className="break-all text-xs text-[var(--theme-muted)]">
+                                {displayCnsDossierCode(dossier.code)} ·{" "}
+                                {dossier.source === "CURRENT"
+                                  ? "Hồ sơ mới"
+                                  : "Hồ sơ lịch sử"}
+                                {dossier.versionNo != null
+                                  ? ` · Phiên bản ${dossier.versionNo}`
+                                  : ""}
+                              </p>
+                              <p className="text-xs">
+                                {archiveStatusLabel(dossier.businessStatus)} ·
+                                Ghi nhận {formatDate(dossier.recordedAt)} ·{" "}
+                                {dossier.documentCount} tài liệu,{" "}
+                                {dossier.imageCount} ảnh, {dossier.videoCount}{" "}
+                                video, {dossier.certificateCount} chứng nhận
+                              </p>
+                              <Link
+                                className="inline-flex min-h-11 items-center font-semibold text-[var(--theme-accent)] underline underline-offset-2"
+                                href={archiveRecordPath(
+                                  dossier.source,
+                                  dossier.id,
+                                )}
+                              >
+                                Xem bộ hồ sơ
+                              </Link>
+                            </li>
+                          ))}
+                        </ul>
+                        {(accountDossiers.data?.meta.total ?? 0) > 25 ? (
+                          <div className="flex items-center justify-between gap-3">
+                            <p className="text-xs text-[var(--theme-muted)]">
+                              Trang {dossierPage} /{" "}
+                              {Math.ceil(
+                                (accountDossiers.data?.meta.total ?? 0) / 25,
+                              )}
+                            </p>
+                            <div className="flex gap-2">
+                              <button
+                                aria-label="Hồ sơ trước"
+                                className="grid size-11 place-items-center rounded-xl border border-[var(--theme-border)] disabled:opacity-50"
+                                disabled={
+                                  dossierPage <= 1 || accountDossiers.isFetching
+                                }
+                                onClick={() =>
+                                  setDossierPage((current) => current - 1)
+                                }
+                                type="button"
+                              >
+                                <ChevronLeft
+                                  aria-hidden="true"
+                                  className="size-4"
+                                />
+                              </button>
+                              <button
+                                aria-label="Hồ sơ tiếp"
+                                className="grid size-11 place-items-center rounded-xl border border-[var(--theme-border)] disabled:opacity-50"
+                                disabled={
+                                  dossierPage >=
+                                    Math.ceil(
+                                      (accountDossiers.data?.meta.total ?? 0) /
+                                        25,
+                                    ) || accountDossiers.isFetching
+                                }
+                                onClick={() =>
+                                  setDossierPage((current) => current + 1)
+                                }
+                                type="button"
+                              >
+                                <ChevronRight
+                                  aria-hidden="true"
+                                  className="size-4"
+                                />
+                              </button>
+                            </div>
+                          </div>
+                        ) : null}
+                      </>
+                    )}
+                  </section>
+                ) : null}
                 {canManageTestAccounts &&
                 displayedUser.roles.length === 1 &&
                 displayedUser.roles[0] === "USER" ? (

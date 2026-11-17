@@ -5,7 +5,12 @@ import { describe, expect, it, vi } from "vitest";
 
 import { AdminUserWorkspace } from "@/components/admin/admin-user-workspace";
 import { AuthUserProvider } from "@/lib/auth/user-context";
-import { adminUsersApi, auditApi, staffInvitationsApi } from "@/lib/api/client";
+import {
+  adminUsersApi,
+  auditApi,
+  nominationArchiveApi,
+  staffInvitationsApi,
+} from "@/lib/api/client";
 
 vi.mock("@/lib/api/client", () => ({
   adminUsersApi: {
@@ -15,6 +20,7 @@ vi.mock("@/lib/api/client", () => ({
     setSubmissionFeeTestExemption: vi.fn(),
   },
   auditApi: { list: vi.fn() },
+  nominationArchiveApi: { list: vi.fn() },
   staffInvitationsApi: { createTestApplicant: vi.fn() },
   ApiError: class extends Error {},
 }));
@@ -89,6 +95,36 @@ describe("AdminUserWorkspace", () => {
       data: [],
       meta: { request_id: "audit-1", page: 1, pageSize: 20, total: 0 },
     });
+    vi.mocked(nominationArchiveApi.list).mockResolvedValue({
+      success: true,
+      data: [
+        {
+          id: "dossier-1",
+          source: "CURRENT",
+          code: "CNS-2026-001",
+          title: "Hồ sơ của An",
+          subject: "an@example.com",
+          ownerUserId: "user-1",
+          ownerName: "Nguyen Van An",
+          ownerEmail: "an@example.com",
+          year: 2026,
+          categoryId: "category-1",
+          categoryName: "Văn hóa",
+          recordedAt: "2026-08-20T09:00:00Z",
+          versionNo: 1,
+          businessStatus: "SUBMITTED",
+          publicationStatus: null,
+          archiveStatus: null,
+          documentCount: 2,
+          imageCount: 1,
+          videoCount: 0,
+          certificateCount: 0,
+          certificateReference: null,
+          updatedAt: "2026-08-20T09:00:00Z",
+        },
+      ],
+      meta: { request_id: "archive-1", page: 1, pageSize: 25, total: 1 },
+    });
     vi.mocked(adminUsersApi.changeStatus).mockResolvedValue(undefined as never);
     vi.mocked(adminUsersApi.setSubmissionFeeTestExemption).mockResolvedValue({
       id: "user-1",
@@ -132,6 +168,15 @@ describe("AdminUserWorkspace", () => {
     expect(
       await screen.findByRole("dialog", { name: "Chi tiết tài khoản" }),
     ).toBeTruthy();
+    expect(await screen.findByText("Hồ sơ của An")).toBeTruthy();
+    expect(
+      screen.getByRole("link", { name: "Xem bộ hồ sơ" }).getAttribute("href"),
+    ).toBe("/admin/nomination-records/CURRENT/dossier-1");
+    expect(nominationArchiveApi.list).toHaveBeenCalledWith({
+      owner_user_id: "user-1",
+      page: "1",
+      page_size: "25",
+    });
     expect(
       await screen.findByText(/Tài khoản này có cờ TEST riêng/),
     ).toBeTruthy();

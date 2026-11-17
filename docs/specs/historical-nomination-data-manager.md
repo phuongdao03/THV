@@ -42,12 +42,16 @@ transactions during this task.
 
 ### Boundaries and validation
 
-The user separately approved SUPER_ADMIN-only read access across completed and
+The user initially approved SUPER_ADMIN-only read access across completed and
 archived CURRENT/LEGACY records, plus navigation to the existing publication
-editor for the exact work. Implemented archive routes are read-only; other roles
-retain existing scopes. No approval extends to source restoration, new decisions,
-issuance, schema changes or production operations. See the linked handoff for
-implementation evidence and remaining operational gaps.
+editor for the exact work. On 2026-11-17 the user extended the read-only archive
+scope to DATA_MANAGER, whose existing `historical.records.read` capability
+authorizes access to the same archive sections and only media assets linked to
+those retained records/certificates. DATA_MANAGER gains no archive mutation,
+decision, issuance, or restore controls. Account-administration dossier lists
+remain SUPER_ADMIN-only. No approval extends to schema changes or production
+operations. See the linked handoff for implementation evidence and remaining
+operational gaps.
 
 Use current module ownership and DTO conventions; no duplicate source records
 or copied files. Source: `backend/app/modules/`, frontend feature components and

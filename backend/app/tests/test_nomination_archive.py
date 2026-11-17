@@ -1,16 +1,18 @@
 import asyncio
 from collections.abc import AsyncIterator
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from functools import partial
 from uuid import uuid4
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.db.base import Base
 from app.db.session import get_session
 from app.main import app, create_application
+from app.modules.audit.models import AuditLog
 from app.modules.auth.dependencies import get_current_principal
 from app.modules.auth.models import User, UserStatus
 from app.modules.auth.session_service import AuthPrincipal
@@ -19,6 +21,14 @@ from app.modules.certificate_archives.models import (
     CertificateArchive,
     CertificateArchivePage,
     CertificateArchiveRevision,
+)
+from app.modules.council.models import (
+    CouncilCase,
+    CouncilCaseDecision,
+    CouncilSession,
+    CouncilSessionStatus,
+    CouncilVote,
+    CouncilVoteChoice,
 )
 from app.modules.dossiers.archive_service import NominationArchiveService
 from app.modules.dossiers.models import (
@@ -44,6 +54,7 @@ from app.modules.public.models import PublicationStatus, PublicWork
 from app.modules.reviews.media_access import ReviewMediaAccessPolicy
 from app.modules.reviews.models import Review, ReviewAssignment, ReviewAssignmentStatus
 from app.modules.supplements.models import SupplementRequest, SupplementResponse
+from app.modules.users.models import UserProfile
 
 
 def test_archive_retains_issued_certificate_versions_and_scanned_revisions() -> None:
@@ -115,7 +126,18 @@ def test_archive_retains_issued_certificate_versions_and_scanned_revisions() -> 
                 bytes=2048,
                 status=MediaStatus.ACTIVE,
             )
-            session.add_all([version, media, pdf, work])
+            unlinked_media = MediaAsset(
+                id=uuid4(),
+                owner_user_id=user.id,
+                cloudinary_public_id="PRIVATE-UNLINKED-ASSET",
+                resource_type="raw",
+                access_mode="authenticated",
+                original_filename="unlinked.pdf",
+                mime_type="application/pdf",
+                bytes=1024,
+                status=MediaStatus.ACTIVE,
+            )
+            session.add_all([version, media, pdf, unlinked_media, work])
             await session.flush()
             certificate = Certificate(
                 id=uuid4(),
@@ -181,7 +203,17 @@ def test_archive_retains_issued_certificate_versions_and_scanned_revisions() -> 
             async with session.begin():
                 assert await policy.can_deliver(admin, media.id)
                 assert await policy.can_deliver(admin, pdf.id)
-                for role in ("DATA_MANAGER", "REVIEWER", "PUBLIC_USER"):
+                manager = AuthPrincipal(
+                    user_id=uuid4(),
+                    session_id=uuid4(),
+                    email="manager@example.test",
+                    roles=("DATA_MANAGER",),
+                    permissions=("historical.records.read",),
+                )
+                assert await policy.can_deliver(manager, media.id)
+                assert await policy.can_deliver(manager, pdf.id)
+                assert not await policy.can_deliver(manager, unlinked_media.id)
+                for role in ("REVIEWER", "PUBLIC_USER"):
                     reader = AuthPrincipal(
                         user_id=uuid4(),
                         session_id=uuid4(),
@@ -199,6 +231,168 @@ def test_archive_retains_issued_certificate_versions_and_scanned_revisions() -> 
             assert total == 1 and retained[0].facts["metadata_json"] == {
                 "title": "Frozen certificate title"
             }
+        await engine.dispose()
+
+    asyncio.run(scenario())
+
+
+def test_archive_list_includes_owner_date_and_retained_file_counts() -> None:
+    async def scenario() -> None:
+        engine = create_async_engine("sqlite+aiosqlite://")
+        async with engine.begin() as connection:
+            await connection.run_sync(Base.metadata.create_all)
+        factory = async_sessionmaker(engine, expire_on_commit=False)
+        owner = User(id=uuid4(), email="owner@example.test", status=UserStatus.ACTIVE)
+        admin = AuthPrincipal(
+            user_id=uuid4(),
+            session_id=uuid4(),
+            email="admin@example.test",
+            roles=("SUPER_ADMIN",),
+        )
+        category = Category(id=uuid4(), code="archive-list", name="Archive list")
+        recorded_at = datetime(2026, 11, 16, 10, tzinfo=UTC)
+        dossier = Dossier(
+            id=uuid4(),
+            code="CNS-ARCHIVE-LIST",
+            title="Archive list source",
+            owner_user_id=owner.id,
+            category_id=category.id,
+            current_version_no=1,
+            submitted_at=recorded_at,
+            created_at=recorded_at,
+            updated_at=recorded_at,
+        )
+        profile = UserProfile(user_id=owner.id, full_name="Nguyen Van An")
+        media_items = [
+            MediaAsset(
+                id=uuid4(),
+                owner_user_id=owner.id,
+                cloudinary_public_id=f"archive-list-{index}",
+                resource_type="raw" if mime_type == "application/pdf" else "image",
+                access_mode="authenticated",
+                original_filename=filename,
+                mime_type=mime_type,
+                bytes=1_024,
+                status=MediaStatus.ACTIVE,
+            )
+            for index, (filename, mime_type) in enumerate(
+                (
+                    ("photo.png", "image/png"),
+                    ("interview.mp4", "video/mp4"),
+                    ("submission.pdf", "application/pdf"),
+                )
+            )
+        ]
+        version = DossierVersion(
+            id=uuid4(),
+            dossier_id=dossier.id,
+            version_no=1,
+            snapshot_json={"title": dossier.title},
+            canonical_hash="d" * 64,
+            submitted_by=owner.id,
+            submitted_at=recorded_at,
+        )
+        evidences = [
+            DossierEvidence(
+                id=uuid4(),
+                dossier_id=dossier.id,
+                dossier_version_id=version.id,
+                media_asset_id=media.id,
+                evidence_type="SOURCE",
+                title=media.original_filename,
+            )
+            for media in media_items
+        ]
+        certificate = Certificate(
+            id=uuid4(),
+            dossier_id=dossier.id,
+            certificate_number="THV-ARCHIVE-LIST",
+            current_version_no=1,
+            issued_at=recorded_at,
+            public_token_hash="e" * 64,
+            qr_payload="unused-test-payload",
+        )
+        async with factory() as session:
+            session.add_all(
+                [
+                    owner,
+                    category,
+                    dossier,
+                    profile,
+                    version,
+                    certificate,
+                    *media_items,
+                    *evidences,
+                ]
+            )
+            await session.commit()
+            records, total = await NominationArchiveService(session).list_records(
+                admin,
+                owner_user_id=owner.id,
+                recorded_from=date(2026, 11, 16),
+                recorded_to=date(2026, 11, 16),
+            )
+            assert total == 1
+            record = records[0]
+            assert record.owner_user_id == owner.id
+            assert record.owner_name == "Nguyen Van An"
+            assert record.category_name == "Archive list"
+            assert record.recorded_at.replace(tzinfo=UTC) == recorded_at
+            assert record.version_no == 1
+            assert record.document_count == 1
+            assert record.image_count == 1
+            assert record.video_count == 1
+            assert record.certificate_count == 1
+            assert record.certificate_reference == "THV-ARCHIVE-LIST"
+
+            archive_service = NominationArchiveService(session)
+            await archive_service.get_record(admin, "CURRENT", dossier.id)
+            await archive_service.section(admin, "CURRENT", dossier.id, "documents")
+            list_audit = await session.scalar(
+                select(AuditLog).where(
+                    AuditLog.action == "admin.nomination_archive.list_viewed",
+                    AuditLog.resource_type == "nomination_archive",
+                    AuditLog.resource_id == "list",
+                )
+            )
+            assert list_audit is not None
+            assert list_audit.after_json == {
+                "page": 1,
+                "page_size": 25,
+                "source": None,
+                "owner_filtered": True,
+                "recorded_from": "2026-11-16",
+                "recorded_to": "2026-11-16",
+                "business_status": None,
+                "publication_status": None,
+                "archive_status": None,
+            }
+            audit_rows = (
+                await session.execute(
+                    select(AuditLog.action, AuditLog.after_json).where(
+                        AuditLog.resource_id == str(dossier.id)
+                    )
+                )
+            ).all()
+            assert {row.action for row in audit_rows} == {
+                "admin.nomination_archive.record_viewed",
+                "admin.nomination_archive.section_viewed",
+            }
+            assert all(
+                row.after_json == {"source": "CURRENT"}
+                or row.after_json == {"source": "CURRENT", "section": "documents"}
+                for row in audit_rows
+            )
+            await session.commit()
+
+            outside_range, outside_total = await NominationArchiveService(
+                session
+            ).list_records(
+                admin,
+                owner_user_id=owner.id,
+                recorded_from=date(2026, 11, 17),
+            )
+            assert outside_total == 0 and outside_range == []
         await engine.dispose()
 
     asyncio.run(scenario())
@@ -243,7 +437,15 @@ def test_archive_preserves_completed_sources_and_owner_boundaries() -> None:
                 archive_reason="Completed historical import",
                 created_by_user_id=user.id,
             )
-            session.add_all([category, user, current, legacy])
+            session.add_all(
+                [
+                    category,
+                    user,
+                    current,
+                    legacy,
+                    UserProfile(user_id=user.id, full_name="Archive Admin"),
+                ]
+            )
             await session.flush()
             media = MediaAsset(
                 id=uuid4(),
@@ -292,6 +494,21 @@ def test_archive_preserves_completed_sources_and_owner_boundaries() -> None:
                 submitted_by=user.id,
                 submitted_at=datetime.now(UTC),
             )
+            council_session = CouncilSession(
+                id=uuid4(),
+                code="ARCHIVE-COUNCIL-001",
+                title="Archive decision session",
+                scheduled_at=datetime.now(UTC),
+                status=CouncilSessionStatus.CLOSED,
+                quorum_required=1,
+            )
+            council_case = CouncilCase(
+                id=uuid4(),
+                session_id=council_session.id,
+                dossier_id=current.id,
+                dossier_version_id=version.id,
+                decision=CouncilCaseDecision.REJECT,
+            )
             work = PublicWork(
                 id=uuid4(),
                 dossier_id=current.id,
@@ -302,7 +519,7 @@ def test_archive_preserves_completed_sources_and_owner_boundaries() -> None:
                 short_description="A public presentation only.",
                 show_certificate=False,
             )
-            session.add_all([media, version, work])
+            session.add_all([media, version, work, council_session, council_case])
             await session.flush()
             assignment = ReviewAssignment(
                 id=uuid4(),
@@ -349,6 +566,14 @@ def test_archive_preserves_completed_sources_and_owner_boundaries() -> None:
                         reason_code="TEST",
                         note="Recorded decision",
                     ),
+                    CouncilVote(
+                        id=uuid4(),
+                        case_id=council_case.id,
+                        member_user_id=user.id,
+                        choice=CouncilVoteChoice.REJECT,
+                        reason="Evidence did not meet the recorded criteria.",
+                        voted_at=datetime.now(UTC),
+                    ),
                 ]
             )
             await session.flush()
@@ -378,6 +603,8 @@ def test_archive_preserves_completed_sources_and_owner_boundaries() -> None:
             found, total = await service.list_records(admin, query="THV-2020-OLD")
             assert total == 1 and found[0].id == current.id
             for role in ("PUBLIC_USER", "DATA_MANAGER", "REVIEWER"):
+                if role == "DATA_MANAGER":
+                    continue
                 principal = AuthPrincipal(
                     user_id=user.id,
                     session_id=uuid4(),
@@ -387,6 +614,16 @@ def test_archive_preserves_completed_sources_and_owner_boundaries() -> None:
                 )
                 with pytest.raises(HistoricalNominationForbiddenError):
                     await service.list_records(principal)
+            manager = AuthPrincipal(
+                user_id=user.id,
+                session_id=uuid4(),
+                email=user.email,
+                roles=("DATA_MANAGER",),
+                permissions=("historical.records.read",),
+            )
+            managed_rows, managed_total = await service.list_records(manager)
+            assert managed_total == 2
+            assert {row.source for row in managed_rows} == {"CURRENT", "LEGACY"}
             detail = await service.get_record(admin, "LEGACY", legacy.id)
             assert detail.archive_status == "ARCHIVED"
             legacy_versions, version_count = await service.section(
@@ -415,7 +652,7 @@ def test_archive_preserves_completed_sources_and_owner_boundaries() -> None:
                     )
                     assert "PRIVATE-STORAGE-KEY" not in "".join(
                         entry.model_dump_json() for entry in entries
-                    )
+                    ), f"{source}/{section} leaked a storage key"
             documents, total = await service.section(
                 admin, "CURRENT", current.id, "documents"
             )
@@ -436,7 +673,21 @@ def test_archive_preserves_completed_sources_and_owner_boundaries() -> None:
             decisions, total = await service.section(
                 admin, "CURRENT", current.id, "decisions"
             )
-            assert total == 1 and decisions[0].status == "REJECTED"
+            assert total == 3
+            assert any(
+                entry.status == "REJECTED"
+                and entry.facts["reason"] == "TEST"
+                and entry.actor == "Archive Admin"
+                for entry in decisions
+            )
+            assert any(
+                entry.title == "Phiếu biểu quyết hội đồng"
+                and entry.status == "REJECT"
+                and entry.facts["reason"]
+                == "Evidence did not meet the recorded criteria."
+                and entry.actor == "Archive Admin"
+                for entry in decisions
+            )
             supplements, total = await service.section(
                 admin, "CURRENT", current.id, "supplements"
             )
@@ -452,11 +703,21 @@ def test_archive_preserves_completed_sources_and_owner_boundaries() -> None:
             )
             assert total == 1 and retained[0].media_id == documents[0].media_id
             for role in ("PUBLIC_USER", "DATA_MANAGER", "REVIEWER"):
+                if role == "DATA_MANAGER":
+                    continue
                 principal = AuthPrincipal(
                     user_id=user.id, session_id=uuid4(), email=user.email, roles=(role,)
                 )
                 with pytest.raises(HistoricalNominationForbiddenError):
                     await service.section(principal, "CURRENT", current.id, "documents")
+            manager_documents, manager_document_count = await service.section(
+                manager, "CURRENT", current.id, "documents"
+            )
+            assert manager_document_count == 1
+            assert manager_documents[0].media_id == media.id
+            policy = ReviewMediaAccessPolicy(session)
+            async with session.begin():
+                assert await policy.can_deliver(manager, media.id)
 
             async def test_session() -> AsyncIterator[AsyncSession]:
                 async with factory() as request_session:
@@ -475,6 +736,15 @@ def test_archive_preserves_completed_sources_and_owner_boundaries() -> None:
                         listed.status_code == 200
                         and listed.json()["meta"]["total"] == 2
                     )
+                    owner_listed = await client.get(
+                        "/api/v1/admin/nomination-records",
+                        params={"owner_user_id": str(user.id)},
+                    )
+                    assert (
+                        owner_listed.status_code == 200
+                        and owner_listed.json()["meta"]["total"] == 1
+                        and owner_listed.json()["data"][0]["id"] == str(current.id)
+                    )
                     for section in sections:
                         response = await client.get(f"{path}/{section}")
                         assert response.status_code == 200, section
@@ -485,6 +755,8 @@ def test_archive_preserves_completed_sources_and_owner_boundaries() -> None:
                         )
                     ).status_code == 404
                     for role in ("PUBLIC_USER", "DATA_MANAGER", "REVIEWER"):
+                        if role == "DATA_MANAGER":
+                            continue
                         principal = AuthPrincipal(
                             user_id=user.id,
                             session_id=uuid4(),
@@ -502,6 +774,21 @@ def test_archive_preserves_completed_sources_and_owner_boundaries() -> None:
                         assert (
                             await client.get("/api/v1/admin/nomination-records")
                         ).status_code == 403
+                    manager = AuthPrincipal(
+                        user_id=user.id,
+                        session_id=uuid4(),
+                        email=user.email,
+                        roles=("DATA_MANAGER",),
+                        permissions=("historical.records.read",),
+                    )
+                    test_app.dependency_overrides[get_current_principal] = partial(
+                        lambda value: value, manager
+                    )
+                    manager_list = await client.get("/api/v1/admin/nomination-records")
+                    manager_documents = await client.get(f"{path}/documents")
+                    assert manager_list.status_code == 200
+                    assert manager_list.json()["meta"]["total"] == 2
+                    assert manager_documents.status_code == 200
             finally:
                 test_app.dependency_overrides.clear()
         await engine.dispose()

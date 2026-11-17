@@ -35,7 +35,7 @@ describe("DashboardNavigation work-allocation migration", () => {
     expect(screen.getByRole("link", { name: "Duyệt tăng ca" })).toBeDefined();
   });
 
-  it("keeps data-manager navigation limited to its own workspace", () => {
+  it("adds archive access to data-manager navigation without admin operations", () => {
     const view = render(
       <DashboardNavigation
         area="admin"
@@ -52,6 +52,9 @@ describe("DashboardNavigation work-allocation migration", () => {
         .getByRole("link", { name: "Nội dung công bố" })
         .getAttribute("href"),
     ).toBe("/data-manager/content");
+    expect(
+      view.container.querySelector('a[href="/admin/nomination-records"]'),
+    ).not.toBeNull();
     expect(view.container.querySelector('a[href="/admin"]')).toBeNull();
     expect(
       view.container.querySelector('a[href="/admin/payments"]'),

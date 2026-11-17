@@ -5,11 +5,63 @@ Implemented from the
 remains excluded. No production database migration, deployment, or commit was
 made.
 
+## 2026-11-17: DATA_MANAGER archive access
+
+The user extended read-only access to the unified CURRENT/LEGACY archive to
+DATA_MANAGER. Both archive routes and navigation now accept this role, and the
+backend checks the existing `historical.records.read` capability. The role can
+read all archive sections and request signed delivery only for media referenced
+by dossier evidence, historical nominations, issued certificate versions, or
+certificate scan pages. No mutation, decision, issuance, or restore access was
+added. The account-administration dossier list remains SUPER_ADMIN-only; no
+migration was needed because the DATA_MANAGER role already has the capability.
+
+Validation for this access change: all 3 archive backend tests, the media
+delivery integration test, and all 26 focused route/navigation tests pass.
+Linked-media delivery is covered for
+dossier files, issued certificate PDFs and scan pages; unlinked assets remain
+denied.
+
+## 2026-11-17: archive inventory and retention safeguards
+
+Expanded the existing SUPER_ADMIN archive so the unified CURRENT/LEGACY index
+shows owner, category, recorded date, source version, document/image/video
+counts, and certificate reference. Added owner and recorded-date filters plus
+date/version and file-version details on the list and dossier views. The
+SUPER_ADMIN account workspace now lists that account's dossiers with status,
+date, and file summaries. Council vote outcomes and actors display readable
+labels instead of raw enum values or user IDs.
+
+Archive sections now include uploader/version context for files and council
+vote reasons alongside final decisions and status transitions. List reads are
+audited without recording search text or owner IDs. Generic media deletion
+refuses assets referenced by dossier evidence, historical records, issued or
+scanned certificates, or public work. Link creation locks assets before
+validation to serialize against deletion. No schema or migration change.
+
+This extends the archive API/UI already documented below; it does not assert a
+production object-store inventory or repair existing missing/orphaned objects.
+No production data or storage was inspected.
+
+Validation for this update: 22 focused backend tests passed; the expanded
+archive test also passed on its isolated rerun. Root structure tests (10), the
+full frontend suite (259 files / 1,150 tests before the final label assertion),
+and the final focused archive/account UI tests (2 files / 7 tests) passed.
+Repository lint, backend Ruff, and direct frontend TypeScript checks passed.
+The broader backend run (excluding the local `openpyxl`-dependent import parser)
+reported 1,414 passed and 3 skipped, with one archive assertion failing only in
+that run; its focused reruns passed, so the broader result is not recorded as a
+clean pass. Desktop Chromium E2E passed the archive/account flow at 375, 390,
+768, 1024, and 1440 px and saved ignored evidence under `frontend/test-results/`.
+Mobile E2E could not complete because local Next startup stopped at its security
+vulnerability notice. No migration, commit, deployment, or production operation.
+
 ## 2026-11-17: unified archive audit and safe terminology changes
 
 The MASTER TASK P0 brief supersedes the previous push instruction: do not push,
 merge, or deploy this work. Existing uncommitted UX evidence images are unrelated
-and must be preserved. This revision does not claim the unified archive is done.
+and must be preserved. At that stage, the unified archive work described below
+was still in progress.
 
 ### Delivered safe UI slice
 
@@ -70,9 +122,11 @@ navigation does not save or publish anything.
 Archive projections retain source/editorial versions separately, exact review
 snapshots, supplement responses, final transitions/council decisions, issued
 certificate lineage, scanned revisions and audit history. Missing asset metadata
-does not remove the inventory entry. Only actual SUPER_ADMIN receives the added
-signed-delivery read grant for issued PDFs and scan pages. Owner version history
-also reuses the existing owner-scoped file viewer without a new permission.
+does not remove the inventory entry. At initial release, SUPER_ADMIN received
+signed-delivery access for issued PDFs and scan pages; the later DATA_MANAGER
+scope above adds this only for media linked to archived dossier or certificate
+records. Owner version history also reuses the existing owner-scoped file viewer
+without a new permission.
 
 Validation this revision: 8 focused backend tests pass. Root structure tests
 (10) and the complete frontend suite (259 files / 1,149 tests) pass; the final
@@ -94,8 +148,8 @@ Full backend collection is blocked by missing local `openpyxl`; no passing full
 backend result is claimed. No commit,
 push, merge, production migration or deployment was performed for this slice.
 
-Tests must cover forbidden PUBLIC/USER/REVIEWER/DATA_MANAGER archive reads,
-post-decision reads, old versions and supplements, missing storage objects,
+Tests must cover allowed DATA_MANAGER read-only archive access, forbidden
+PUBLIC/USER/REVIEWER reads, post-decision reads, old versions and supplements, missing storage objects,
 published/hidden preservation, certificate lineage, and desktop/mobile flows.
 Archive/restore CURRENT state, final decision immutability changes, issuance,
 and any backfill/migration need separate proposals if the audit finds gaps.

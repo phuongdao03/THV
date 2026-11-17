@@ -35,12 +35,17 @@ class PublicMediaRepository:
             )
         return cast(PublicWork | None, await self._session.scalar(statement))
 
-    async def get_asset(self, media_id: UUID) -> MediaAsset | None:
+    async def get_asset(
+        self, media_id: UUID, *, for_update: bool = False
+    ) -> MediaAsset | None:
+        statement = select(MediaAsset).where(MediaAsset.id == media_id)
+        if for_update:
+            statement = statement.with_for_update().execution_options(
+                populate_existing=True
+            )
         return cast(
             MediaAsset | None,
-            await self._session.scalar(
-                select(MediaAsset).where(MediaAsset.id == media_id)
-            ),
+            await self._session.scalar(statement),
         )
 
     async def get_relation(

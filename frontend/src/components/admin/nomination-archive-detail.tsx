@@ -201,6 +201,19 @@ export function NominationArchiveDetail({
         <p className="break-all text-sm">
           {displayCnsDossierCode(record.data.code)} · Năm{" "}
           {record.data.year ?? "chưa ghi nhận"}
+          {record.data.versionNo != null
+            ? ` · Phiên bản ${record.data.versionNo}`
+            : ""}
+        </p>
+        <p className="break-all text-sm">
+          Người nộp:{" "}
+          {record.data.ownerName ||
+            record.data.ownerEmail ||
+            record.data.subject ||
+            "Không ghi nhận"}
+          {record.data.ownerEmail && record.data.ownerName
+            ? ` · ${record.data.ownerEmail}`
+            : ""}
         </p>
         <p className="text-sm">
           Nghiệp vụ: {archiveStatusLabel(record.data.businessStatus)} · Công bố:{" "}
@@ -210,7 +223,8 @@ export function NominationArchiveDetail({
             : ""}
         </p>
         <p className="text-xs text-[var(--theme-muted)]">
-          Cập nhật {date(record.data.updatedAt)}
+          Ghi nhận {date(record.data.recordedAt)} · Cập nhật{" "}
+          {date(record.data.updatedAt)}
         </p>
       </header>
       <label className="block text-sm lg:hidden">
@@ -302,7 +316,9 @@ export function NominationArchiveDetail({
                 ) : null}
                 {entry.versionId ? (
                   <p className="break-all text-xs">
-                    Phiên bản nguồn: {entry.versionId}
+                    {"Phiên bản nguồn "}
+                    {entry.versionNo != null ? `${entry.versionNo}: ` : ""}
+                    {entry.versionId}
                   </p>
                 ) : null}
                 {entry.bytes != null ? (

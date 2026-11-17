@@ -37,6 +37,11 @@ class ReviewMediaAccessPolicy:
         permission="dossier.evidence.read_all",
         compatible_roles=frozenset({"SUPER_ADMIN"}),
     )
+    DATA_MANAGER_ARCHIVE_DELIVERY = PolicyRequirement(
+        permission="historical.records.read",
+        compatible_roles=frozenset({"DATA_MANAGER"}),
+        allow_super_admin=False,
+    )
 
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
@@ -70,6 +75,19 @@ class ReviewMediaAccessPolicy:
                     select(or_(admin_evidence, historical_evidence, certificate_files))
                 )
             )
+
+        if AuthorizationPolicy.allows_capability(
+            principal,
+            self.DATA_MANAGER_ARCHIVE_DELIVERY,
+        ):
+            archive_assets = or_(
+                exists().where(DossierEvidence.media_asset_id == media_id),
+                exists().where(HistoricalMediaLink.media_asset_id == media_id),
+                exists().where(Certificate.pdf_media_id == media_id),
+                exists().where(CertificateVersion.pdf_media_id == media_id),
+                exists().where(CertificateArchivePage.media_asset_id == media_id),
+            )
+            return bool(await self._session.scalar(select(archive_assets)))
 
         if AuthorizationPolicy.allows_capability(
             principal,
