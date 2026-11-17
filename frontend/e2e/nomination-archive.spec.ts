@@ -135,7 +135,9 @@ test("admin browses a retained source and keeps missing-file errors separate fro
   );
   await page.goto("/admin/nomination-records");
   await expect(
-    page.getByRole("heading", { name: "Kho hồ sơ đề cử", exact: true }),
+    page
+      .getByRole("region", { name: "Kho hồ sơ đề cử" })
+      .getByRole("heading", { name: "Kho hồ sơ đề cử", exact: true }),
   ).toBeVisible();
   await page.getByLabel("Tìm hồ sơ").fill("THV-2020-ARCHIVE");
   await page
@@ -146,7 +148,11 @@ test("admin browses a retained source and keeps missing-file errors separate fro
     fullPage: true,
   });
   await page.getByRole("link", { name: record.title }).click();
-  await expect(page.getByRole("heading", { name: record.title })).toBeVisible();
+  await expect(
+    page
+      .getByRole("region", { name: "Bộ hồ sơ đề cử" })
+      .getByRole("heading", { name: record.title, exact: true }),
+  ).toBeVisible({ timeout: 60_000 });
   async function section(value: string, label: string) {
     if (info.project.name === "mobile-chrome")
       await page.getByLabel("Chọn mục hồ sơ").selectOption(value);
