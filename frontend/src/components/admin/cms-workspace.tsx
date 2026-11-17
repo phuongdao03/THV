@@ -31,7 +31,9 @@ const sections = [
 const inputClass =
   "min-h-11 w-full rounded-xl border border-neutral-200 bg-white px-3 text-sm outline-none transition focus:border-primary-500 focus:ring-2 focus:ring-primary-100";
 
-export function CmsWorkspace() {
+export function CmsWorkspace({
+  initialWorkId,
+}: { initialWorkId?: string } = {}) {
   const [section, setSection] = useState<CmsSection>("publicWorks");
 
   return (
@@ -72,7 +74,12 @@ export function CmsWorkspace() {
         })}
       </nav>
 
-      {section === "publicWorks" ? <PublicWorkEditor /> : null}
+      {section === "publicWorks" ? (
+        <PublicWorkEditor
+          key={initialWorkId}
+          initialSelectedId={initialWorkId}
+        />
+      ) : null}
       {section === "posts" ? <PostManager /> : null}
       {section === "pages" ? <PageManager /> : null}
       {section === "banners" ? <BannerManager /> : null}

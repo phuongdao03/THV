@@ -27,6 +27,7 @@ import {
   DossierStatusBadge,
 } from "@/components/dossiers/dossier-status";
 import { DossierWorkflowTimeline } from "@/components/dossiers/dossier-workflow-timeline";
+import { DossierVersionDocuments } from "@/components/dossiers/dossier-version-documents";
 import { DossierClaimsEditor } from "@/components/dossiers/dossier-claims-editor";
 import { SupplementRequestsPanel } from "@/components/supplements/supplement-requests-panel";
 import { FileUploader } from "@/components/media/file-uploader";
@@ -647,12 +648,18 @@ function SubmittedDossier({
             <p role="alert">Không thể tải phiên bản hồ sơ.</p>
           ) : (
             versions.map((version) => (
-              <p key={version.id} className="py-2 text-sm">
-                Phiên bản {version.versionNo} ·{" "}
-                {version.submittedAt
-                  ? new Date(version.submittedAt).toLocaleString("vi-VN")
-                  : "Chưa nộp chính thức"}
-              </p>
+              <details
+                key={version.id}
+                className="border-t border-[var(--theme-border)] py-2 text-sm"
+              >
+                <summary className="min-h-11 cursor-pointer py-3">
+                  Phiên bản {version.versionNo} ·{" "}
+                  {version.submittedAt
+                    ? new Date(version.submittedAt).toLocaleString("vi-VN")
+                    : "Chưa nộp chính thức"}
+                </summary>
+                <DossierVersionDocuments snapshot={version.snapshotJson} />
+              </details>
             ))
           )}
         </details>
@@ -1533,6 +1540,14 @@ export function DossierWorkspace({
                           "Chờ hoàn tất thanh toán"
                         )}
                       </p>
+                      <details className="mt-3">
+                        <summary className="min-h-11 cursor-pointer py-2 text-sm">
+                          Xem tài liệu thuộc phiên bản
+                        </summary>
+                        <DossierVersionDocuments
+                          snapshot={version.snapshotJson}
+                        />
+                      </details>
                     </div>
                   ))
                 ) : (

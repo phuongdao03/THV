@@ -12,7 +12,7 @@ import {
   ShieldCheck,
   X,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { PrivateDocumentVerification } from "@/components/documents/private-document-verification";
@@ -38,11 +38,14 @@ function isDeliveryFresh(expiresAt: number) {
 export function EvidenceViewer({
   documentRules = [],
   evidences,
+  contextLabel,
 }: {
   documentRules?: DossierDocumentRule[];
   evidences: ReviewEvidenceSnapshot[];
+  contextLabel?: string;
 }) {
   const [activeMediaId, setActiveMediaId] = useState<string | null>(null);
+  const groupId = useId();
   const [preview, setPreview] = useState<{
     evidence: ReviewEvidenceSnapshot;
     url: string;
@@ -115,8 +118,12 @@ export function EvidenceViewer({
     <section className="flex min-w-0 flex-col">
       <div className="py-4">
         <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-[var(--theme-accent)]">
-          <ShieldCheck aria-hidden="true" className="size-4" />
-          Bằng chứng phiên bản đã khóa
+          {contextLabel ? (
+            <FileText aria-hidden="true" className="size-4" />
+          ) : (
+            <ShieldCheck aria-hidden="true" className="size-4" />
+          )}
+          {contextLabel ?? "Bằng chứng phiên bản đã khóa"}
         </p>
         <h2 className="mt-2 text-xl font-bold">
           Tài liệu kiểm chứng ({evidences.length})
@@ -126,13 +133,13 @@ export function EvidenceViewer({
         <div className="order-2 space-y-4">
           {evidenceGroups.map((group) => (
             <section
-              aria-labelledby={`evidence-group-${group.key}`}
+              aria-labelledby={`evidence-group-${groupId}-${group.key}`}
               key={group.key}
             >
               <div className="py-3">
                 <h3
                   className="text-xs font-bold uppercase tracking-[0.1em] text-[var(--theme-muted)]"
-                  id={`evidence-group-${group.key}`}
+                  id={`evidence-group-${groupId}-${group.key}`}
                 >
                   {group.label} · {group.items.length} tệp
                 </h3>
