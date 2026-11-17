@@ -111,6 +111,21 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
+it("keeps stopping work in secondary actions and distinguishes it from saving", async () => {
+  renderDetail();
+  expect(screen.getByRole("button", { name: "Chỉnh sửa hồ sơ" })).toBeTruthy();
+  const menu = screen
+    .getByText("Thao tác khác", { exact: true })
+    .closest("details");
+  expect(menu?.hasAttribute("open")).toBe(false);
+  fireEvent.click(screen.getByText("Thao tác khác", { exact: true }));
+  expect(menu?.hasAttribute("open")).toBe(true);
+  expect(
+    screen.getByRole("button", { name: "Ngừng xử lý hồ sơ" }),
+  ).toBeTruthy();
+  expect(screen.getByText(/Thao tác này không phải lưu thay đổi/)).toBeTruthy();
+});
+
 it("marks completed steps with a visible label and keeps optional empty steps unfinished", async () => {
   renderDetail({ ...record, publicationStatus: "PUBLISHED" });
   const overview = screen.getByRole("region", {

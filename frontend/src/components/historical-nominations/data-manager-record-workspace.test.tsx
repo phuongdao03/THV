@@ -99,12 +99,12 @@ it.each([false, true])(
         <DataManagerRecordWorkspace recordId={record.id} />
       </QueryClientProvider>,
     );
-    fireEvent.click(screen.getByRole("button", { name: "Sửa thông tin" }));
+    fireEvent.click(screen.getByRole("button", { name: "Chỉnh sửa hồ sơ" }));
     await screen.findByRole("heading", { name: "Chỉnh sửa hồ sơ" });
     fireEvent.change(screen.getByDisplayValue(record.title), {
       target: { value: "Tên vừa nhập" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Lưu bản nháp" }));
+    fireEvent.click(screen.getByRole("button", { name: "Lưu thay đổi" }));
     await screen.findByRole("alert");
     expect(api.update).toHaveBeenCalledTimes(sourceChanged ? 1 : 2);
     expect(screen.getByDisplayValue("Tên vừa nhập")).toBeTruthy();
@@ -145,14 +145,15 @@ it("refreshes the record version before opening the edit form", async () => {
     </QueryClientProvider>,
   );
 
-  fireEvent.click(await screen.findByRole("button", { name: "Sửa thông tin" }));
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Chỉnh sửa hồ sơ" }),
+  );
 
   await waitFor(() => expect(api.get).toHaveBeenCalledWith(record.id));
   expect(screen.queryByRole("heading", { name: "Chỉnh sửa hồ sơ" })).toBeNull();
-  expect(screen.getByRole("button", { name: "Sửa thông tin" })).toHaveProperty(
-    "disabled",
-    true,
-  );
+  expect(
+    screen.getByRole("button", { name: "Chỉnh sửa hồ sơ" }),
+  ).toHaveProperty("disabled", true);
   expect(screen.getByRole("status").textContent).toContain(
     "Đang kiểm tra phiên bản hồ sơ mới nhất",
   );
@@ -169,7 +170,7 @@ it("refreshes the record version before opening the edit form", async () => {
     title: "Hồ sơ cập nhật trong lúc đang sửa",
     updatedAt: "2026-11-16T08:00:00.000Z",
   });
-  fireEvent.click(screen.getByRole("button", { name: "Lưu bản nháp" }));
+  fireEvent.click(screen.getByRole("button", { name: "Lưu thay đổi" }));
 
   await waitFor(() =>
     expect(api.update).toHaveBeenCalledWith(
@@ -205,12 +206,12 @@ it.each([false, true])(
         <DataManagerRecordWorkspace recordId={record.id} />
       </QueryClientProvider>,
     );
-    fireEvent.click(screen.getByRole("button", { name: "Sửa thông tin" }));
+    fireEvent.click(screen.getByRole("button", { name: "Chỉnh sửa hồ sơ" }));
     await screen.findByRole("heading", { name: "Chỉnh sửa hồ sơ" });
     fireEvent.change(screen.getByDisplayValue(record.title), {
       target: { value: "Tên vừa nhập" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Lưu bản nháp" }));
+    fireEvent.click(screen.getByRole("button", { name: "Lưu thay đổi" }));
     await screen.findByText(/Đã lưu thay đổi lúc/);
     expect(screen.queryByRole("alert")).toBeNull();
     expect(api.update).toHaveBeenCalledTimes(alreadySaved ? 1 : 2);

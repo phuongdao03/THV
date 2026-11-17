@@ -258,7 +258,11 @@ export function DataManagerRecordWorkspace({ recordId }: { recordId: string }) {
   }
 
   async function archiveRecord() {
-    const reason = window.prompt("Lý do lưu trữ hồ sơ:")?.trim();
+    const reason = window
+      .prompt(
+        "Ngừng xử lý hồ sơ này? Hồ sơ sẽ ra khỏi danh sách đang làm; dữ liệu vẫn được giữ. Nhập lý do để xác nhận:",
+      )
+      ?.trim();
     if (!reason || !record.data) return;
     setBusy(true);
     setError(null);

@@ -479,6 +479,7 @@ export function HistoricalRecordDetailComplete({
             {record.title || "Hồ sơ chưa đặt tên"}
           </h2>
           <p className="mt-1 text-sm text-[var(--theme-muted)]">
+            Người / tổ chức được đề cử:{" "}
             {record.subjectName || "Chưa có đối tượng ghi nhận"} ·{" "}
             {record.nominationYear ?? "Chưa rõ năm"}
           </p>
@@ -494,26 +495,36 @@ export function HistoricalRecordDetailComplete({
               onClick={onEdit}
               type="button"
             >
-              Sửa thông tin
+              Chỉnh sửa hồ sơ
             </button>
           ) : null}
           {canEdit && record.publicationStatus !== "PUBLISHED" ? (
-            <button
-              className="min-h-10 rounded-md border border-[var(--theme-border)] px-3 text-sm disabled:opacity-60"
-              disabled={submitting}
-              onClick={onArchive}
-              type="button"
-            >
-              Lưu trữ hồ sơ
-            </button>
+            <details className="relative">
+              <summary className="cursor-pointer rounded-md border border-[var(--theme-border)] px-3 py-2 text-sm">
+                Thao tác khác
+              </summary>
+              <div className="absolute right-0 z-20 mt-2 w-72 rounded-md border border-[var(--theme-border)] bg-[var(--theme-surface)] p-3 shadow-lg">
+                <p className="mb-2 text-xs text-[var(--theme-muted)]">
+                  Đưa hồ sơ khỏi danh sách đang làm, vẫn giữ dữ liệu. Thao tác
+                  này không phải lưu thay đổi hoặc ẩn bài trên website.
+                </p>
+                <button
+                  className="min-h-10 rounded-md border border-[var(--theme-border)] px-3 text-sm disabled:opacity-60"
+                  disabled={submitting}
+                  onClick={onArchive}
+                  type="button"
+                >
+                  Ngừng xử lý hồ sơ
+                </button>
+              </div>
+            </details>
           ) : null}
         </div>
       </header>
 
       <p className="text-xs leading-5 text-[var(--theme-muted)]">
-        “Sửa thông tin” cập nhật dữ liệu nguồn. “Lưu trữ hồ sơ” đưa hồ sơ ngừng
-        xử lý ra khỏi danh sách đang làm; thông tin và tài liệu vẫn được giữ
-        lại. Để đăng lên website, dùng bước Nội dung &amp; xuất bản.
+        Chọn “Chỉnh sửa hồ sơ” để cập nhật thông tin, sau đó “Lưu thay đổi”. Để
+        chuẩn bị bài đăng trên website, dùng bước Nội dung &amp; xuất bản.
       </p>
       <section
         aria-label="Các bước hoàn thiện hồ sơ"
@@ -709,7 +720,7 @@ export function HistoricalRecordDetailComplete({
             }
           />
           <Info
-            label="Nguồn lưu trữ"
+            label="Tài liệu dùng để nhập hồ sơ"
             value={`${sourceKindLabels[record.sourceKind] ?? "Khác / chưa rõ"} · ${record.sourceLabel ?? "Chưa ghi nhận"}`}
           />
           <Info

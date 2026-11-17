@@ -14,7 +14,7 @@ import type {
 import { HistoricalDateField } from "./historical-date-field";
 
 const sourceKinds: { value: HistoricalSourceKind; label: string }[] = [
-  { value: "ARCHIVE", label: "Lưu trữ" },
+  { value: "ARCHIVE", label: "Tài liệu lưu trữ (hồ sơ giấy, Excel…)" },
   { value: "OFFICIAL_RECORD", label: "Hồ sơ chính thức" },
   { value: "ORGANIZATION_RECORD", label: "Hồ sơ tổ chức" },
   { value: "PERSONAL_RECORD", label: "Tài liệu cá nhân" },
@@ -222,15 +222,16 @@ export function HistoricalRecordFormComplete({
       >
         <div>
           <h3 className="font-semibold" id="historical-form-source-title">
-            Nguồn lưu trữ
+            Thông tin được lấy từ đâu?
           </h3>
           <p className="mt-1 text-xs text-[var(--theme-muted)]">
-            Ghi lại tham chiếu tìm được; không suy đoán nội dung còn thiếu.
+            Cho biết tài liệu hoặc người cung cấp thông tin để nhập hồ sơ cũ.
+            Chỉ dùng nội bộ để đối chiếu; thông tin chưa biết có thể để trống.
           </p>
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="space-y-1.5 text-sm">
-            <span>Loại nguồn</span>
+            <span>Loại tài liệu nguồn</span>
             <select
               className={fieldClass}
               defaultValue={record?.sourceKind ?? "ARCHIVE"}
@@ -244,35 +245,38 @@ export function HistoricalRecordFormComplete({
             </select>
           </label>
           <label className="space-y-1.5 text-sm">
-            <span>Tên cơ quan / nguồn</span>
+            <span>Đơn vị / người cung cấp thông tin</span>
             <input
               className={fieldClass}
               defaultValue={record?.sourceLabel ?? ""}
               maxLength={255}
               name="sourceLabel"
+              placeholder="Ví dụ: Văn phòng Tinh Hoa Việt"
             />
           </label>
           <label className="space-y-1.5 text-sm">
-            <span>Mã hồ sơ cũ hoặc tham chiếu</span>
+            <span>Số hồ sơ cũ / đường dẫn tài liệu</span>
             <input
               className={fieldClass}
               defaultValue={record?.sourceReference ?? ""}
               maxLength={500}
               name="sourceReference"
+              placeholder="Ví dụ: Danh sách đề cử 2020, dòng 15"
             />
           </label>
           <HistoricalDateField
             initialDate={record?.sourceRecordedAt}
-            label="Ngày ghi nhận nguồn (nếu biết đầy đủ)"
+            label="Ngày ghi nhận thông tin trên tài liệu (nếu biết)"
             name="sourceRecordedAt"
           />
           <label className="space-y-1.5 text-sm sm:col-span-2">
-            <span>Ghi chú nguồn nội bộ</span>
+            <span>Ghi chú đối chiếu (nội bộ)</span>
             <textarea
               className={`${fieldClass} min-h-20`}
               defaultValue={record?.provenanceNotes ?? ""}
               maxLength={10_000}
               name="provenanceNotes"
+              placeholder="Ví dụ: Nhập từ danh sách năm 2020 do văn phòng cung cấp."
             />
           </label>
         </div>
@@ -291,7 +295,7 @@ export function HistoricalRecordFormComplete({
           disabled={busy}
           type="submit"
         >
-          {busy ? "Đang lưu…" : "Lưu bản nháp"}
+          {busy ? "Đang lưu…" : record ? "Lưu thay đổi" : "Lưu bản nháp"}
         </button>
       </footer>
     </form>

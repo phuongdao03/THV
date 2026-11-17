@@ -137,13 +137,23 @@ test("data manager saves historical dates and sees persisted edits after reload"
     await sectionPicker.selectOption("Thông tin");
   }
   await page
-    .getByRole("button", { name: "Sửa thông tin", exact: true })
+    .getByRole("button", { name: "Chỉnh sửa hồ sơ", exact: true })
     .click();
+
+  await expect(
+    page.getByRole("heading", { name: "Thông tin được lấy từ đâu?" }),
+  ).toBeVisible();
+  await expect(
+    page.getByLabel("Đơn vị / người cung cấp thông tin"),
+  ).toBeVisible();
+  await page
+    .locator('[aria-labelledby="historical-form-source-title"]')
+    .screenshot({ path: info.outputPath("historical-source-guidance.png") });
 
   await page.getByLabel("Tên hồ sơ đề cử").fill("Nghề thủ công truyền thống");
   await expect(page.getByLabel("Năm đề cử (nếu chỉ biết năm)")).toHaveCount(0);
   await page.getByLabel("Thời gian đề cử").fill("15/05/2020");
-  await page.getByRole("button", { name: "Lưu bản nháp" }).click();
+  await page.getByRole("button", { name: "Lưu thay đổi" }).click();
 
   const saveStatus = page.getByRole("status");
   await expect(saveStatus).toContainText("Đã lưu thay đổi lúc");
@@ -155,6 +165,14 @@ test("data manager saves historical dates and sees persisted edits after reload"
   await expect(
     page.getByRole("heading", { name: "Nghề thủ công truyền thống" }),
   ).toBeVisible();
+  await page.getByText("Thao tác khác", { exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Ngừng xử lý hồ sơ", exact: true }),
+  ).toBeVisible();
+  await page.screenshot({
+    path: info.outputPath("historical-secondary-actions.png"),
+  });
+  await page.getByText("Thao tác khác", { exact: true }).click();
 
   await page.getByRole("button", { name: "Soạn nội dung công khai" }).click();
   await expect(
@@ -179,9 +197,22 @@ test("data manager saves historical dates and sees persisted edits after reload"
     (button) => getComputedStyle(button).backgroundColor,
   );
   expect(darkButtonBackground).not.toBe("rgba(0, 0, 0, 0)");
+  if (
+    info.project.name === "mobile-chrome" &&
+    !(await page
+      .getByRole("dialog", { name: "Điều hướng workspace" })
+      .isVisible())
+  ) {
+    await page.getByRole("button", { name: "Mở điều hướng workspace" }).click();
+  }
   await page.getByRole("button", { name: "Giao diện sáng" }).click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
-  if (info.project.name === "mobile-chrome") {
+  if (
+    info.project.name === "mobile-chrome" &&
+    (await page
+      .getByRole("dialog", { name: "Điều hướng workspace" })
+      .isVisible())
+  ) {
     await page
       .getByRole("dialog", { name: "Điều hướng workspace" })
       .getByRole("button", { name: "Đóng điều hướng workspace" })
@@ -455,7 +486,7 @@ test("confirms before browser back leaves a dirty historical record", async ({
     .getByRole("link", { name: /Gìn giữ nghề thủ công truyền thống/ })
     .click();
   await page
-    .getByRole("button", { name: "Sửa thông tin", exact: true })
+    .getByRole("button", { name: "Chỉnh sửa hồ sơ", exact: true })
     .click();
   await page.getByLabel("Tên hồ sơ đề cử").fill("Thay đổi chưa lưu");
 
@@ -477,7 +508,7 @@ test("confirms before browser back leaves a dirty historical record", async ({
     .getByRole("link", { name: /Gìn giữ nghề thủ công truyền thống/ })
     .click();
   await page
-    .getByRole("button", { name: "Sửa thông tin", exact: true })
+    .getByRole("button", { name: "Chỉnh sửa hồ sơ", exact: true })
     .click();
   await page.getByLabel("Tên hồ sơ đề cử").fill("Thay đổi sẽ bỏ");
   await page.goBack();
