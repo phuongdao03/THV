@@ -1,10 +1,12 @@
 from uuid import UUID
 
-from sqlalchemy import exists, or_, select
+from sqlalchemy import exists, false, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.auth.authorization import AuthorizationPolicy, PolicyRequirement
 from app.modules.auth.session_service import AuthPrincipal
+from app.modules.blockchain.models import Certificate, CertificateVersion
+from app.modules.certificate_archives.models import CertificateArchivePage
 from app.modules.dossiers.models import DossierEvidence, EvidenceVisibility
 from app.modules.historical_nominations.models import HistoricalMediaLink
 from app.modules.reviews.models import (
@@ -52,9 +54,20 @@ class ReviewMediaAccessPolicy:
             historical_evidence = exists().where(
                 HistoricalMediaLink.media_asset_id == media_id
             )
+            # Approved archive access includes official certificate files and
+            # retained scan revisions; other role/permission paths stay scoped.
+            certificate_files = (
+                or_(
+                    exists().where(Certificate.pdf_media_id == media_id),
+                    exists().where(CertificateVersion.pdf_media_id == media_id),
+                    exists().where(CertificateArchivePage.media_asset_id == media_id),
+                )
+                if "SUPER_ADMIN" in principal.roles
+                else false()
+            )
             return bool(
                 await self._session.scalar(
-                    select(or_(admin_evidence, historical_evidence))
+                    select(or_(admin_evidence, historical_evidence, certificate_files))
                 )
             )
 

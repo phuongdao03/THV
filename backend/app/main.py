@@ -46,6 +46,7 @@ from app.api.v1.hr import router as hr_router
 from app.api.v1.hr import self_router as my_hr_router
 from app.api.v1.media import router as media_router
 from app.api.v1.memberships import router as memberships_router
+from app.api.v1.nomination_archive import router as nomination_archive_router
 from app.api.v1.notifications import router as notifications_router
 from app.api.v1.operations import router as operations_router
 from app.api.v1.organizations import router as organizations_router
@@ -312,6 +313,7 @@ def create_application(
     app.include_router(events_admin_router)
     app.include_router(media_router)
     app.include_router(historical_nominations_router)
+    app.include_router(nomination_archive_router)
     app.include_router(organizations_router)
     app.include_router(notifications_router)
     app.include_router(admin_promotions_router)
