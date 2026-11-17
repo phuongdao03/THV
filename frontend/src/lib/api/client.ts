@@ -93,6 +93,7 @@ import type {
   CommunityPostWriteResult,
   CommunityVisibilityResult,
   Certificate,
+  CertificateCorrectionCandidate,
   CertificateArchiveContentInput,
   CertificateArchiveManagerData,
   CertificateContent,
@@ -3042,6 +3043,18 @@ export const adminCertificateApi = {
       parameters.set("publicationStatus", filters.publicationStatus);
     return requestPaginated<AdminCertificate[]>(
       `/admin/certificates?${parameters.toString()}`,
+    );
+  },
+  correctionCandidates(
+    filters: { page?: number; pageSize?: number; search?: string } = {},
+  ) {
+    const parameters = new URLSearchParams({
+      page: String(filters.page ?? 1),
+      pageSize: String(filters.pageSize ?? 20),
+    });
+    if (filters.search) parameters.set("search", filters.search);
+    return requestPaginated<CertificateCorrectionCandidate[]>(
+      `/certificates/correction-candidates?${parameters.toString()}`,
     );
   },
 };

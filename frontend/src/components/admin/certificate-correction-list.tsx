@@ -11,21 +11,47 @@ const pageSize = 10;
 
 export function CertificateCorrectionList({
   onSelectCertificateId,
+  dataManagerMode = false,
 }: {
   onSelectCertificateId?: (certificateId: string) => void;
+  dataManagerMode?: boolean;
 } = {}) {
   const [searchDraft, setSearchDraft] = useState("");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const query = useQuery({
-    queryKey: ["admin", "certificate-corrections", search, page],
-    queryFn: () =>
-      adminCertificateApi.list({
+    queryKey: [
+      dataManagerMode ? "data-manager" : "admin",
+      "certificate-corrections",
+      search,
+      page,
+    ],
+    queryFn: async () => {
+      if (dataManagerMode)
+        return adminCertificateApi.correctionCandidates({
+          page,
+          pageSize,
+          search: search || undefined,
+        });
+      const response = await adminCertificateApi.list({
         page,
         pageSize,
         search: search || undefined,
         status: "ACTIVE",
-      }),
+      });
+      return {
+        ...response,
+        data: response.data.map(({ certificate }) => ({
+          id: certificate.id,
+          certificateNumber: certificate.certificateNumber,
+          dossierCode: certificate.dossierCode,
+          assetTitle: certificate.assetTitle,
+          currentVersionNo: certificate.currentVersionNo,
+          blockchainStatus: certificate.blockchainStatus,
+          hasTransactionHash: Boolean(certificate.transactionHash),
+        })),
+      };
+    },
   });
 
   function submitSearch(event: FormEvent<HTMLFormElement>) {
@@ -95,12 +121,12 @@ export function CertificateCorrectionList({
           aria-label="Bằng đã cấp"
           className="divide-y divide-neutral-200 overflow-hidden rounded-xl border border-neutral-200 bg-white"
         >
-          {query.data.data.map(({ certificate }) => {
+          {query.data.data.map((certificate) => {
             const isThv = certificate.certificateNumber.startsWith("THV-");
             const canCorrect =
               isThv &&
               certificate.blockchainStatus === "CONFIRMED" &&
-              Boolean(certificate.transactionHash);
+              certificate.hasTransactionHash;
             return (
               <article
                 className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between"

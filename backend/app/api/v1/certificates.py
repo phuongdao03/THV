@@ -18,6 +18,7 @@ from app.modules.certificates.dependencies import (
     CertificateVersionServiceDependency,
 )
 from app.modules.certificates.schemas import (
+    CertificateCorrectionCandidateData,
     CertificateData,
     CertificateDetailData,
     CertificateVersionData,
@@ -54,6 +55,36 @@ async def list_certificates(
     )
     return PaginatedSuccessEnvelope(
         data=[CertificateData.model_validate(row) for row in rows],
+        meta=ListResponseMeta(
+            request_id=request.state.request_id,
+            page=page,
+            page_size=page_size,
+            total=total,
+        ),
+    )
+
+
+@router.get(
+    "/correction-candidates",
+    response_model=PaginatedSuccessEnvelope[list[CertificateCorrectionCandidateData]],
+    responses=RESPONSES,
+)
+async def list_certificate_correction_candidates(
+    request: Request,
+    principal: CurrentPrincipalDependency,
+    service: CertificateServiceDependency,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, alias="pageSize", ge=1, le=100),
+    search: str | None = Query(default=None, min_length=1, max_length=255),
+) -> PaginatedSuccessEnvelope[list[CertificateCorrectionCandidateData]]:
+    rows, total = await service.list_correction_candidates(
+        principal,
+        search=search,
+        page=page,
+        page_size=page_size,
+    )
+    return PaginatedSuccessEnvelope(
+        data=[CertificateCorrectionCandidateData.model_validate(row) for row in rows],
         meta=ListResponseMeta(
             request_id=request.state.request_id,
             page=page,

@@ -81,7 +81,10 @@ function DataManagerIssuedCertificateCorrections() {
           <CertificateContentCorrection certificateId={certificateId} />
         </div>
       ) : (
-        <CertificateCorrectionList onSelectCertificateId={setCertificateId} />
+        <CertificateCorrectionList
+          dataManagerMode
+          onSelectCertificateId={setCertificateId}
+        />
       )}
     </section>
   );

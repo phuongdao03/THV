@@ -64,6 +64,16 @@ class AdminCertificateData(CertificateSchema):
     public_work_version: int | None = None
 
 
+class CertificateCorrectionCandidateData(CertificateSchema):
+    id: UUID
+    certificate_number: str
+    dossier_code: str
+    asset_title: str
+    current_version_no: int
+    blockchain_status: BlockchainTransactionStatus | None
+    has_transaction_hash: bool
+
+
 class CertificateListingRequest(CertificateSchema):
     expected_work_version: int = Field(ge=1)
     show_certificate: bool

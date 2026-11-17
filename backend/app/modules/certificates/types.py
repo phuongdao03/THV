@@ -51,6 +51,17 @@ class AdminCertificateView:
 
 
 @dataclass(frozen=True, slots=True)
+class CertificateCorrectionCandidateView:
+    id: UUID
+    certificate_number: str
+    dossier_code: str
+    asset_title: str
+    current_version_no: int
+    blockchain_status: BlockchainTransactionStatus | None
+    has_transaction_hash: bool
+
+
+@dataclass(frozen=True, slots=True)
 class CertificateVersionView:
     id: UUID
     certificate_id: UUID

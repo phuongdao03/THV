@@ -1446,6 +1446,16 @@ export interface AdminCertificate {
   publicWorkVersion?: number | null;
 }
 
+export interface CertificateCorrectionCandidate {
+  id: string;
+  certificateNumber: string;
+  dossierCode: string;
+  assetTitle: string;
+  currentVersionNo: number;
+  blockchainStatus: BlockchainTransactionStatus | null;
+  hasTransactionHash: boolean;
+}
+
 export interface CertificateContent {
   title: string;
   summary: string;

@@ -62,7 +62,7 @@ export function HistoricalAwardLibrary({
           {awards.error.message}
         </p>
       ) : null}
-      {!awards.isLoading && awards.data?.data.length === 0 ? (
+      {!awards.isLoading && !awards.error && awards.data?.data.length === 0 ? (
         <div className="rounded-lg border border-dashed border-[var(--theme-border)] px-5 py-12 text-center">
           <Award
             aria-hidden
@@ -74,51 +74,55 @@ export function HistoricalAwardLibrary({
           </p>
         </div>
       ) : null}
-      <div className="overflow-x-auto rounded-lg border border-[var(--theme-border)]">
-        <table className="w-full min-w-[680px] text-left text-sm">
-          <thead className="bg-[var(--theme-surface-muted)] text-xs text-[var(--theme-muted)]">
-            <tr>
-              <th className="px-4 py-3 font-medium">Bằng / giải thưởng</th>
-              <th className="px-4 py-3 font-medium">Số hiệu</th>
-              <th className="px-4 py-3 font-medium">Người được cấp</th>
-              <th className="px-4 py-3 font-medium">Ngày cấp</th>
-              <th className="px-4 py-3 font-medium">Hồ sơ</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-[var(--theme-border)]">
-            {awards.data?.data.map((award) => (
-              <tr key={award.id}>
-                <td className="px-4 py-3">
-                  <span className="font-medium">{award.awardName}</span>
-                  <span className="mt-1 block text-xs text-[var(--theme-muted)]">
-                    {award.issuedBy ?? "Chưa rõ đơn vị cấp"}
-                  </span>
-                </td>
-                <td className="px-4 py-3">{award.certificateNumber ?? "—"}</td>
-                <td className="px-4 py-3">
-                  {award.subjectName ?? "Chưa có đối tượng ghi nhận"}
-                </td>
-                <td className="px-4 py-3">
-                  {award.issuedAt
-                    ? new Intl.DateTimeFormat("vi-VN", {
-                        dateStyle: "medium",
-                      }).format(new Date(award.issuedAt))
-                    : "—"}
-                </td>
-                <td className="px-4 py-3">
-                  <button
-                    className="font-medium text-[var(--theme-accent)] underline-offset-2 hover:underline"
-                    onClick={() => onOpenRecord(award.recordId)}
-                    type="button"
-                  >
-                    {award.recordCode}
-                  </button>
-                </td>
+      {awards.data?.data.length ? (
+        <div className="overflow-x-auto rounded-lg border border-[var(--theme-border)]">
+          <table className="w-full min-w-[680px] text-left text-sm">
+            <thead className="bg-[var(--theme-surface-muted)] text-xs text-[var(--theme-muted)]">
+              <tr>
+                <th className="px-4 py-3 font-medium">Bằng / giải thưởng</th>
+                <th className="px-4 py-3 font-medium">Số hiệu</th>
+                <th className="px-4 py-3 font-medium">Đối tượng hồ sơ</th>
+                <th className="px-4 py-3 font-medium">Ngày cấp</th>
+                <th className="px-4 py-3 font-medium">Hồ sơ</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody className="divide-y divide-[var(--theme-border)]">
+              {awards.data.data.map((award) => (
+                <tr key={award.id}>
+                  <td className="px-4 py-3">
+                    <span className="font-medium">{award.awardName}</span>
+                    <span className="mt-1 block text-xs text-[var(--theme-muted)]">
+                      {award.issuedBy ?? "Chưa rõ đơn vị cấp"}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    {award.certificateNumber ?? "—"}
+                  </td>
+                  <td className="px-4 py-3">
+                    {award.subjectName ?? "Chưa có đối tượng ghi nhận"}
+                  </td>
+                  <td className="px-4 py-3">
+                    {award.issuedAt
+                      ? new Intl.DateTimeFormat("vi-VN", {
+                          dateStyle: "medium",
+                        }).format(new Date(award.issuedAt))
+                      : "—"}
+                  </td>
+                  <td className="px-4 py-3">
+                    <button
+                      className="font-medium text-[var(--theme-accent)] underline-offset-2 hover:underline"
+                      onClick={() => onOpenRecord(award.recordId)}
+                      type="button"
+                    >
+                      {award.recordCode}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
       {awards.data?.meta ? (
         <p className="text-xs text-[var(--theme-muted)]">
           {awards.data.meta.total} bằng xác lập · đang hiển thị{" "}

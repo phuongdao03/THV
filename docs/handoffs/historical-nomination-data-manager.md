@@ -180,6 +180,11 @@ and any backfill/migration need separate proposals if the audit finds gaps.
 - Both roles can edit pre-issue certificate content. Issued certificate edits
   submit a reasoned pending proposal; only Admin can approve and anchor it.
   Issuance and revocation remain Admin-only.
+- The DATA_MANAGER correction selector uses
+  `GET /api/v1/certificates/correction-candidates`, guarded by
+  `certificate_content.edit`; it returns active certificates with only the
+  identifier, number, work/dossier labels, version, blockchain status, and a
+  transaction-presence flag. The full Admin listing remains separately guarded.
 - Migration 0172 adds a distinct scan archive attached to public works. Scans
   upload privately through inspection, publish as safe derivatives, and can be
   hidden or recoverably archived. Admin alone restores an archived scan.
@@ -308,6 +313,9 @@ and any backfill/migration need separate proposals if the audit finds gaps.
   Filters cover status, year, and dossier type; cards show media, document, and
   award counts. Public content editing remains on its own route with existing
   public scan and certificate utilities.
+- The historical records area includes a searchable **Bằng xác lập cũ** view.
+  It links back to the source record; attached source scans stay private and
+  separate from the public scan archive.
 - New source records receive unique `THV-LS-{year}-{uuid}` codes. Existing
   `HIST-` codes remain searchable aliases. Create requests accept an idempotency
   key, so retries return the same source record.

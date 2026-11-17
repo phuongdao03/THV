@@ -75,6 +75,26 @@ function fromRow(row: CertificateArchiveManagerData): Form {
   };
 }
 
+function archiveLoadErrorDetails(error: unknown) {
+  const message =
+    error instanceof Error
+      ? error.message
+      : "Lỗi chưa xác định khi tải danh sách.";
+  if (typeof error !== "object" || error === null)
+    return { message, status: null, code: null, requestId: null };
+  const detail = error as {
+    status?: unknown;
+    code?: unknown;
+    requestId?: unknown;
+  };
+  return {
+    message,
+    status: typeof detail.status === "number" ? detail.status : null,
+    code: typeof detail.code === "string" ? detail.code : null,
+    requestId: typeof detail.requestId === "string" ? detail.requestId : null,
+  };
+}
+
 export function CertificateArchiveWorkspace({
   canRestore = false,
 }: {
@@ -97,6 +117,7 @@ export function CertificateArchiveWorkspace({
       (await publicWorkAdminApi.list({ page: 1, pageSize: 100 })).data,
   });
   const selected = archives.data?.find((row) => row.id === selectedId);
+  const loadError = archiveLoadErrorDetails(archives.error);
   const dirty = Boolean(
     selected &&
       form &&
@@ -190,18 +211,18 @@ export function CertificateArchiveWorkspace({
       <header className="flex flex-wrap items-end justify-between gap-3 border-b border-neutral-200 pb-4">
         <div>
           <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] text-primary-700">
-            <Archive aria-hidden="true" className="size-4" /> Hồ sơ tư liệu
+            <Archive aria-hidden="true" className="size-4" /> Kho scan công khai
           </p>
           <h2
             id="certificate-archive-title"
             className="mt-2 text-2xl font-bold"
           >
-            Bằng xác lập lưu trữ
+            Bằng scan công khai
           </h2>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-neutral-600">
-            Nhập thông tin lưu trữ và đăng ảnh scan cũ. Không cần PDF hay
-            blockchain; bản gốc được giữ riêng, chỉ bản đã kiểm tra mới hiển thị
-            công khai.
+            Lưu bản scan được chọn để công bố cùng tác phẩm. Thông tin bằng cũ
+            và scan nguồn riêng tư nằm trong hồ sơ đề cử lịch sử, mục “Bằng xác
+            lập cũ”; chúng không tự xuất hiện ở kho này.
           </p>
         </div>
         <button
@@ -221,12 +242,29 @@ export function CertificateArchiveWorkspace({
             </p>
           ) : null}
           {archives.isError ? (
-            <p
+            <div
               className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800"
               role="alert"
             >
-              Không tải được danh sách bằng lưu trữ.
-            </p>
+              <p>Không tải được danh sách bằng lưu trữ.</p>
+              <p className="mt-1 break-words">{loadError.message}</p>
+              {loadError.status !== null ? (
+                <p className="mt-1 text-xs">
+                  HTTP {loadError.status}
+                  {loadError.code ? ` · ${loadError.code}` : ""}
+                  {loadError.requestId
+                    ? ` · Mã yêu cầu ${loadError.requestId}`
+                    : ""}
+                </p>
+              ) : null}
+              <button
+                className="mt-2 min-h-10 font-semibold underline"
+                onClick={() => void archives.refetch()}
+                type="button"
+              >
+                Thử tải lại
+              </button>
+            </div>
           ) : null}
           {archives.data?.map((row) => (
             <button

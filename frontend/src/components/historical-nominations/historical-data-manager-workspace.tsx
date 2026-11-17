@@ -12,6 +12,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 
+import { HistoricalAwardLibrary } from "@/components/historical-nominations/historical-award-library";
 import {
   dossierApi,
   historicalNominationApi,
@@ -34,6 +35,7 @@ export function HistoricalDataManagerWorkspace() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [query, setQuery] = useState("");
+  const [view, setView] = useState<"records" | "awards">("records");
   const [statusFilter, setStatusFilter] = useState("");
   const [year, setYear] = useState("");
   const [dossierTypeId, setDossierTypeId] = useState("");
@@ -64,14 +66,17 @@ export function HistoricalDataManagerWorkspace() {
         year: year ? Number(year) : undefined,
         dossierTypeId: dossierTypeId || undefined,
       }),
+    enabled: view === "records",
   });
   const categories = useQuery({
     queryKey: ["historical-record-source-categories"],
     queryFn: publicWorkAdminApi.categories,
+    enabled: view === "records",
   });
   const dossierTypes = useQuery({
     queryKey: ["historical-record-dossier-types"],
     queryFn: dossierApi.listTypes,
+    enabled: view === "records",
   });
   const labels = categoryLabels(categories.data ?? []);
   const dossierTypeNames = new Map(
@@ -198,6 +203,79 @@ export function HistoricalDataManagerWorkspace() {
     }
   }
 
+  function deleteDraftUnavailableReason(record: HistoricalNomination) {
+    if (record.archiveStatus === "ARCHIVED")
+      return "Hồ sơ đã lưu trữ nên không thể xóa như bản nháp.";
+    if (["PUBLISHED", "HIDDEN"].includes(record.publicationStatus))
+      return "Hồ sơ đã công khai hoặc đang ẩn; chỉ bản nháp chưa công khai mới xóa được.";
+    if (record.verificationStatus !== "DRAFT")
+      return "Chỉ xóa được hồ sơ chưa gửi.";
+    return "Chỉ xóa được bản nháp chưa công khai.";
+  }
+
+  const viewNavigation = (
+    <nav
+      aria-label="Tra cứu hồ sơ lịch sử"
+      className="flex flex-wrap gap-2 border-b border-[var(--theme-border)] pb-3"
+    >
+      <button
+        aria-pressed={view === "records"}
+        className={
+          view === "records"
+            ? "min-h-10 rounded-md bg-primary-700 px-4 text-sm font-semibold text-white"
+            : "min-h-10 rounded-md border border-[var(--theme-border)] px-4 text-sm font-semibold"
+        }
+        onClick={() => setView("records")}
+        type="button"
+      >
+        Hồ sơ đề cử
+      </button>
+      <button
+        aria-pressed={view === "awards"}
+        className={
+          view === "awards"
+            ? "min-h-10 rounded-md bg-primary-700 px-4 text-sm font-semibold text-white"
+            : "min-h-10 rounded-md border border-[var(--theme-border)] px-4 text-sm font-semibold"
+        }
+        onClick={() => setView("awards")}
+        type="button"
+      >
+        Bằng xác lập cũ
+      </button>
+    </nav>
+  );
+
+  if (view === "awards") {
+    return (
+      <section
+        className="space-y-5"
+        aria-labelledby="historical-records-heading"
+      >
+        <header>
+          <p className="text-sm text-[var(--theme-muted)]">
+            Tra cứu các bằng đã ghi nhận trong hồ sơ đề cử lịch sử.
+          </p>
+          <h2
+            className="mt-1 text-2xl font-semibold"
+            id="historical-records-heading"
+          >
+            Bằng xác lập cũ
+          </h2>
+        </header>
+        {viewNavigation}
+        <p className="text-sm text-[var(--theme-muted)]">
+          Bản scan nguồn vẫn là tư liệu riêng của hồ sơ, không tự chuyển sang
+          kho scan công khai.
+        </p>
+        <HistoricalAwardLibrary
+          onOpenRecord={(recordId) =>
+            router.push("/data-manager/records/" + encodeURIComponent(recordId))
+          }
+        />
+      </section>
+    );
+  }
+
   return (
     <section className="space-y-5" aria-labelledby="historical-records-heading">
       <header className="flex flex-wrap items-end justify-between gap-3">
@@ -222,6 +300,8 @@ export function HistoricalDataManagerWorkspace() {
           {busy ? "Đang tạo…" : "Thêm hồ sơ"}
         </button>
       </header>
+
+      {viewNavigation}
 
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
         <label className="relative block sm:col-span-2 lg:col-span-1">
@@ -385,7 +465,14 @@ export function HistoricalDataManagerWorkspace() {
                         <Trash2 aria-hidden className="size-4" />
                         Xóa bản nháp
                       </button>
-                    ) : null}
+                    ) : (
+                      <p
+                        className="px-3 py-2 text-xs text-[var(--theme-muted)]"
+                        role="note"
+                      >
+                        {deleteDraftUnavailableReason(record)}
+                      </p>
+                    )}
                   </div>
                 </details>
               </li>

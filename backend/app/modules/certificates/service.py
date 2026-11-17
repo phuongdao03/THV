@@ -43,6 +43,7 @@ from app.modules.certificates.repository import (
 from app.modules.certificates.storage import CertificateStorage
 from app.modules.certificates.types import (
     AdminCertificateView,
+    CertificateCorrectionCandidateView,
     CertificateDetailView,
     CertificateView,
 )
@@ -270,6 +271,32 @@ class CertificateService:
                 limit=page_size,
             )
             return tuple(self._admin_view(row) for row in rows), total
+
+    async def list_correction_candidates(
+        self,
+        principal: AuthPrincipal,
+        *,
+        search: str | None,
+        page: int,
+        page_size: int,
+    ) -> tuple[tuple[CertificateCorrectionCandidateView, ...], int]:
+        AuthorizationPolicy.require_capability(
+            principal,
+            PolicyRequirement(
+                permission="certificate_content.edit",
+                compatible_roles=frozenset({"DATA_MANAGER"}),
+            ),
+            CertificateForbiddenError,
+        )
+        async with self._session.begin():
+            rows, total = await self._certificates.list_admin(
+                search=search,
+                status=CertificateStatus.ACTIVE.value,
+                publication_status=None,
+                offset=(page - 1) * page_size,
+                limit=page_size,
+            )
+            return tuple(self._correction_candidate(row) for row in rows), total
 
     async def process_issuance(self, dossier_id: UUID) -> CertificateView | None:
         async with self._session.begin():
@@ -804,6 +831,21 @@ class CertificateService:
             is_discoverable=discoverable,
             show_certificate=public_work.show_certificate if public_work else False,
             public_work_version=public_work.version if public_work else None,
+        )
+
+    @staticmethod
+    def _correction_candidate(
+        row: AdminCertificateRow,
+    ) -> CertificateCorrectionCandidateView:
+        certificate, _version, dossier, _category, transaction, _public_work = row
+        return CertificateCorrectionCandidateView(
+            id=certificate.id,
+            certificate_number=certificate.certificate_number,
+            dossier_code=dossier.code,
+            asset_title=dossier.title,
+            current_version_no=certificate.current_version_no,
+            blockchain_status=transaction.status if transaction is not None else None,
+            has_transaction_hash=bool(transaction and transaction.tx_hash),
         )
 
     @staticmethod
