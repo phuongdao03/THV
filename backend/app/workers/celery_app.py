@@ -16,6 +16,7 @@ celery_app = Celery(
         "app.workers.affiliate_tasks",
         "app.workers.payout_tasks",
         "app.workers.media_inspection_tasks",
+        "app.workers.media_cleanup_tasks",
         "app.workers.similarity_tasks",
         "app.workers.public_work_tasks",
         "app.workers.public_media_tasks",
@@ -38,6 +39,28 @@ celery_app.conf.update(
     task_serializer="json",
     timezone="UTC",
     beat_schedule={
+        **(
+            {
+                "process-draft-media-cleanup": {
+                    "task": (
+                        "app.workers.media_cleanup_tasks.process_draft_media_cleanup"
+                    ),
+                    "schedule": 60.0,
+                }
+            }
+            if settings.media_draft_cleanup_enabled
+            else {}
+        ),
+        **(
+            {
+                "reconcile-media-storage": {
+                    "task": "app.workers.media_cleanup_tasks.reconcile_media_storage",
+                    "schedule": 86400.0,
+                }
+            }
+            if settings.media_storage_reconciliation_enabled
+            else {}
+        ),
         "resume-promotion-distribution": {
             "task": "app.workers.promotion_tasks.distribute_promotions",
             "schedule": 30.0,

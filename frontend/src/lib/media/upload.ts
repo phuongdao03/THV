@@ -11,6 +11,7 @@ import type {
 type UploadStage = "uploading" | "verifying" | "inspecting";
 
 interface UploadCallbacks {
+  dossierId?: string;
   inspectionPollIntervalMs?: number;
   onProgress?: (progress: number) => void;
   onStage?: (stage: UploadStage) => void;
@@ -421,6 +422,7 @@ export async function uploadMedia(
       callbacks.uploadSessionId ?? createMediaUploadSessionId();
     const authorization = await mediaApi.createUploadSignature({
       confidentiality: "PRIVATE",
+      ...(callbacks.dossierId ? { dossierId: callbacks.dossierId } : {}),
       sessionId: uploadSessionId,
       purpose,
       filename: file.name,

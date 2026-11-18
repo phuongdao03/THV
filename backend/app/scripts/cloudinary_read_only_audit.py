@@ -57,6 +57,28 @@ _SUMMARY_SQL = text(
       ) repeated_hashes) AS duplicate_hash_groups
     """
 )
+_CLEANUP_COUNTS_SQL = text(
+    """
+    SELECT count(*) FILTER (WHERE finished_at IS NULL) AS pending,
+           count(*) FILTER (WHERE finished_at IS NOT NULL AND outcome IN
+             ('REFERENCE_CONFLICT', 'PROVIDER_UNAVAILABLE')) AS failed,
+           count(*) FILTER (WHERE outcome = 'DELETED') AS provider_confirmed
+    FROM media_cleanup_jobs
+    """
+)
+_ACTIVE_KEYS_SQL = text(
+    """
+    SELECT
+      CASE WHEN encrypted_object_public_id IS NOT NULL THEN 'raw'
+        ELSE resource_type END,
+      CASE WHEN encrypted_object_public_id IS NOT NULL THEN 'authenticated'
+        ELSE access_mode END,
+      coalesce(encrypted_object_public_id, cloudinary_public_id)
+    FROM media_assets
+    WHERE storage_provider = 'CLOUDINARY'
+      AND status = 'ACTIVE' AND deleted_at IS NULL
+    """
+)
 
 
 def _config() -> dict[str, str]:
@@ -120,8 +142,11 @@ async def _page(
             return resources, True
 
 
-async def _audit(args: argparse.Namespace) -> dict[str, Any]:
-    config = _config()
+async def _audit(
+    args: argparse.Namespace, *, config: dict[str, str] | None = None
+) -> dict[str, Any]:
+    if config is None:
+        config = _config()
     environment = config.get("APP_ENV", "unknown").strip().lower()
     prefixes = (
         f"cns/{environment}/",
@@ -150,6 +175,30 @@ async def _audit(args: argparse.Namespace) -> dict[str, Any]:
                 _SUMMARY_SQL, {"age_hours": args.min_age_hours}
             )
             stale_pending, duplicate_hash_groups = summary.one()
+            expected_active = (
+                set()
+                if args.database_only
+                else {
+                    (str(row[0]), str(row[1]), str(row[2]))
+                    for row in (await connection.execute(_ACTIVE_KEYS_SQL)).all()
+                    if row[0] in _RESOURCE_TYPES
+                    and row[1] in _DELIVERY_TYPES
+                    and str(row[2]).startswith(prefixes)
+                }
+            )
+            cleanup_counts = None
+            if (
+                await connection.scalar(
+                    text("SELECT to_regclass('public.media_cleanup_jobs')")
+                )
+                is not None
+            ):
+                counts = (await connection.execute(_CLEANUP_COUNTS_SQL)).one()
+                cleanup_counts = {
+                    "pending": int(counts.pending),
+                    "failed": int(counts.failed),
+                    "provider_confirmed": int(counts.provider_confirmed),
+                }
     finally:
         await engine.dispose()
 
@@ -163,6 +212,7 @@ async def _audit(args: argparse.Namespace) -> dict[str, Any]:
                 "tracked_asset_keys": len(tracked),
                 "stale_pending_media_candidates": int(stale_pending),
                 "duplicate_active_sha256_groups": int(duplicate_hash_groups),
+                "cleanup_jobs": cleanup_counts,
             },
             "cloudinary": {"inventory": "skipped by --database-only"},
         }
@@ -270,6 +320,7 @@ async def _audit(args: argparse.Namespace) -> dict[str, Any]:
             "tracked_asset_keys": len(tracked),
             "stale_pending_media_candidates": int(stale_pending),
             "duplicate_active_sha256_groups": int(duplicate_hash_groups),
+            "cleanup_jobs": cleanup_counts,
         },
         "cloudinary": {
             "assets_seen": asset_count,
@@ -277,6 +328,9 @@ async def _audit(args: argparse.Namespace) -> dict[str, Any]:
             "unregistered_candidates_seen": candidate_count,
             "unregistered_candidate_bytes_seen": candidate_bytes,
             "age_qualified_candidates": len(candidate_ids),
+            "active_keys_missing": (
+                len(expected_active - seen) if inventory_complete else None
+            ),
             "error": cloudinary_error,
             "scopes": scopes,
         },

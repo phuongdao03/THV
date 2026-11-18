@@ -98,7 +98,13 @@ class RecordingContentGateway:
             bytes=len(content),
         )
 
-    async def delete_asset(self, *, public_id: str, resource_type: str) -> None:
+    async def delete_asset(
+        self,
+        *,
+        public_id: str,
+        resource_type: str,
+        inspect_encrypted_manifest: bool = True,
+    ) -> None:
         if self.fail_delete_once:
             self.fail_delete_once = False
             raise MediaProviderUnavailableError()

@@ -79,7 +79,7 @@ from app.modules.dossiers.types import (
     SubmissionView,
 )
 from app.modules.dossiers.workflow import DossierWorkflowService
-from app.modules.media.models import MediaAsset, MediaStatus
+from app.modules.media.models import MediaAsset, MediaCleanupJob, MediaStatus
 from app.modules.media.provenance import has_current_trusted_provenance
 from app.modules.media.repository import MediaAssetRepository
 from app.modules.organizations.models import (
@@ -761,7 +761,37 @@ class DossierService:
             if dossier.status is not DossierStatus.DRAFT:
                 raise DossierInvalidStateError("Only a draft dossier can be deleted.")
             dossier.deleted_at = self._clock()
+            media_ids = set(
+                await self._session.scalars(
+                    select(MediaAsset.id).where(
+                        MediaAsset.upload_dossier_id == dossier.id,
+                        MediaAsset.deleted_at.is_(None),
+                    )
+                )
+            )
+            for evidence, media in await self._repository.list_draft_evidences(
+                dossier.id
+            ):
+                await self._repository.remove_evidence(evidence)
+                media_ids.add(media.id)
+            self._session.add_all(
+                MediaCleanupJob(
+                    dossier_id=dossier.id,
+                    media_id=media_id,
+                    enqueued_at=dossier.deleted_at,
+                    next_attempt_at=dossier.deleted_at,
+                )
+                for media_id in media_ids
+            )
             self._audit("dossier.deleted", principal.user_id, dossier_id)
+
+    async def require_evidence_upload_scope(
+        self, principal: AuthPrincipal, dossier_id: UUID
+    ) -> None:
+        self._require_mutation_role(principal)
+        dossier = await self._owned_or_scoped(principal, dossier_id, for_update=True)
+        await self._require_mutation_scope(principal, dossier)
+        self._require_editable(dossier)
 
     async def attach_evidence(
         self,
@@ -779,6 +809,8 @@ class DossierService:
             await self._require_mutation_scope(principal, dossier)
             self._require_editable(dossier)
             media = await self._require_media(principal, payload.media_asset_id)
+            if media.upload_dossier_id not in (None, dossier.id):
+                raise DossierForbiddenError()
             existing_rows = await self._repository.list_draft_evidences(dossier.id)
             evidence_type, evidence_role, access_scope = await self._attachment_policy(
                 dossier,
@@ -916,6 +948,15 @@ class DossierService:
                 evidence_id,
             )
             await self._repository.remove_evidence(evidence)
+            removed_at = self._clock()
+            self._session.add(
+                MediaCleanupJob(
+                    dossier_id=dossier.id,
+                    media_id=evidence.media_asset_id,
+                    enqueued_at=removed_at,
+                    next_attempt_at=removed_at,
+                )
+            )
             self._audit("dossier.evidence.removed", principal.user_id, dossier_id)
 
     async def submit_dossier(

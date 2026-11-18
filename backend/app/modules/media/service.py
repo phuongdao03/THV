@@ -18,6 +18,7 @@ from app.modules.auth.session_service import AuthPrincipal
 from app.modules.blockchain.models import Certificate, CertificateVersion
 from app.modules.certificate_archives.models import CertificateArchivePage
 from app.modules.dossiers.models import DossierEvidence
+from app.modules.dossiers.service import DossierService
 from app.modules.historical_nominations.models import HistoricalMediaLink
 from app.modules.media.encryption import (
     DocumentEncryptionConfigurationError,
@@ -253,10 +254,17 @@ class MediaService:
         ):
             raise MediaForbiddenError()
         policy = self._validate_intent(intent)
+        if (
+            intent.dossier_id is not None
+            and intent.purpose is not MediaPurpose.DOSSIER_EVIDENCE
+        ):
+            raise MediaUploadMetadataMismatchError()
         issued_at = int(self._clock().timestamp())
+        expires_at = issued_at + self._signature_ttl_seconds
         created = True
         try:
             async with self._session.begin():
+                await self._require_upload_scope(principal, intent)
                 asset = await self._find_upload_session(intent.session_id)
                 if asset is None:
                     asset = self._new_upload_asset(principal, intent, policy)
@@ -272,17 +280,20 @@ class MediaService:
                     self._validate_reused_session(asset, principal, intent)
                     self._normalize_pending_raw_public_id(asset, policy)
                     created = False
+                self._record_upload_expiry(asset, expires_at)
                 media_id = asset.id
                 public_id = asset.cloudinary_public_id
         except IntegrityError:
             if intent.session_id is None:
                 raise
             async with self._session.begin():
+                await self._require_upload_scope(principal, intent)
                 asset = await self._find_upload_session(intent.session_id)
                 if asset is None:
                     raise
                 self._validate_reused_session(asset, principal, intent)
                 self._normalize_pending_raw_public_id(asset, policy)
+                self._record_upload_expiry(asset, expires_at)
                 created = False
                 media_id = asset.id
                 public_id = asset.cloudinary_public_id
@@ -310,14 +321,33 @@ class MediaService:
             api_key=authorization.api_key,
             signature=authorization.signature,
             parameters=authorization.parameters,
-            expires_at=issued_at + self._signature_ttl_seconds,
+            expires_at=expires_at,
             existing_asset=existing_asset,
         )
+
+    async def _require_upload_scope(
+        self, principal: AuthPrincipal, intent: UploadIntent
+    ) -> None:
+        if intent.dossier_id is not None:
+            await DossierService(session=self._session).require_evidence_upload_scope(
+                principal, intent.dossier_id
+            )
 
     async def _find_upload_session(self, session_id: UUID | None) -> MediaAsset | None:
         if session_id is None:
             return None
-        return await self._repository.get_by_upload_session_id(session_id)
+        return await self._repository.get_by_upload_session_id(
+            session_id, for_update=True
+        )
+
+    @staticmethod
+    def _record_upload_expiry(asset: MediaAsset, expires_at: int) -> None:
+        if asset.upload_dossier_id is None:
+            return
+        expiry = datetime.fromtimestamp(expires_at, UTC)
+        previous = asset.upload_expires_at
+        if previous is None or previous.replace(tzinfo=UTC) < expiry:
+            asset.upload_expires_at = expiry
 
     def _new_upload_asset(
         self,
@@ -338,6 +368,7 @@ class MediaService:
         return MediaAsset(
             id=media_id,
             upload_session_id=intent.session_id,
+            upload_dossier_id=intent.dossier_id,
             owner_user_id=principal.user_id,
             purpose=intent.purpose.value,
             cloudinary_public_id=cloudinary_public_id,
@@ -377,6 +408,7 @@ class MediaService:
             raise MediaForbiddenError()
         if (
             asset.purpose != intent.purpose.value
+            or asset.upload_dossier_id != intent.dossier_id
             or asset.original_filename != intent.filename
             or asset.mime_type != intent.mime_type
             or asset.bytes != intent.size

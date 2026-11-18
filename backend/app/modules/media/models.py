@@ -45,6 +45,25 @@ class MediaEncryptionStatus(StrEnum):
     FAILED = "FAILED"
 
 
+class MediaCleanupJob(Base):
+    __tablename__ = "media_cleanup_jobs"
+    __table_args__ = (
+        Index("ix_media_cleanup_jobs_due", "finished_at", "next_attempt_at"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    media_id: Mapped[UUID] = mapped_column(
+        ForeignKey("media_assets.id", ondelete="RESTRICT"), nullable=False
+    )
+    dossier_id: Mapped[UUID] = mapped_column(Uuid, nullable=False)
+    enqueued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    next_attempt_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    outcome: Mapped[str | None] = mapped_column(String(32))
+
+
 class MediaAsset(UtcTimestampMixin, Base):
     __tablename__ = "media_assets"
     __table_args__ = (
@@ -123,6 +142,10 @@ class MediaAsset(UtcTimestampMixin, Base):
         nullable=False,
     )
     purpose: Mapped[str | None] = mapped_column(String(32))
+    upload_dossier_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("dossiers.id", ondelete="SET NULL"), index=True
+    )
+    upload_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     cloudinary_public_id: Mapped[str] = mapped_column(
         Text,
         nullable=False,

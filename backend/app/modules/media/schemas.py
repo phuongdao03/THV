@@ -27,6 +27,7 @@ class MediaSchema(BaseModel):
 
 class UploadSignatureRequest(MediaSchema):
     session_id: UUID | None = None
+    dossier_id: UUID | None = None
     purpose: MediaPurpose
     filename: Annotated[str, Field(min_length=1, max_length=255)]
     mime_type: Annotated[str, Field(min_length=3, max_length=127)]

@@ -58,6 +58,7 @@ async def create_upload_signature(
         principal,
         UploadIntent(
             session_id=payload.session_id,
+            dossier_id=payload.dossier_id,
             purpose=payload.purpose,
             filename=payload.filename,
             mime_type=payload.mime_type,

@@ -310,6 +310,17 @@ class CloudinaryMediaGateway:
     def _provider_asset_metadata(
         self, payload: Mapping[str, object]
     ) -> ProviderAssetMetadata:
+        public_id = self._required_str(payload, "public_id")
+        resource_type = self._required_str(payload, "resource_type")
+        if resource_type == "raw" and "format" not in payload:
+            # Cloudinary includes raw file extensions in the public ID.
+            filename = public_id.rsplit("/", 1)[-1]
+            stem, _, file_format = filename.rpartition(".")
+            if not stem or not file_format:
+                raise MediaProviderUnavailableError()
+            file_format = file_format.lower()
+        else:
+            file_format = self._required_str(payload, "format")
         duration = self._optional_number(payload, "duration")
         sha256 = payload.get("sha256")
         if sha256 is not None and (
@@ -319,11 +330,11 @@ class CloudinaryMediaGateway:
         ):
             raise MediaProviderUnavailableError()
         return ProviderAssetMetadata(
-            public_id=self._required_str(payload, "public_id"),
+            public_id=public_id,
             version=self._required_int(payload, "version"),
-            resource_type=self._required_str(payload, "resource_type"),
+            resource_type=resource_type,
             delivery_type=self._required_str(payload, "type"),
-            file_format=self._required_str(payload, "format"),
+            file_format=file_format,
             bytes=self._required_int(payload, "bytes"),
             width=self._optional_int(payload, "width"),
             height=self._optional_int(payload, "height"),
@@ -591,10 +602,15 @@ class CloudinaryMediaGateway:
         provider_asset_id: str | None = None,
         purge_backups: bool = False,
         delivery_type: str = _DELIVERY_TYPE,
+        inspect_encrypted_manifest: bool = True,
     ) -> None:
         if purge_backups and provider_asset_id is not None:
             await self._delete_backed_up_versions(provider_asset_id)
-        if resource_type == "raw" and delivery_type == self._DELIVERY_TYPE:
+        if (
+            inspect_encrypted_manifest
+            and resource_type == "raw"
+            and delivery_type == self._DELIVERY_TYPE
+        ):
             try:
                 manifest = await self._download_single_asset(
                     public_id=public_id,
@@ -603,6 +619,22 @@ class CloudinaryMediaGateway:
                     max_bytes=_ENCRYPTED_MANIFEST_MAX_BYTES,
                 )
             except MediaContentTooLargeError:
+                manifest = b""
+            except MediaProviderUnavailableError as exc:
+                cause = exc.__cause__
+                if not isinstance(cause, httpx.HTTPStatusError) or (
+                    cause.response.status_code != 404
+                ):
+                    raise
+                if (
+                    await self.find_asset_metadata(
+                        public_id=public_id, resource_type=resource_type
+                    )
+                    is not None
+                ):
+                    raise
+                # A previous destroy may have succeeded before its response
+                # was lost. Destroy still confirms absence for this identity.
                 manifest = b""
             parts = self._encrypted_manifest_parts(
                 manifest,

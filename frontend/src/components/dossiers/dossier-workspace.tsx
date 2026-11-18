@@ -1234,6 +1234,7 @@ export function DossierWorkspace({
                         displayOrder: dossier.evidences.length + index,
                       });
                     }}
+                    dossierId={dossier.id}
                     purpose="DOSSIER_EVIDENCE"
                   >
                     {dossier.evidences.length ? (

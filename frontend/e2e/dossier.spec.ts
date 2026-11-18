@@ -84,9 +84,18 @@ test("applicant creates, uploads evidence and submits an immutable dossier", asy
       "base64",
     ),
   });
+  const signatureRequest = page.waitForRequest(
+    (request) =>
+      request.method() === "POST" &&
+      new URL(request.url()).pathname.endsWith("/media/upload-signature"),
+  );
   await page
     .getByRole("button", { name: "Tải lên 1 tệp", exact: true })
     .click();
+  expect((await signatureRequest).postDataJSON()).toMatchObject({
+    dossierId: new URL(page.url()).pathname.split("/").at(-1),
+    purpose: "DOSSIER_EVIDENCE",
+  });
   await expect(
     page.getByRole("heading", { name: "Bản gốc nhận diện" }),
   ).toBeVisible();

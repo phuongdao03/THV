@@ -40,6 +40,7 @@ interface UseMediaUploaderOptions {
   cleanupCompletedOnRemove: boolean;
   constraints?: MediaFileConstraints;
   disabled: boolean;
+  dossierId?: string;
   existingFiles?: readonly {
     filename: string | null | undefined;
     bytes: number;
@@ -135,6 +136,7 @@ export function useMediaUploader({
   cleanupCompletedOnRemove,
   constraints,
   disabled,
+  dossierId,
   existingFiles = [],
   maxFiles,
   onComplete,
@@ -290,6 +292,7 @@ export function useMediaUploader({
             queued.file,
             purpose,
             {
+              dossierId,
               onProgress: (progress) => updateItem(queued.id, { progress }),
               onStage: (status) =>
                 updateItem(queued.id, {
@@ -332,7 +335,7 @@ export function useMediaUploader({
       processingRef.current = false;
       setIsProcessing(false);
     },
-    [constraints, disabled, items, onComplete, purpose, updateItem],
+    [constraints, disabled, dossierId, items, onComplete, purpose, updateItem],
   );
 
   const failedCount = items.filter((item) => item.status === "failed").length;

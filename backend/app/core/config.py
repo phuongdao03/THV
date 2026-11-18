@@ -169,6 +169,8 @@ class Settings(BaseSettings):
         le=104_857_600,
     )
     media_provider_timeout_seconds: float = Field(default=5.0, gt=0, le=30)
+    media_draft_cleanup_enabled: bool = False
+    media_storage_reconciliation_enabled: bool = False
     media_derivative_timeout_seconds: float = Field(default=180.0, gt=0, le=600)
     media_scanner_host: str = Field(default="clamav", min_length=1, max_length=255)
     media_scanner_port: int = Field(default=3310, ge=1, le=65_535)

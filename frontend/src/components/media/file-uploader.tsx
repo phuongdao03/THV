@@ -41,6 +41,7 @@ interface FileUploaderProps {
   description?: string;
   documentTypeLabel?: string;
   disabled?: boolean;
+  dossierId?: string;
   existingFiles?: readonly {
     filename: string | null | undefined;
     bytes: number;
@@ -160,6 +161,7 @@ export function FileUploader({
   description,
   documentTypeLabel,
   disabled = false,
+  dossierId,
   existingFiles,
   idleMessage,
   label,
@@ -195,6 +197,7 @@ export function FileUploader({
     cleanupCompletedOnRemove,
     constraints,
     disabled,
+    dossierId,
     existingFiles,
     maxFiles,
     onComplete,

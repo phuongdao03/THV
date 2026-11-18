@@ -74,6 +74,42 @@ def test_cloudinary_signatures_and_expiring_private_url() -> None:
     asyncio.run(exercise())
 
 
+@pytest.mark.parametrize("extension", ["pdf", "docx", "pptx", "xlsx"])
+def test_raw_metadata_uses_public_id_extension_when_format_is_absent(
+    extension: str,
+) -> None:
+    async def exercise() -> None:
+        public_id = f"cns/test/owners/example/uploads/evidence/document.{extension}"
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            assert request.url.path.endswith(f"/raw/authenticated/{public_id}")
+            return httpx.Response(
+                200,
+                json={
+                    "public_id": public_id,
+                    "version": 1,
+                    "resource_type": "raw",
+                    "type": "authenticated",
+                    "bytes": 2_048,
+                },
+            )
+
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            gateway = CloudinaryMediaGateway(
+                cloud_name="demo", api_key="key", api_secret="secret", client=client
+            )
+            completed = await gateway.get_asset_metadata(
+                public_id=public_id, resource_type="raw"
+            )
+            recovered = await gateway.find_asset_metadata(
+                public_id=public_id, resource_type="raw"
+            )
+        assert completed.file_format == extension
+        assert recovered == completed
+
+    asyncio.run(exercise())
+
+
 def test_metadata_uses_explicit_when_admin_api_is_rate_limited() -> None:
     async def exercise() -> None:
         requests = []

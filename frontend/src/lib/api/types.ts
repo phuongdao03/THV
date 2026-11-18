@@ -702,6 +702,7 @@ export type MediaStatus =
   | "DELETED";
 
 export interface MediaUploadIntent {
+  dossierId?: string;
   sessionId?: string;
   confidentiality: MediaConfidentiality;
   purpose: MediaPurpose;

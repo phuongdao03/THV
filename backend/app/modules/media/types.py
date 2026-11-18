@@ -34,6 +34,7 @@ class UploadIntent:
     size: int
     confidentiality: MediaConfidentiality = MediaConfidentiality.PRIVATE
     session_id: UUID | None = None
+    dossier_id: UUID | None = None
 
 
 @dataclass(frozen=True, slots=True)

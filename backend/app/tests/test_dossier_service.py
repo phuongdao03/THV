@@ -1,7 +1,8 @@
 import asyncio
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
+import httpx
 import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import (
@@ -25,11 +26,17 @@ from app.modules.dossiers.errors import (
 from app.modules.dossiers.models import (
     Category,
     Dossier,
+    DossierEvidence,
     DossierStatus,
     DossierVisibility,
 )
 from app.modules.dossiers.service import DossierService
 from app.modules.dossiers.types import CreateDossier, DossierChanges
+from app.modules.media.cleanup import MediaCleanupService
+from app.modules.media.gateway import CloudinaryMediaGateway
+from app.modules.media.models import MediaAsset, MediaCleanupJob, MediaStatus
+from app.modules.media.service import MediaService
+from app.modules.media.types import MediaPurpose, UploadIntent
 from app.modules.organizations.models import (
     MembershipRole,
     MembershipStatus,
@@ -178,6 +185,182 @@ def test_owner_can_create_list_update_and_soft_delete_draft() -> None:
             assert all(row.actor_user_id == principal.user_id for row in audit_rows)
             assert all(row.resource_type == "dossier" for row in audit_rows)
 
+        await service.close()
+        await engine.dispose()
+
+    asyncio.run(exercise())
+
+
+def test_draft_cleanup_waits_for_upload_expiry_and_retries_provider() -> None:
+    async def exercise() -> None:
+        service, sessions, engine, users, _ = await _build_service()
+        principal = _principal(users["owner"])
+        draft = await service.create_dossier(
+            principal,
+            CreateDossier(category_id=CATEGORY_ID, title="Storage lifecycle"),
+        )
+        calls = 0
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            nonlocal calls
+            assert request.method == "POST"
+            assert request.url.path.endswith("/raw/destroy")
+            calls += 1
+            if calls == 1:
+                return httpx.Response(503)
+            return httpx.Response(200, json={"result": "not found"})
+
+        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+            gateway = CloudinaryMediaGateway(
+                cloud_name="demo", api_key="key", api_secret="secret", client=client
+            )
+            now = datetime.now(UTC)
+            async with sessions() as session:
+                media_service = MediaService(
+                    session=session,
+                    gateway=gateway,
+                    environment="local",
+                    signature_ttl_seconds=3600,
+                    delivery_ttl_seconds=300,
+                    avatar_max_bytes=1024,
+                    evidence_max_bytes=1024,
+                    clock=lambda: now,
+                )
+                intent = UploadIntent(
+                    purpose=MediaPurpose.DOSSIER_EVIDENCE,
+                    filename="evidence.docx",
+                    mime_type=(
+                        "application/vnd.openxmlformats-officedocument"
+                        ".wordprocessingml.document"
+                    ),
+                    size=256,
+                    session_id=uuid4(),
+                    dossier_id=draft.id,
+                )
+                with pytest.raises(DossierForbiddenError):
+                    await media_service.create_upload_signature(
+                        _principal(users["stranger"]), intent
+                    )
+                issued = await media_service.create_upload_signature(principal, intent)
+                await service.delete_dossier(principal, draft.id)
+                with pytest.raises(DossierNotFoundError):
+                    await media_service.create_upload_signature(principal, intent)
+
+            async with sessions() as session:
+                cleanup = MediaCleanupService(session, gateway, environment="local")
+                assert await cleanup.process_one()
+                assert not await cleanup.process_one()
+                assert calls == 0
+
+                async with session.begin():
+                    job = await session.scalar(select(MediaCleanupJob))
+                    asset = await session.get(MediaAsset, issued.media_id)
+                    assert job is not None and asset is not None
+                    assert job.media_id == asset.id
+                    assert job.next_attempt_at == asset.upload_expires_at
+                    assert asset.status is MediaStatus.PENDING
+                    expired = now - timedelta(seconds=1)
+                    asset.upload_expires_at = expired
+                    job.next_attempt_at = expired
+
+                assert await cleanup.process_one()
+                async with session.begin():
+                    assert job.attempts == 1
+                    assert job.finished_at is None
+                    assert job.outcome == "PROVIDER_UNAVAILABLE"
+                    assert asset.status is MediaStatus.DELETED
+                    job.next_attempt_at = expired
+
+                assert await cleanup.process_one()
+                assert not await cleanup.process_one()
+                assert calls == 2
+                assert job.outcome == "DELETED"
+                assert job.finished_at is not None
+        await service.close()
+        await engine.dispose()
+
+    asyncio.run(exercise())
+
+
+def test_draft_cleanup_preserves_shared_evidence() -> None:
+    async def exercise() -> None:
+        service, sessions, engine, users, _ = await _build_service()
+        principal = _principal(users["owner"])
+        draft = await service.create_dossier(
+            principal,
+            CreateDossier(category_id=CATEGORY_ID, title="Storage lifecycle"),
+        )
+        media_id = uuid4()
+        public_id = (
+            f"cns/local/owners/{principal.user_id}/uploads/dossier-evidence/{media_id}"
+        )
+        async with sessions.begin() as session:
+            retained = Dossier(
+                id=uuid4(),
+                owner_user_id=principal.user_id,
+                category_id=CATEGORY_ID,
+                code="CNS-TEST-SHARED",
+                title="Shared evidence",
+                visibility=DossierVisibility.PRIVATE,
+            )
+            session.add(retained)
+            session.add(
+                MediaAsset(
+                    id=media_id,
+                    owner_user_id=principal.user_id,
+                    purpose=MediaPurpose.DOSSIER_EVIDENCE,
+                    original_filename="photo.jpg",
+                    mime_type="image/jpeg",
+                    bytes=100,
+                    status=MediaStatus.ACTIVE,
+                    cloudinary_public_id=public_id,
+                    resource_type="image",
+                    access_mode="authenticated",
+                )
+            )
+            await session.flush()
+            for dossier_id in (draft.id, retained.id):
+                session.add(
+                    DossierEvidence(
+                        dossier_id=dossier_id,
+                        media_asset_id=media_id,
+                        evidence_type="DOCUMENT",
+                        title="Evidence",
+                    )
+                )
+        await service.delete_dossier(principal, draft.id)
+
+        calls = 0
+
+        def destroy(request: httpx.Request) -> httpx.Response:
+            nonlocal calls
+            calls += 1
+            assert request.url.path.endswith("/image/destroy")
+            return httpx.Response(200, json={"result": "ok"})
+
+        async with httpx.AsyncClient(transport=httpx.MockTransport(destroy)) as client:
+            gateway = CloudinaryMediaGateway(
+                cloud_name="demo", api_key="key", api_secret="secret", client=client
+            )
+            async with sessions() as session:
+                cleanup = MediaCleanupService(session, gateway, environment="local")
+                assert await cleanup.process_one()
+                job = await session.scalar(select(MediaCleanupJob))
+                asset = await session.get(MediaAsset, media_id)
+                references = (await session.scalars(select(DossierEvidence))).all()
+                assert job is not None and job.outcome == "RETAINED"
+                assert asset is not None and asset.status is MediaStatus.ACTIVE
+                assert [item.dossier_id for item in references] == [retained.id]
+                remaining_evidence_id = references[0].id
+                assert calls == 0
+            await service.remove_evidence(principal, retained.id, remaining_evidence_id)
+            async with sessions() as session:
+                cleanup = MediaCleanupService(session, gateway, environment="local")
+                assert await cleanup.process_one()
+                assert calls == 1
+                assert await session.scalar(select(DossierEvidence.id)) is None
+                asset = await session.get(MediaAsset, media_id)
+                assert asset is not None and asset.status is MediaStatus.DELETED
         await service.close()
         await engine.dispose()
 

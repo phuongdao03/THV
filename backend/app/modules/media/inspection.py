@@ -150,6 +150,7 @@ class MediaContentGateway(Protocol):
         *,
         public_id: str,
         resource_type: str,
+        inspect_encrypted_manifest: bool = True,
     ) -> None: ...
 
 
@@ -629,6 +630,7 @@ class MediaInspectionService:
             await self._gateway.delete_asset(
                 public_id=staging_public_id,
                 resource_type=staging_resource_type,
+                inspect_encrypted_manifest=False,
             )
         except MediaProviderUnavailableError as exc:
             unavailable = InspectionUnavailableError("PLAINTEXT_DELETE_UNAVAILABLE")
