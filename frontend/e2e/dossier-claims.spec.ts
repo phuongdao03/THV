@@ -94,7 +94,10 @@ test("applicant links a private claim to an attached file and saves its revision
   });
   await page.goto(`/dossiers/${dossierId}`);
   await page.getByRole("button", { name: /2\. Tài liệu/ }).click();
-  const editor = page.getByRole("region", { name: "Nhận định và căn cứ" });
+  const editor = page
+    .locator(".dossier-evidence-step details")
+    .filter({ hasText: "Nhận định và căn cứ" });
+  await editor.locator("summary").click();
   await editor.getByRole("button", { name: "Thêm nhận định" }).click();
   await editor
     .getByRole("textbox", { name: "Nội dung nhận định 1" })
@@ -110,7 +113,7 @@ test("applicant links a private claim to an attached file and saves its revision
     ),
   ).toBe(true);
   const accessibility = await new AxeBuilder({ page })
-    .include("[aria-labelledby='dossier-claims-heading']")
+    .include(".dossier-evidence-step details")
     .analyze();
   expect(accessibility.violations.map(({ id }) => id)).toEqual([]);
   await page.screenshot({

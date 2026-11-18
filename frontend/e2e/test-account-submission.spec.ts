@@ -147,7 +147,7 @@ test("existing USER with the scoped exemption submits without a payment", async 
     page.getByRole("heading", { level: 1, name: dossier.title }),
   ).toBeVisible();
   await page.getByRole("button", { name: /2\. Tài liệu/ }).click();
-  await expect(page.getByText("Tệp cần thêm", { exact: true })).toBeVisible();
+  await expect(page.getByText(/Tài liệu trong hồ sơ/)).toBeVisible();
   const originalViewport = page.viewportSize();
   for (const width of [320, 375, 390, 768, 1024, 1440]) {
     await page.setViewportSize({ width, height: 960 });
@@ -163,7 +163,7 @@ test("existing USER with the scoped exemption submits without a payment", async 
     });
   }
   if (originalViewport) await page.setViewportSize(originalViewport);
-  await page.getByRole("button", { name: /Kiểm tra & nộp/ }).click();
+  await page.getByRole("button", { name: "3. Kiểm tra và gửi" }).click();
   await expect(
     page.getByText("Phí nộp hồ sơ được miễn theo quyền kiểm thử."),
   ).toBeVisible();

@@ -83,7 +83,7 @@ test("critical MVP journey reaches a publicly verifiable certificate", async ({
     await page.getByRole("button", { name: /Tài liệu/ }).click();
     await page.getByText("Đặt tên hiển thị cho tài liệu (tùy chọn)").click();
     await page.getByLabel("Tên tài liệu").fill("Bản gốc nhận diện");
-    await page.getByLabel("Chọn tệp cần thêm").setInputFiles({
+    await page.getByLabel("Chọn tài liệu và minh chứng").setInputFiles({
       name: "evidence.png",
       mimeType: "image/png",
       buffer: Buffer.from(
@@ -94,7 +94,7 @@ test("critical MVP journey reaches a publicly verifiable certificate", async ({
     await page
       .getByRole("button", { name: "Tải lên 1 tệp", exact: true })
       .click();
-    await page.getByRole("button", { name: /Kiểm tra & nộp/ }).click();
+    await page.getByRole("button", { name: "3. Kiểm tra và gửi" }).click();
     const submit = page.getByRole("button", { name: "Nộp hồ sơ" });
     await expect(submit).toBeDisabled();
     await page

@@ -77,7 +77,8 @@ test("applicant preparation and submission read as one sequence", async ({
   await expect(
     page.getByRole("button", { name: "2. Tài liệu và minh chứng" }),
   ).toBeVisible();
-  await expect(page.getByText("Nhận định và căn cứ")).toBeVisible();
+  await page.getByRole("button", { name: "2. Tài liệu và minh chứng" }).click();
+  await expect(page.locator(".dossier-evidence-step")).toBeVisible();
   await page.getByRole("button", { name: "3. Kiểm tra và gửi" }).click();
   await expect(
     page.getByRole("heading", { name: "Kiểm tra và gửi" }),
