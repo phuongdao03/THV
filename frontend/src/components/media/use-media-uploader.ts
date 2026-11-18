@@ -67,19 +67,68 @@ function fileKey(file: File): string {
 }
 
 function uploadErrorMessage(error: unknown, canResume: boolean): string {
+  if (error instanceof ApiError) {
+    if (error.code === "UNAUTHENTICATED" || error.status === 401) {
+      return "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại để tiếp tục.";
+    }
+    if (
+      error.code === "MEDIA_UPLOAD_METADATA_MISMATCH" ||
+      error.code === "MEDIA_SIGNATURE_INVALID"
+    ) {
+      return "Không thể tiếp tục tải tệp này. Vui lòng thử tải lại.";
+    }
+    if (error.code === "MEDIA_FORBIDDEN") {
+      return "Bạn không có quyền thêm tệp vào hồ sơ này.";
+    }
+    if (error.code === "MEDIA_VALIDATION_ERROR") {
+      const message = error.message.toLocaleLowerCase("en");
+      if (message.includes("size")) {
+        return "Tệp vượt quá dung lượng cho phép.";
+      }
+      if (message.includes("mime") || message.includes("extension")) {
+        return "Định dạng tệp này chưa được hỗ trợ. Vui lòng chọn tệp thuộc danh sách cho phép.";
+      }
+      return "Tệp chưa đáp ứng yêu cầu tải lên. Vui lòng kiểm tra định dạng và dung lượng.";
+    }
+    if (error.code === "MEDIA_PROVIDER_UNAVAILABLE") {
+      return canResume
+        ? "Dịch vụ lưu trữ tạm gián đoạn. Tệp đã được gửi; bấm Thử lại để tiếp tục, không cần tải lại."
+        : "Dịch vụ lưu trữ tạm gián đoạn. Vui lòng thử lại sau ít phút.";
+    }
+    if (canResume) {
+      return "Tệp đã tải lên nhưng chưa thể hoàn tất lưu vào hồ sơ. Bấm Thử lại để tiếp tục, không cần tải lại.";
+    }
+    return "Không thể hoàn tất tải lên. Vui lòng kiểm tra kết nối và thử lại.";
+  }
+  if (!(error instanceof Error)) {
+    return "Không thể hoàn tất tải lên. Vui lòng kiểm tra kết nối và thử lại.";
+  }
+  if (error.message === "Không thể kết nối đến dịch vụ tải tệp.") {
+    return "Không thể hoàn tất tải lên. Vui lòng kiểm tra kết nối và thử lại.";
+  }
   if (
-    (error instanceof ApiError &&
-      error.code === "MEDIA_PROVIDER_UNAVAILABLE") ||
-    (error instanceof Error &&
-      error.message === "Media provider is unavailable.")
+    error.message === "Tệp tải lên không khớp với phiên bảo mật hiện tại." ||
+    error.message === "Phản hồi từ dịch vụ lưu trữ không hợp lệ."
+  ) {
+    return "Không thể tiếp tục tải tệp này. Vui lòng thử tải lại.";
+  }
+  if (
+    error.message === "Mạng không ổn định." ||
+    error.message === "Kết nối bị gián đoạn."
+  ) {
+    return error.message;
+  }
+  if (error.message.startsWith("Đã dừng chờ kiểm tra tệp")) {
+    return "Đã dừng chờ kiểm tra tệp. Bấm Thử lại để tiếp tục.";
+  }
+  if (
+    error.message.toLocaleLowerCase("en").includes("provider is unavailable")
   ) {
     return canResume
-      ? "Dịch vụ lưu trữ tạm gián đoạn. Tệp đã được gửi; bấm Thử lại để tiếp tục xác nhận, không cần tải lại."
+      ? "Dịch vụ lưu trữ tạm gián đoạn. Tệp đã được gửi; bấm Thử lại để tiếp tục, không cần tải lại."
       : "Dịch vụ lưu trữ tạm gián đoạn. Vui lòng thử lại sau ít phút.";
   }
-  return error instanceof Error
-    ? error.message
-    : "Không thể tải tệp. Vui lòng kiểm tra kết nối và thử lại.";
+  return "Không thể hoàn tất tải lên. Vui lòng kiểm tra kết nối và thử lại.";
 }
 
 export function useMediaUploader({
@@ -210,74 +259,85 @@ export function useMediaUploader({
     [cleanupCompletedOnRemove, disabled, items],
   );
 
-  const startUpload = useCallback(async () => {
-    if (processingRef.current || disabled) return;
-    const pending = items.filter(
-      (item) => item.status === "selected" || item.status === "failed",
-    );
-    if (!pending.length) return;
+  const startUpload = useCallback(
+    async (itemIds?: readonly string[]) => {
+      if (processingRef.current || disabled) return;
+      const pending = items.filter((item) =>
+        itemIds
+          ? itemIds.includes(item.id) &&
+            (item.status === "selected" || item.status === "failed")
+          : item.status === "selected",
+      );
+      if (!pending.length) return;
 
-    processingRef.current = true;
-    setIsProcessing(true);
-    setSelectionError(null);
-    let newlyCompleted = 0;
+      processingRef.current = true;
+      setIsProcessing(true);
+      setSelectionError(null);
+      let newlyCompleted = 0;
 
-    for (const queued of pending) {
-      let completion = queued.completion;
-      const controller = new AbortController();
-      activeAbortController.current = controller;
-      updateItem(queued.id, {
-        error: null,
-        inspectionStartedAt: null,
-        progress: completion ? 100 : 0,
-        status: completion ? "verifying" : "signing",
-      });
-      try {
-        const asset = await uploadMedia(
-          queued.file,
-          purpose,
-          {
-            onProgress: (progress) => updateItem(queued.id, { progress }),
-            onStage: (status) =>
-              updateItem(queued.id, {
-                status,
-                inspectionStartedAt:
-                  status === "inspecting" ? Date.now() : null,
-              }),
-            onTransferred: (transferred) => {
-              completion = transferred;
-              updateItem(queued.id, { completion: transferred, progress: 100 });
-            },
-            resumeCompletion: completion ?? undefined,
-            uploadSessionId: queued.uploadSessionId,
-            signal: controller.signal,
-          },
-          constraints,
-        );
-        await onComplete(asset, newlyCompleted);
-        newlyCompleted += 1;
-        completedFileKeys.current.add(fileKey(queued.file));
-        setItems((current) => current.filter((item) => item.id !== queued.id));
-      } catch (error) {
+      for (const queued of pending) {
+        let completion = queued.completion;
+        const controller = new AbortController();
+        activeAbortController.current = controller;
         updateItem(queued.id, {
-          completion,
-          error: uploadErrorMessage(error, completion !== null),
-          status: "failed",
+          error: null,
+          inspectionStartedAt: null,
+          progress: completion ? 100 : 0,
+          status: completion ? "verifying" : "signing",
         });
+        try {
+          const asset = await uploadMedia(
+            queued.file,
+            purpose,
+            {
+              onProgress: (progress) => updateItem(queued.id, { progress }),
+              onStage: (status) =>
+                updateItem(queued.id, {
+                  status,
+                  inspectionStartedAt:
+                    status === "inspecting" ? Date.now() : null,
+                }),
+              onTransferred: (transferred) => {
+                completion = transferred;
+                updateItem(queued.id, {
+                  completion: transferred,
+                  progress: 100,
+                });
+              },
+              resumeCompletion: completion ?? undefined,
+              uploadSessionId: queued.uploadSessionId,
+              signal: controller.signal,
+            },
+            constraints,
+          );
+          await onComplete(asset, newlyCompleted);
+          newlyCompleted += 1;
+          completedFileKeys.current.add(fileKey(queued.file));
+          setItems((current) =>
+            current.filter((item) => item.id !== queued.id),
+          );
+        } catch (error) {
+          updateItem(queued.id, {
+            completion,
+            error: uploadErrorMessage(error, completion !== null),
+            status: "failed",
+          });
+        }
+        activeAbortController.current = null;
       }
-      activeAbortController.current = null;
-    }
 
-    if (newlyCompleted > 0) {
-      setCompletedCount((current) => current + newlyCompleted);
-    }
-    processingRef.current = false;
-    setIsProcessing(false);
-  }, [constraints, disabled, items, onComplete, purpose, updateItem]);
+      if (newlyCompleted > 0) {
+        setCompletedCount((current) => current + newlyCompleted);
+      }
+      processingRef.current = false;
+      setIsProcessing(false);
+    },
+    [constraints, disabled, items, onComplete, purpose, updateItem],
+  );
 
   const failedCount = items.filter((item) => item.status === "failed").length;
   const pendingCount = items.filter(
-    (item) => item.status === "selected" || item.status === "failed",
+    (item) => item.status === "selected",
   ).length;
   const activeItem = items.find((item) => BUSY_STATUSES.includes(item.status));
   const stopWaiting = useCallback(

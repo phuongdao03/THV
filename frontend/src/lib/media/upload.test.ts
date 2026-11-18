@@ -180,6 +180,39 @@ describe("media upload policy", () => {
       ),
     ).toThrow(MediaUploadValidationError);
   });
+
+  it.each([
+    ["document.pdf", "application/pdf"],
+    ["document.doc", "application/msword"],
+    [
+      "document.docx",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ],
+    ["sheet.xls", "application/vnd.ms-excel"],
+    [
+      "sheet.xlsx",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ],
+    ["slides.ppt", "application/vnd.ms-powerpoint"],
+    [
+      "slides.pptx",
+      "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    ],
+    ["notes.txt", "text/plain"],
+    ["photo.jpg", "image/jpeg"],
+    ["photo.png", "image/png"],
+    ["photo.webp", "image/webp"],
+    ["clip.mp4", "video/mp4"],
+    ["clip.mov", "video/quicktime"],
+    ["clip.webm", "video/webm"],
+  ])("accepts approved dossier format %s", (filename, mimeType) => {
+    expect(() =>
+      validateMediaFile(
+        sizedFile(filename, mimeType, 2_048),
+        "DOSSIER_EVIDENCE",
+      ),
+    ).not.toThrow();
+  });
 });
 
 describe("uploadMedia", () => {
@@ -261,6 +294,62 @@ describe("uploadMedia", () => {
       signature: "b".repeat(40),
     });
     expect(statusSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it("completes a raw DOCX upload when Cloudinary returns its signed ID", async () => {
+    const rawPublicId = `${authorization.publicId}.docx`;
+    const documentMimeType =
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+    const rawAuthorization: MediaUploadAuthorization = {
+      ...authorization,
+      publicId: rawPublicId,
+      uploadUrl: "https://api.cloudinary.test/v1_1/demo/raw/upload",
+      parameters: {
+        ...authorization.parameters,
+        allowed_formats: "docx",
+        public_id: rawPublicId,
+      },
+    };
+    const uploadedAsset: MediaAsset = {
+      ...activeAsset,
+      mimeType: documentMimeType,
+      bytes: 5_600_000,
+      width: null,
+      height: null,
+    };
+    FakeXMLHttpRequest.response = {
+      public_id: rawPublicId,
+      version: 17,
+      signature: "b".repeat(40),
+    };
+    const signatureSpy = vi
+      .spyOn(mediaApi, "createUploadSignature")
+      .mockResolvedValue(rawAuthorization);
+    const completeSpy = vi
+      .spyOn(mediaApi, "completeUpload")
+      .mockResolvedValue(uploadedAsset);
+    const file = sizedFile("Báo cáo Proteus.docx", documentMimeType, 5_600_000);
+
+    await expect(
+      uploadMedia(file, "DOSSIER_EVIDENCE", {
+        uploadSessionId: "6a0bb388-3c26-4417-aed8-3ca05c212d1f",
+      }),
+    ).resolves.toEqual(uploadedAsset);
+
+    expect(signatureSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        filename: "Báo cáo Proteus.docx",
+        size: 5_600_000,
+      }),
+    );
+    expect(FakeXMLHttpRequest.latest?.open).toHaveBeenCalledWith(
+      "POST",
+      rawAuthorization.uploadUrl,
+      true,
+    );
+    expect(completeSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ publicId: rawPublicId }),
+    );
   });
 
   it("reuses a stable upload session and skips a provider transfer after recovery", async () => {

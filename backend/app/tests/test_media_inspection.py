@@ -184,6 +184,68 @@ def test_content_policy_accepts_safe_evidence_archives_and_rejects_unsafe_ones()
         )
 
 
+def test_content_policy_accepts_requested_powerpoint_text_and_quicktime_formats() -> (
+    None
+):
+    policy = MediaInspectionPolicy()
+    pptx = _archive(
+        {
+            "[Content_Types].xml": b"<Types/>",
+            "ppt/presentation.xml": b"<p:presentation/>",
+        }
+    )
+    legacy_ppt = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1" + bytes(512)
+    quicktime = b"\x00\x00\x00\x14ftypqt  \x00\x00\x00\x00qt  "
+
+    policy.validate("slides.ppt", "application/vnd.ms-powerpoint", legacy_ppt)
+    policy.validate(
+        "slides.pptx",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        pptx,
+    )
+    policy.validate("notes.txt", "text/plain", "Tài liệu\nNội dung".encode())
+    policy.validate("recording.mov", "video/quicktime", quicktime)
+
+    with pytest.raises(InspectionRejectedError, match="OFFICE_MALFORMED"):
+        policy.validate(
+            "slides.pptx",
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            _archive({"[Content_Types].xml": b"<Types/>"}),
+        )
+    with pytest.raises(InspectionRejectedError, match="OFFICE_MACRO_CONTENT"):
+        policy.validate(
+            "slides.pptx",
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            _archive(
+                {
+                    "[Content_Types].xml": b"<Types/>",
+                    "ppt/presentation.xml": b"<p:presentation/>",
+                    "ppt/vbaProject.bin": b"macro",
+                }
+            ),
+        )
+    with pytest.raises(InspectionRejectedError, match="MAGIC_BYTES_MISMATCH"):
+        policy.validate("notes.txt", "text/plain", b"binary\x00content")
+    with pytest.raises(InspectionRejectedError, match="MAGIC_BYTES_MISMATCH"):
+        policy.validate(
+            "recording.mov",
+            "video/quicktime",
+            b"\x00\x00\x00\x14ftypmp42\x00\x00\x00\x00mp42",
+        )
+    with pytest.raises(InspectionRejectedError, match="MAGIC_BYTES_MISMATCH"):
+        policy.validate(
+            "recording.mov",
+            "video/quicktime",
+            b"\x00\x00\x00\x14ftypmp42\x00\x00\x00\x00junkqt  ",
+        )
+    with pytest.raises(InspectionRejectedError, match="MAGIC_BYTES_MISMATCH"):
+        policy.validate(
+            "recording.mov",
+            "video/quicktime",
+            b"\x00\x00\x00\x15ftypqt  \x00\x00\x00\x00qt  x",
+        )
+
+
 def test_inspection_activates_only_clean_media_and_uses_server_hash() -> None:
     async def exercise() -> None:
         engine = create_async_engine("sqlite+aiosqlite://")

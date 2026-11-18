@@ -130,6 +130,12 @@ _FORMATS = {
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": (
         _FormatPolicy("xlsx", "raw", frozenset({".xlsx"}))
     ),
+    "application/vnd.ms-powerpoint": _FormatPolicy("ppt", "raw", frozenset({".ppt"})),
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation": (
+        _FormatPolicy("pptx", "raw", frozenset({".pptx"}))
+    ),
+    "text/plain": _FormatPolicy("txt", "raw", frozenset({".txt"})),
+    "video/quicktime": _FormatPolicy("mov", "video", frozenset({".mov"})),
     "application/zip": _FormatPolicy("zip", "raw", frozenset({".zip"})),
 }
 _EVIDENCE_ONLY_MIME_TYPES = frozenset(
@@ -138,6 +144,9 @@ _EVIDENCE_ONLY_MIME_TYPES = frozenset(
         "application/vnd.ms-excel",
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/vnd.ms-powerpoint",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "text/plain",
         "application/zip",
     }
 )
@@ -146,7 +155,14 @@ _PURPOSE_MIME_TYPES = {
     MediaPurpose.AVATAR: frozenset({"image/jpeg", "image/png", "image/webp"}),
     MediaPurpose.COMMUNITY_POST: COMMUNITY_POST_IMAGE_MIME_TYPES,
     MediaPurpose.DOSSIER_EVIDENCE: frozenset(_FORMATS),
-    MediaPurpose.HISTORICAL_NOMINATION: frozenset(_FORMATS),
+    MediaPurpose.HISTORICAL_NOMINATION: frozenset(_FORMATS).difference(
+        {
+            "application/vnd.ms-powerpoint",
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            "text/plain",
+            "video/quicktime",
+        }
+    ),
     MediaPurpose.CERTIFICATE_ARCHIVE_SCAN: frozenset(
         {"image/jpeg", "image/png", "image/webp"}
     ),
@@ -254,6 +270,7 @@ class MediaService:
                     await self._session.flush()
                 else:
                     self._validate_reused_session(asset, principal, intent)
+                    self._normalize_pending_raw_public_id(asset, policy)
                     created = False
                 media_id = asset.id
                 public_id = asset.cloudinary_public_id
@@ -265,6 +282,7 @@ class MediaService:
                 if asset is None:
                     raise
                 self._validate_reused_session(asset, principal, intent)
+                self._normalize_pending_raw_public_id(asset, policy)
                 created = False
                 media_id = asset.id
                 public_id = asset.cloudinary_public_id
@@ -309,15 +327,20 @@ class MediaService:
     ) -> MediaAsset:
         media_id = uuid4()
         purpose_segment = intent.purpose.value.lower().replace("_", "-")
+        cloudinary_public_id = (
+            f"cns/{self._environment}/owners/{principal.user_id}/uploads/"
+            f"{purpose_segment}/{media_id}"
+        )
+        if policy.resource_type == "raw":
+            # Cloudinary raw assets identify the format in their public ID.
+            # Derive the suffix from the server-validated MIME policy.
+            cloudinary_public_id = f"{cloudinary_public_id}.{policy.file_format}"
         return MediaAsset(
             id=media_id,
             upload_session_id=intent.session_id,
             owner_user_id=principal.user_id,
             purpose=intent.purpose.value,
-            cloudinary_public_id=(
-                f"cns/{self._environment}/owners/{principal.user_id}/uploads/"
-                f"{purpose_segment}/{media_id}"
-            ),
+            cloudinary_public_id=cloudinary_public_id,
             resource_type=policy.resource_type,
             access_mode="authenticated",
             original_filename=intent.filename,
@@ -325,6 +348,24 @@ class MediaService:
             bytes=intent.size,
             confidentiality=intent.confidentiality,
         )
+
+    @staticmethod
+    def _normalize_pending_raw_public_id(
+        asset: MediaAsset,
+        policy: _FormatPolicy,
+    ) -> None:
+        if (
+            asset.status is MediaStatus.PENDING
+            and policy.resource_type == "raw"
+            and not asset.cloudinary_public_id.lower().endswith(
+                f".{policy.file_format}"
+            )
+        ):
+            # Older clients created extensionless raw IDs. Normalize pending
+            # sessions so retries can recover the provider's actual asset ID.
+            asset.cloudinary_public_id = (
+                f"{asset.cloudinary_public_id}.{policy.file_format}"
+            )
 
     @staticmethod
     def _validate_reused_session(

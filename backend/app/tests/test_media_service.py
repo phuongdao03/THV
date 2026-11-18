@@ -500,6 +500,52 @@ def test_upload_session_reuses_asset_and_recovers_provider_upload() -> None:
     asyncio.run(exercise())
 
 
+def test_legacy_raw_upload_session_recovers_with_the_provider_extension() -> None:
+    async def exercise() -> None:
+        service, gateway, session_factory, engine, users = await _build_service()
+        owner = _principal(users["owner"])
+        session_id = uuid4()
+        intent = UploadIntent(
+            purpose=MediaPurpose.DOSSIER_EVIDENCE,
+            filename="Báo cáo Proteus.docx",
+            mime_type=(
+                "application/vnd.openxmlformats-officedocument."
+                "wordprocessingml.document"
+            ),
+            size=5_600_000,
+            session_id=session_id,
+        )
+        first = await service.create_upload_signature(owner, intent)
+        legacy_public_id = first.public_id.removesuffix(".docx")
+        async with session_factory() as session:
+            asset = await session.get(MediaAsset, first.media_id)
+            assert asset is not None
+            asset.cloudinary_public_id = legacy_public_id
+            await session.commit()
+
+        gateway.existing_metadata = ProviderAssetMetadata(
+            public_id=first.public_id,
+            version=17,
+            resource_type="raw",
+            delivery_type="authenticated",
+            file_format="docx",
+            bytes=5_600_000,
+            provider_asset_id="cloudinary-raw-asset-id",
+        )
+        retried = await service.create_upload_signature(owner, intent)
+
+        assert retried.media_id == first.media_id
+        assert retried.public_id == first.public_id
+        assert retried.existing_asset is not None
+        assert retried.existing_asset.status is MediaStatus.QUARANTINED
+        assert gateway.inspection_jobs == [str(first.media_id)]
+
+        await service.close()
+        await engine.dispose()
+
+    asyncio.run(exercise())
+
+
 def test_deleted_community_image_retries_provider_and_backup_purge() -> None:
     async def exercise() -> None:
         service, gateway, session_factory, engine, users = await _build_service()
@@ -785,6 +831,34 @@ def test_evidence_upload_policy_allows_inspected_document_formats_only() -> None
         assert docx.parameters["allowed_formats"] == "docx"
         assert docx.parameters["max_file_size"] == "2048"
 
+        requested_formats = (
+            (
+                "slides.ppt",
+                "application/vnd.ms-powerpoint",
+                "ppt",
+            ),
+            (
+                "slides.pptx",
+                "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                "pptx",
+            ),
+            ("notes.txt", "text/plain", "txt"),
+            ("recording.mov", "video/quicktime", "mov"),
+        )
+        for filename, mime_type, file_format in requested_formats:
+            issued = await service.create_upload_signature(
+                owner,
+                UploadIntent(
+                    purpose=MediaPurpose.DOSSIER_EVIDENCE,
+                    filename=filename,
+                    mime_type=mime_type,
+                    size=2_048,
+                ),
+            )
+            assert issued.parameters["allowed_formats"] == file_format
+            if file_format != "mov":
+                assert issued.public_id.endswith(f".{file_format}")
+
         with pytest.raises(MediaValidationError):
             await service.create_upload_signature(
                 owner,
@@ -799,6 +873,36 @@ def test_evidence_upload_policy_allows_inspected_document_formats_only() -> None
                     confidentiality=MediaConfidentiality.PUBLIC,
                 ),
             )
+
+        await service.close()
+        await engine.dispose()
+
+    asyncio.run(exercise())
+
+
+def test_raw_upload_authorization_includes_the_validated_file_extension() -> None:
+    async def exercise() -> None:
+        service, _, _, engine, users = await _build_service()
+        owner = _principal(users["owner"])
+        authorization = await service.create_upload_signature(
+            owner,
+            UploadIntent(
+                purpose=MediaPurpose.DOSSIER_EVIDENCE,
+                filename="Báo cáo Proteus.docx",
+                mime_type=(
+                    "application/vnd.openxmlformats-officedocument."
+                    "wordprocessingml.document"
+                ),
+                size=5_600_000,
+                session_id=uuid4(),
+            ),
+        )
+
+        # Cloudinary raw assets identify the format in their public ID. Signing
+        # an extensionless ID makes a successful provider response fail the
+        # client's exact upload-session check before /media/complete is called.
+        assert authorization.public_id.endswith(".docx")
+        assert authorization.parameters["public_id"] == authorization.public_id
 
         await service.close()
         await engine.dispose()

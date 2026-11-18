@@ -3,8 +3,12 @@
 import {
   CircleAlert,
   FileCheck2,
+  FileImage,
+  FileSpreadsheet,
   FileText,
+  FileVideo,
   LoaderCircle,
+  RotateCcw,
   ShieldCheck,
   Trash2,
   Upload,
@@ -12,6 +16,7 @@ import {
 import {
   type ChangeEvent,
   type DragEvent,
+  type ReactNode,
   useEffect,
   useId,
   useRef,
@@ -30,8 +35,11 @@ import { cn } from "@/lib/utils";
 
 interface FileUploaderProps {
   cleanupCompletedOnRemove?: boolean;
+  chooseButtonLabel?: string;
   compact?: boolean;
   constraints?: MediaFileConstraints;
+  description?: string;
+  documentTypeLabel?: string;
   disabled?: boolean;
   existingFiles?: readonly {
     filename: string | null | undefined;
@@ -45,6 +53,7 @@ interface FileUploaderProps {
   onComplete: (asset: MediaAsset, index: number) => void | Promise<void>;
   onQueueChange?: (hasQueuedFiles: boolean) => void;
   purpose: MediaPurpose;
+  children?: ReactNode;
 }
 
 const statusText: Record<UploadQueueItem["status"], string> = {
@@ -77,6 +86,44 @@ function supportedFormatLabel(
   ].join(", ");
 }
 
+function FileTypeIcon({ mimeType }: { mimeType: string }) {
+  if (mimeType.startsWith("image/")) {
+    return <FileImage aria-hidden="true" className="size-4" />;
+  }
+  if (mimeType.startsWith("video/") || mimeType.startsWith("audio/")) {
+    return <FileVideo aria-hidden="true" className="size-4" />;
+  }
+  if (
+    mimeType.includes("spreadsheet") ||
+    mimeType === "application/vnd.ms-excel"
+  ) {
+    return <FileSpreadsheet aria-hidden="true" className="size-4" />;
+  }
+  return <FileText aria-hidden="true" className="size-4" />;
+}
+
+function fileTypeLabel(mimeType: string): string {
+  const labels: Record<string, string> = {
+    "application/pdf": "PDF",
+    "application/msword": "DOC",
+    "application/vnd.ms-excel": "XLS",
+    "application/vnd.ms-powerpoint": "PPT",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+      "DOCX",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "XLSX",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation":
+      "PPTX",
+    "text/plain": "TXT",
+    "video/quicktime": "MOV",
+    "video/mp4": "MP4",
+    "video/webm": "WEBM",
+    "image/jpeg": "JPG",
+    "image/png": "PNG",
+    "image/webp": "WEBP",
+  };
+  return labels[mimeType] ?? mimeType.split("/").at(-1)?.toUpperCase() ?? "Tệp";
+}
+
 function itemStatus(item: UploadQueueItem): string {
   if (item.status === "uploading") {
     return `${statusText.uploading} · ${item.progress}%`;
@@ -107,8 +154,11 @@ function overallStatus(
 
 export function FileUploader({
   cleanupCompletedOnRemove = false,
+  chooseButtonLabel = "Thêm tệp",
   compact = false,
   constraints,
+  description,
+  documentTypeLabel,
   disabled = false,
   existingFiles,
   idleMessage,
@@ -118,6 +168,7 @@ export function FileUploader({
   onComplete,
   onQueueChange,
   purpose,
+  children,
 }: FileUploaderProps) {
   const inputId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -131,7 +182,6 @@ export function FileUploader({
   const {
     completedCount,
     error,
-    failedCount,
     isBusy,
     items,
     pendingCount,
@@ -187,6 +237,8 @@ export function FileUploader({
     : 0;
   const openPicker = () => inputRef.current?.click();
   const descriptionId = `${inputId}-description`;
+  const documentCount = (existingFiles?.length ?? 0) + items.length;
+  const hasDocumentRows = children !== undefined || items.length > 0;
 
   return (
     <section
@@ -211,22 +263,22 @@ export function FileUploader({
               <ShieldCheck aria-hidden="true" className="size-4" />
             </span>
             <h3
-              className="text-base font-bold text-neutral-950"
+              className="text-base font-bold text-[var(--theme-text)]"
               id={`${inputId}-label`}
             >
               {label}
             </h3>
           </div>
           <p
-            className="mt-2 text-sm leading-6 text-neutral-600"
+            className="mt-2 text-sm leading-6 text-[var(--theme-muted)]"
             id={descriptionId}
           >
-            Mỗi tệp tối đa {formatBytes(maxBytes)}. Tệp được kiểm tra an toàn
-            trước khi thêm vào hồ sơ.
+            {description ??
+              `Mỗi tệp tối đa ${formatBytes(maxBytes)}. Tệp được kiểm tra an toàn trước khi thêm vào hồ sơ.`}
           </p>
         </div>
         {maxFiles !== undefined ? (
-          <span className="w-fit shrink-0 text-xs font-bold text-neutral-700 sm:rounded-full sm:bg-neutral-100 sm:px-3 sm:py-1">
+          <span className="w-fit shrink-0 text-xs font-bold text-[var(--theme-muted)] sm:rounded-full sm:bg-[var(--theme-elevated)] sm:px-3 sm:py-1">
             Còn {Math.max(0, maxFiles - items.length)} tệp
           </span>
         ) : null}
@@ -270,34 +322,25 @@ export function FileUploader({
               <Upload aria-hidden="true" className="size-5" />
             </span>
             <div className="min-w-0 flex-1">
-              {!compact && (
-                <>
-                  <p className="font-bold text-neutral-950">
-                    {items.length
-                      ? "Bạn có thể tiếp tục thêm tệp"
-                      : multiple
-                        ? "Chọn một hoặc nhiều tệp"
-                        : "Chọn tệp từ thiết bị"}
-                  </p>
-                  <p className="mt-1 hidden text-xs leading-5 text-neutral-500 sm:block">
-                    Bấm Thêm tệp để chọn từ thiết bị.
-                    <span className="hidden sm:block">
-                      Bạn cũng có thể kéo thả tệp vào đây.
-                    </span>
-                  </p>
-                </>
-              )}
-              <details className="mt-1 text-xs text-neutral-500 sm:mt-2">
+              <p className="font-bold text-[var(--theme-text)]">
+                Chọn tệp hoặc kéo thả vào đây
+              </p>
+              <p className="mt-1 text-xs leading-5 text-[var(--theme-muted)]">
+                Định dạng và dung lượng hỗ trợ
+              </p>
+              <details className="mt-1 text-xs text-[var(--theme-muted)] sm:mt-2">
                 <summary className="w-fit cursor-pointer underline underline-offset-2">
-                  Xem định dạng được hỗ trợ
+                  Xem danh sách
                 </summary>
-                <p className="mt-1 leading-5">{supportedFormats}</p>
+                <p className="mt-1 leading-5">
+                  {supportedFormats} · tối đa {formatBytes(maxBytes)} mỗi tệp
+                </p>
               </details>
             </div>
             <FileUploaderActions
               canChoose={canChoose}
+              chooseButtonLabel={chooseButtonLabel}
               disabled={disabled}
-              failedCount={failedCount}
               isBusy={isBusy}
               onChoose={openPicker}
               onUpload={() => void startUpload()}
@@ -306,23 +349,20 @@ export function FileUploader({
           </div>
         </div>
 
-        {items.length ? (
+        {hasDocumentRows ? (
           <div>
             <div className="mb-2 flex items-center justify-between gap-3">
-              <p className="text-sm font-bold text-neutral-950">
-                Tệp chưa tải xong ({items.length})
+              <p className="text-sm font-bold text-[var(--theme-text)]">
+                Tài liệu trong hồ sơ ({documentCount})
               </p>
-              <p className="text-xs text-neutral-500">
-                Có thể thêm nhiều lần trước khi tải
-              </p>
+              {items.length ? (
+                <p className="text-xs text-[var(--theme-muted)]">
+                  Tệp mới và tệp đã lưu cùng trong danh sách
+                </p>
+              ) : null}
             </div>
-            <ul
-              className={cn(
-                compact
-                  ? "grid gap-2"
-                  : "divide-y divide-[var(--theme-border)] border-y border-[var(--theme-border)]",
-              )}
-            >
+            <ul className="divide-y divide-[var(--theme-border)] border-y border-[var(--theme-border)]">
+              {children}
               {items.map((item) => {
                 const hasError = item.status === "failed";
                 const isItemBusy = [
@@ -332,42 +372,37 @@ export function FileUploader({
                   "inspecting",
                 ].includes(item.status);
                 return (
-                  <li
-                    className={cn(
-                      "media-uploader__item",
-                      compact ? "rounded-lg p-3" : "py-3",
-                      hasError ? "bg-error/5" : "bg-[var(--theme-surface)]",
-                    )}
-                    key={item.id}
-                  >
+                  <li className="media-uploader__item py-3" key={item.id}>
                     <div className="flex items-start gap-3">
                       <span
-                        className="t-icon-swap mt-0.5 grid size-9 shrink-0 place-items-center rounded-lg bg-neutral-100 text-neutral-700"
-                        data-state={item.status === "selected" ? "a" : "b"}
+                        className={cn(
+                          "mt-0.5 grid size-9 shrink-0 place-items-center rounded-lg",
+                          hasError
+                            ? "bg-error/10 text-error"
+                            : "bg-[var(--theme-elevated)] text-[var(--theme-muted)]",
+                        )}
                       >
-                        <span className="t-icon" data-icon="a">
-                          <FileText aria-hidden="true" className="size-4" />
-                        </span>
-                        <span className="t-icon" data-icon="b">
-                          {hasError ? (
-                            <CircleAlert
-                              aria-hidden="true"
-                              className="size-4 text-error"
-                            />
-                          ) : (
-                            <LoaderCircle
-                              aria-hidden="true"
-                              className="size-4 animate-spin text-primary-700"
-                            />
-                          )}
-                        </span>
+                        {hasError ? (
+                          <CircleAlert aria-hidden="true" className="size-4" />
+                        ) : isItemBusy ? (
+                          <LoaderCircle
+                            aria-hidden="true"
+                            className="size-4 animate-spin text-primary-700"
+                          />
+                        ) : (
+                          <FileTypeIcon mimeType={item.file.type} />
+                        )}
                       </span>
                       <div className="min-w-0 flex-1">
-                        <p className="[overflow-wrap:anywhere] text-sm font-bold text-neutral-950">
+                        <p className="[overflow-wrap:anywhere] text-sm font-bold text-[var(--theme-text)]">
                           {item.file.name}
                         </p>
-                        <p className="mt-0.5 text-xs text-neutral-500">
-                          {formatBytes(item.file.size)} · {itemStatus(item)}
+                        <p className="mt-0.5 text-xs text-[var(--theme-muted)]">
+                          {fileTypeLabel(item.file.type)} ·{" "}
+                          {formatBytes(item.file.size)}
+                          {documentTypeLabel
+                            ? ` · ${documentTypeLabel}`
+                            : ""} · {itemStatus(item)}
                         </p>
                         {item.status === "uploading" ? (
                           <progress
@@ -387,14 +422,30 @@ export function FileUploader({
                         ) : null}
                       </div>
                       {!isBusy && !isItemBusy ? (
-                        <button
-                          aria-label={`Xóa ${item.file.name}`}
-                          className="grid size-9 shrink-0 place-items-center rounded-lg text-neutral-500 transition-colors hover:bg-error/10 hover:text-error focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600"
-                          onClick={() => void removeFile(item.id)}
-                          type="button"
-                        >
-                          <Trash2 aria-hidden="true" className="size-4" />
-                        </button>
+                        <div className="flex shrink-0 items-center gap-1">
+                          {hasError ? (
+                            <button
+                              aria-label={`Thử lại ${item.file.name}`}
+                              className="inline-flex min-h-10 items-center gap-1.5 rounded-lg px-2 text-sm font-semibold text-primary-800 hover:bg-primary-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 dark:text-primary-300 dark:hover:bg-primary-900/40"
+                              onClick={() => void startUpload([item.id])}
+                              type="button"
+                            >
+                              <RotateCcw
+                                aria-hidden="true"
+                                className="size-4"
+                              />
+                              Thử lại
+                            </button>
+                          ) : null}
+                          <button
+                            aria-label={`Xóa ${item.file.name}`}
+                            className="grid size-10 shrink-0 place-items-center rounded-lg text-[var(--theme-muted)] transition-colors hover:bg-error/10 hover:text-error focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600"
+                            onClick={() => void removeFile(item.id)}
+                            type="button"
+                          >
+                            <Trash2 aria-hidden="true" className="size-4" />
+                          </button>
+                        </div>
                       ) : null}
                     </div>
                   </li>
@@ -408,7 +459,9 @@ export function FileUploader({
           aria-live="polite"
           className={cn(
             "flex items-center gap-2 text-sm font-medium",
-            status === "complete" ? "text-success" : "text-neutral-600",
+            status === "complete"
+              ? "text-success"
+              : "text-[var(--theme-muted)]",
           )}
           role="status"
         >

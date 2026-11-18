@@ -150,7 +150,7 @@ export const mediaPolicies: Record<MediaPurpose, MediaPolicy> = {
   },
   DOSSIER_EVIDENCE: {
     accept:
-      "image/jpeg,image/png,image/webp,application/pdf,audio/mpeg,audio/mp4,audio/ogg,audio/wav,audio/x-wav,video/mp4,video/webm,application/msword,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/zip",
+      "image/jpeg,image/png,image/webp,application/pdf,audio/mpeg,audio/mp4,audio/ogg,audio/wav,audio/x-wav,video/mp4,video/quicktime,video/webm,application/msword,application/vnd.ms-excel,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.openxmlformats-officedocument.presentationml.presentation,text/plain,application/zip",
     maxBytes: 314_572_800,
     maxMegabytes: 300,
     formats: {
@@ -162,6 +162,10 @@ export const mediaPolicies: Record<MediaPurpose, MediaPolicy> = {
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [
         ".xlsx",
       ],
+      "application/vnd.ms-powerpoint": [".ppt"],
+      "application/vnd.openxmlformats-officedocument.presentationml.presentation":
+        [".pptx"],
+      "text/plain": [".txt"],
       "application/zip": [".zip"],
       "audio/mpeg": [".mp3"],
       "audio/mp4": [".m4a", ".mp4"],
@@ -172,6 +176,7 @@ export const mediaPolicies: Record<MediaPurpose, MediaPolicy> = {
       "image/png": [".png"],
       "image/webp": [".webp"],
       "video/mp4": [".mp4"],
+      "video/quicktime": [".mov"],
       "video/webm": [".webm"],
     },
   },

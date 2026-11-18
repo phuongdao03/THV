@@ -1,11 +1,11 @@
-import { LoaderCircle, Plus, RotateCcw, Upload } from "lucide-react";
+import { LoaderCircle, Plus, Upload } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 
 interface FileUploaderActionsProps {
   canChoose: boolean;
+  chooseButtonLabel: string;
   disabled: boolean;
-  failedCount: number;
   isBusy: boolean;
   onChoose: () => void;
   onUpload: () => void;
@@ -14,15 +14,13 @@ interface FileUploaderActionsProps {
 
 export function FileUploaderActions({
   canChoose,
+  chooseButtonLabel,
   disabled,
-  failedCount,
   isBusy,
   onChoose,
   onUpload,
   pendingCount,
 }: FileUploaderActionsProps) {
-  const retryOnly = failedCount > 0 && failedCount === pendingCount;
-
   return (
     <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
       {canChoose ? (
@@ -34,7 +32,7 @@ export function FileUploaderActions({
           variant={pendingCount > 0 ? "ghost" : "default"}
         >
           <Plus aria-hidden="true" className="size-4" />
-          Thêm tệp
+          {chooseButtonLabel}
         </Button>
       ) : null}
       {pendingCount > 0 || isBusy ? (
@@ -47,16 +45,10 @@ export function FileUploaderActions({
         >
           {isBusy ? (
             <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
-          ) : retryOnly ? (
-            <RotateCcw aria-hidden="true" className="size-4" />
           ) : (
             <Upload aria-hidden="true" className="size-4" />
           )}
-          {isBusy
-            ? "Đang xử lý"
-            : retryOnly
-              ? `Thử lại ${failedCount} tệp`
-              : `Tải lên ${pendingCount} tệp`}
+          {isBusy ? "Đang xử lý" : `Tải lên ${pendingCount} tệp`}
         </Button>
       ) : null}
     </div>

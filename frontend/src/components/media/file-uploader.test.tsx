@@ -128,7 +128,9 @@ describe("FileUploader", () => {
     expect((await screen.findByRole("alert")).textContent).toContain(
       "Mạng không ổn định.",
     );
-    await user.click(screen.getByRole("button", { name: "Thử lại 1 tệp" }));
+    await user.click(
+      screen.getByRole("button", { name: "Thử lại avatar.png" }),
+    );
 
     await vi.waitFor(() => {
       expect(screen.getByRole("status").textContent).toContain(
@@ -142,6 +144,48 @@ describe("FileUploader", () => {
     expect(uploadMediaMock.mock.calls[0]?.[2]?.uploadSessionId).toBe(
       uploadMediaMock.mock.calls[1]?.[2]?.uploadSessionId,
     );
+  });
+
+  it("retries only the failed file and keeps successful files out of the retry", async () => {
+    const user = userEvent.setup();
+    const onComplete = vi.fn();
+    uploadMediaMock
+      .mockResolvedValueOnce(activeAsset)
+      .mockRejectedValueOnce(new Error("Kết nối bị gián đoạn."))
+      .mockResolvedValueOnce(activeAsset);
+    render(
+      <FileUploader
+        label="Tài liệu và minh chứng"
+        multiple
+        onComplete={onComplete}
+        purpose="DOSSIER_EVIDENCE"
+      />,
+    );
+
+    const input = screen.getByLabelText("Chọn tài liệu và minh chứng");
+    const firstFile = new File(["pdf one"], "first.pdf", {
+      type: "application/pdf",
+    });
+    const failedFile = new File(["pdf two"], "failed.pdf", {
+      type: "application/pdf",
+    });
+    await user.upload(input, [firstFile, failedFile]);
+    await user.click(screen.getByRole("button", { name: "Tải lên 2 tệp" }));
+
+    expect(
+      await screen.findByRole("button", { name: "Thử lại failed.pdf" }),
+    ).toBeDefined();
+    expect(uploadMediaMock).toHaveBeenCalledTimes(2);
+    expect(onComplete).toHaveBeenCalledTimes(1);
+
+    await user.click(
+      screen.getByRole("button", { name: "Thử lại failed.pdf" }),
+    );
+    await vi.waitFor(() => expect(uploadMediaMock).toHaveBeenCalledTimes(3));
+
+    expect(uploadMediaMock.mock.calls[2]?.[0]).toBe(failedFile);
+    expect(uploadMediaMock.mock.calls[2]?.[0]).not.toBe(firstFile);
+    expect(onComplete).toHaveBeenCalledTimes(2);
   });
 
   it("keeps the uploaded checkpoint and explains a temporary provider failure", async () => {
@@ -174,11 +218,37 @@ describe("FileUploader", () => {
     expect((await screen.findByRole("alert")).textContent).toContain(
       "không cần tải lại",
     );
-    await user.click(screen.getByRole("button", { name: "Thử lại 1 tệp" }));
+    await user.click(
+      screen.getByRole("button", { name: "Thử lại evidence.mp4" }),
+    );
     await vi.waitFor(() => expect(uploadMediaMock).toHaveBeenCalledTimes(2));
     expect(uploadMediaMock.mock.calls[1]?.[2]?.resumeCompletion).toEqual(
       checkpoint,
     );
+  });
+
+  it("shows a localized message for unexpected upload errors", async () => {
+    const user = userEvent.setup();
+    uploadMediaMock.mockRejectedValueOnce(
+      new Error("ECONNRESET from media worker"),
+    );
+    render(
+      <FileUploader
+        label="Bằng chứng hồ sơ"
+        onComplete={vi.fn()}
+        purpose="DOSSIER_EVIDENCE"
+      />,
+    );
+    await user.upload(
+      screen.getByLabelText("Chọn bằng chứng hồ sơ"),
+      new File(["video"], "evidence.mp4", { type: "video/mp4" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Tải lên 1 tệp" }));
+
+    expect((await screen.findByRole("alert")).textContent).toBe(
+      "Không thể hoàn tất tải lên. Vui lòng kiểm tra kết nối và thử lại.",
+    );
+    expect(screen.queryByText("ECONNRESET from media worker")).toBeNull();
   });
 
   it("deletes a transferred community image when its canceled upload is removed", async () => {
@@ -505,7 +575,7 @@ describe("FileUploader", () => {
     expect(onComplete).toHaveBeenCalledWith(secondAsset, 0);
     expect(screen.getByText("Kết nối bị gián đoạn.")).toBeDefined();
 
-    await user.click(screen.getByRole("button", { name: "Thử lại 1 tệp" }));
+    await user.click(screen.getByRole("button", { name: "Thử lại one.pdf" }));
     await vi.waitFor(() => expect(uploadMediaMock).toHaveBeenCalledTimes(3));
     expect(uploadMediaMock.mock.calls[2]?.[0]).toBe(files[0]);
     expect(onComplete).toHaveBeenCalledTimes(2);

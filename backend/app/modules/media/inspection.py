@@ -82,7 +82,11 @@ _DELIVERY_FORMATS = {
     "application/vnd.ms-excel": "xls",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
+    "application/vnd.ms-powerpoint": "ppt",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation": "pptx",
+    "text/plain": "txt",
     "application/zip": "zip",
+    "video/quicktime": "mov",
 }
 _OLE_COMPOUND_SIGNATURE = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
 _ARCHIVE_MAX_ENTRIES = 1_000
@@ -169,15 +173,21 @@ class MediaInspectionPolicy:
             "audio/wav": self._wav,
             "audio/x-wav": self._wav,
             "video/mp4": self._mp4,
+            "video/quicktime": self._quicktime,
             "video/webm": self._webm,
             "application/msword": self._legacy_office,
             "application/vnd.ms-excel": self._legacy_office,
+            "application/vnd.ms-powerpoint": self._legacy_office,
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document": (
                 self._docx
             ),
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": (
                 self._xlsx
             ),
+            (
+                "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+            ): self._pptx,
+            "text/plain": self._plain_text,
             "application/zip": self._zip,
         }.get(mime_type)
         if validator is None or not validator(content):
@@ -224,6 +234,32 @@ class MediaInspectionPolicy:
         return len(content) >= 12 and content[4:8] == b"ftyp"
 
     @staticmethod
+    def _quicktime(content: bytes) -> bool:
+        if len(content) < 16 or content[4:8] != b"ftyp":
+            return False
+
+        box_size = int.from_bytes(content[:4], "big")
+        header_size = 8
+        if box_size == 1:
+            if len(content) < 24:
+                return False
+            box_size = int.from_bytes(content[8:16], "big")
+            header_size = 16
+        elif box_size == 0:
+            box_size = len(content)
+
+        brand_bytes = box_size - header_size
+        if box_size > len(content) or brand_bytes < 8 or (brand_bytes - 8) % 4 != 0:
+            return False
+
+        major_brand = content[header_size : header_size + 4]
+        compatible_brands = content[header_size + 8 : box_size]
+        return major_brand == b"qt  " or any(
+            compatible_brands[offset : offset + 4] == b"qt  "
+            for offset in range(0, len(compatible_brands), 4)
+        )
+
+    @staticmethod
     def _ogg(content: bytes) -> bool:
         return content.startswith(b"OggS")
 
@@ -263,6 +299,24 @@ class MediaInspectionPolicy:
             required_entries={"[Content_Types].xml", "xl/workbook.xml"},
         )
         return True
+
+    def _pptx(self, content: bytes) -> bool:
+        self._office_archive(
+            content,
+            required_entries={"[Content_Types].xml", "ppt/presentation.xml"},
+        )
+        return True
+
+    @staticmethod
+    def _plain_text(content: bytes) -> bool:
+        try:
+            text = content.decode("utf-8-sig")
+        except UnicodeDecodeError:
+            return False
+        allowed_controls = {"\t", "\n", "\r", "\f"}
+        return all(
+            ord(character) >= 32 or character in allowed_controls for character in text
+        )
 
     def _zip(self, content: bytes) -> bool:
         self._inspect_archive(content)
