@@ -166,7 +166,25 @@ export function EvidenceViewer({
                       </span>
                       <div className="min-w-0">
                         <h3 className="font-bold text-[var(--theme-text)]">
-                          {evidence.title}
+                          {contextLabel ? (
+                            <button
+                              aria-label={`Xem ${evidence.title}`}
+                              className="cursor-pointer text-left underline underline-offset-4 hover:decoration-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-accent)]"
+                              disabled={mutation.isPending}
+                              onClick={() => openEvidence(evidence)}
+                              type="button"
+                            >
+                              {opening ? (
+                                <LoaderCircle
+                                  aria-hidden="true"
+                                  className="mr-2 inline size-4 animate-spin"
+                                />
+                              ) : null}
+                              {evidence.title}
+                            </button>
+                          ) : (
+                            evidence.title
+                          )}
                         </h3>
                         <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-[var(--theme-muted)]">
                           <span>Loại tài liệu: {group.label}</span>
@@ -184,20 +202,22 @@ export function EvidenceViewer({
                           </p>
                         ) : null}
                       </div>
-                      <Button
-                        aria-label={`Xem ${evidence.title}`}
-                        className="col-span-2 w-full sm:col-start-2 sm:w-fit lg:col-span-1 lg:col-start-3 lg:row-start-1 lg:self-center"
-                        disabled={mutation.isPending}
-                        onClick={() => openEvidence(evidence)}
-                        variant="outline"
-                      >
-                        {opening ? (
-                          <LoaderCircle className="size-4 animate-spin" />
-                        ) : (
-                          <ExternalLink className="size-4" />
-                        )}
-                        Xem bằng chứng
-                      </Button>
+                      {contextLabel ? null : (
+                        <Button
+                          aria-label={`Xem ${evidence.title}`}
+                          className="col-span-2 w-full sm:col-start-2 sm:w-fit lg:col-span-1 lg:col-start-3 lg:row-start-1 lg:self-center"
+                          disabled={mutation.isPending}
+                          onClick={() => openEvidence(evidence)}
+                          variant="outline"
+                        >
+                          {opening ? (
+                            <LoaderCircle className="size-4 animate-spin" />
+                          ) : (
+                            <ExternalLink className="size-4" />
+                          )}
+                          Xem bằng chứng
+                        </Button>
+                      )}
                       <details className="sm:col-span-2">
                         <summary className="min-h-11 cursor-pointer py-3 text-sm font-semibold text-[var(--theme-muted)]">
                           Kiểm tra tính toàn vẹn

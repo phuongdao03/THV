@@ -74,5 +74,20 @@ python -m alembic upgrade head
 python -m alembic downgrade -1
 ```
 
+## Orphaned media cleanup
+
+From `backend/`, the cleanup command reports old, unreferenced Cloudinary media
+and matching `media_assets` rows by default:
+
+```bash
+python -m app.scripts.purge_orphaned_media
+```
+
+It only scans the configured `APP_ENV` namespaces and requires a complete
+Cloudinary inventory. To apply a reviewed run, pass `--apply`,
+`--confirm-environment <APP_ENV>`, and `--confirm-purge PURGE-ORPHANED-MEDIA`.
+Production additionally requires `--confirm-production PRODUCTION`. The tool
+keeps dossiers, archive/audit history, and any media still referenced in Neon.
+
 Domain services own transaction boundaries. Repository dependencies receive an
 `AsyncSession` from `app.db.session` and must not create independent engines.

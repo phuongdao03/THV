@@ -138,6 +138,7 @@ class MediaGateway(Protocol):
         resource_type: str,
         provider_asset_id: str | None = None,
         purge_backups: bool = False,
+        delivery_type: str = "authenticated",
     ) -> None: ...
 
     async def close(self) -> None: ...
@@ -589,10 +590,11 @@ class CloudinaryMediaGateway:
         resource_type: str,
         provider_asset_id: str | None = None,
         purge_backups: bool = False,
+        delivery_type: str = _DELIVERY_TYPE,
     ) -> None:
         if purge_backups and provider_asset_id is not None:
             await self._delete_backed_up_versions(provider_asset_id)
-        if resource_type == "raw":
+        if resource_type == "raw" and delivery_type == self._DELIVERY_TYPE:
             try:
                 manifest = await self._download_single_asset(
                     public_id=public_id,
@@ -612,10 +614,12 @@ class CloudinaryMediaGateway:
                     await self._delete_single_asset(
                         public_id=part_public_id,
                         resource_type="raw",
+                        delivery_type=delivery_type,
                     )
         await self._delete_single_asset(
             public_id=public_id,
             resource_type=resource_type,
+            delivery_type=delivery_type,
         )
 
     async def _delete_backed_up_versions(self, asset_id: str) -> None:
@@ -664,12 +668,13 @@ class CloudinaryMediaGateway:
         *,
         public_id: str,
         resource_type: str,
+        delivery_type: str = _DELIVERY_TYPE,
     ) -> None:
         parameters = {
             "invalidate": "true",
             "public_id": public_id,
             "timestamp": str(int(self._clock())),
-            "type": self._DELIVERY_TYPE,
+            "type": delivery_type,
         }
         form = {
             **parameters,
