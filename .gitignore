@@ -98,6 +98,7 @@ docs/specs/*
 !docs/handoffs/dossier-submission-payment-test.md
 !docs/handoffs/repository-standardization-audit.md
 !docs/handoffs/ux-copy-topup-regression.md
+!docs/handoffs/process-page-redesign.md
 CONTEXT.md
 
 # Local UI audits, logs and diagnostic scripts

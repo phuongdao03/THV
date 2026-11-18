@@ -1,73 +1,30 @@
 import Link from "next/link";
-import { ArrowRight, Search } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 
 import { ProcessJourney } from "@/components/public/process-journey";
 import { isPreviewRelease } from "@/lib/release-mode";
 
-function ProcessHeroArtwork() {
-  return (
-    <svg
-      aria-hidden="true"
-      className="process-hero__artwork"
-      fill="none"
-      viewBox="0 0 480 360"
-    >
-      <circle className="process-hero__ring" cx="240" cy="180" r="128" />
-      <circle className="process-hero__ring" cx="240" cy="180" r="108" />
-      <circle
-        className="process-hero__ring process-hero__ring--fine"
-        cx="240"
-        cy="180"
-        r="90"
-      />
-      <path className="process-hero__route" d="M112 180h79l41-48 47 48h89" />
-      <path
-        className="process-hero__route process-hero__route--vertical"
-        d="M191 180v68m88-68v68"
-      />
-      <circle className="process-hero__step-dot" cx="112" cy="180" r="8" />
-      <circle className="process-hero__step-dot" cx="191" cy="180" r="8" />
-      <circle className="process-hero__step-dot" cx="279" cy="180" r="8" />
-      <circle className="process-hero__step-dot" cx="368" cy="180" r="8" />
-      <path className="process-hero__document" d="M174 94h57l24 24v38h-81z" />
-      <path
-        className="process-hero__document-line"
-        d="M188 112h27m-27 12h46m-46 12h36"
-      />
-      <path className="process-hero__seal" d="m269 228 10 10 20-22" />
-      <circle className="process-hero__seal-ring" cx="279" cy="228" r="25" />
-      <circle className="process-hero__ornament" cx="240" cy="180" r="145" />
-      <circle className="process-hero__ornament" cx="240" cy="180" r="154" />
-    </svg>
-  );
-}
-
 function ProcessActions({ submissionOpen }: { submissionOpen: boolean }) {
+  const submissionHref = submissionOpen
+    ? "/dossiers/new"
+    : "/coming-soon/submission";
+
   return (
     <section aria-labelledby="process-next-title" className="process-next">
       <div className="process-next__inner">
         <div>
           <p className="public-information-kicker">BƯỚC TIẾP THEO</p>
-          <h2 id="process-next-title">Bạn muốn bắt đầu từ đâu?</h2>
+          <h2 id="process-next-title">Sẵn sàng gửi đề cử?</h2>
           <p>
-            {submissionOpen
-              ? "Tạo hồ sơ để bắt đầu, hoặc tra cứu thông tin đã được công bố."
-              : "Tìm hiểu thông tin mở cổng, hoặc tra cứu bằng xác lập đã được công bố."}
+            Bạn có thể tạo bản nháp trước, chuẩn bị tài liệu và kiểm tra lại mọi
+            thông tin trước khi xác nhận gửi.
           </p>
         </div>
         <div className="process-next__actions">
-          {submissionOpen ? (
-            <Link className="process-next__primary" href="/dossiers/new">
-              Bắt đầu gửi hồ sơ
-            </Link>
-          ) : (
-            <Link
-              className="process-next__primary"
-              href="/coming-soon/submission"
-            >
-              Xem thông tin mở cổng
-            </Link>
-          )}
+          <Link className="process-next__primary" href={submissionHref}>
+            Tạo hồ sơ đề cử
+            <ArrowRight aria-hidden="true" className="size-4" />
+          </Link>
           <Link className="process-next__secondary" href="/verify">
             Tra cứu kết quả
           </Link>
@@ -79,6 +36,7 @@ function ProcessActions({ submissionOpen }: { submissionOpen: boolean }) {
 
 export default function ProcessPage() {
   const preview = isPreviewRelease();
+  const submissionHref = preview ? "/coming-soon/submission" : "/dossiers/new";
 
   return (
     <div className={`process-page${preview ? " process-page--preview" : ""}`}>
@@ -86,32 +44,21 @@ export default function ProcessPage() {
         <div className="process-hero__inner">
           <div className="process-hero__copy">
             <p className="public-information-kicker">
-              HƯỚNG DẪN GỬI HỒ SƠ ĐỀ CỬ
+              TRUNG TÂM ĐỀ CỬ VÀ XÁC LẬP TINH HOA VIỆT
             </p>
-            <h1>Hành trình đề cử Tinh Hoa Việt</h1>
+            <h1>Quy trình đề cử và xác lập</h1>
             <p className="process-hero__description">
-              Tìm hiểu cách chuẩn bị, gửi và theo dõi hồ sơ của bạn qua 4 bước
-              đơn giản. Gửi đề cử không đồng nghĩa với việc chắc chắn được xác
-              lập.
+              Tìm hiểu từng giai đoạn, từ chuẩn bị hồ sơ, hoàn tất thủ tục đến
+              tiếp nhận kết quả. Bạn có thể theo dõi trạng thái và các yêu cầu
+              bổ sung trong tài khoản của mình.
             </p>
             <div className="process-hero__actions">
-              {preview ? (
-                <Link
-                  className="process-hero__primary"
-                  href="/coming-soon/submission"
-                >
-                  Xem thông tin mở cổng
-                  <ArrowRight aria-hidden="true" className="size-4" />
-                </Link>
-              ) : (
-                <Link className="process-hero__primary" href="/dossiers/new">
-                  Bắt đầu gửi hồ sơ
-                  <ArrowRight aria-hidden="true" className="size-4" />
-                </Link>
-              )}
-              <Link className="process-hero__secondary" href="/verify">
-                <Search aria-hidden="true" className="size-4" />
-                Tra cứu kết quả
+              <Link className="process-hero__primary" href={submissionHref}>
+                Bắt đầu gửi hồ sơ
+                <ArrowRight aria-hidden="true" className="size-4" />
+              </Link>
+              <Link className="process-hero__secondary" href="#process-details">
+                Xem các giai đoạn
               </Link>
             </div>
             {preview ? (
@@ -120,15 +67,24 @@ export default function ProcessPage() {
               </p>
             ) : null}
           </div>
-          <div className="process-hero__visual">
-            <ProcessHeroArtwork />
-            <span aria-hidden="true" className="process-hero__caption">
-              TỪ HỒ SƠ ĐẾN GIÁ TRỊ ĐƯỢC LAN TỎA
-            </span>
-          </div>
+
+          <aside
+            aria-labelledby="process-principle-title"
+            className="process-principle"
+          >
+            <p className="process-principle__label">NGUYÊN TẮC XEM XÉT</p>
+            <h2 id="process-principle-title">
+              Mỗi hồ sơ được xem xét theo thông tin và minh chứng đã gửi.
+            </h2>
+            <p>
+              Việc gửi hồ sơ không đồng nghĩa với việc chắc chắn được chấp
+              thuận, công bố hay cấp bằng xác lập.
+            </p>
+          </aside>
         </div>
       </header>
-      <ProcessJourney submissionOpen={!preview} />
+
+      <ProcessJourney />
       <ProcessActions submissionOpen={!preview} />
     </div>
   );

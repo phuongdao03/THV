@@ -6,53 +6,91 @@ import ProcessPage from "@/app/(public)/process/page";
 describe("ProcessPage", () => {
   afterEach(() => vi.unstubAllEnvs());
 
-  it("shows the four-step preview journey without opening dossier creation", () => {
+  it("explains the five stages and keeps preview submission links gated", () => {
     vi.stubEnv("NEXT_PUBLIC_RELEASE_MODE", "preview");
     render(<ProcessPage />);
 
     expect(
       screen.getByRole("heading", {
         level: 1,
-        name: "Hành trình đề cử Tinh Hoa Việt",
+        name: "Quy trình đề cử và xác lập",
       }),
     ).toBeDefined();
+    [
+      "Chuẩn bị thông tin và minh chứng",
+      "Gửi hồ sơ",
+      "Tiếp nhận và thẩm định",
+      "Nhận kết quả xem xét",
+      "Công bố và quản lý hồ sơ",
+    ].forEach((title) => {
+      expect(
+        screen.getByRole("heading", { level: 3, name: title }),
+      ).toBeDefined();
+    });
+    expect(screen.getByRole("heading", { name: "Cần bổ sung" })).toBeDefined();
     expect(
-      screen.getByRole("button", { name: /Chuẩn bị hồ sơ/ }),
+      screen.getByRole("heading", { name: "Không được chấp thuận" }),
     ).toBeDefined();
-    expect(screen.getByRole("button", { name: /Gửi hồ sơ/ })).toBeDefined();
-    expect(screen.getByRole("button", { name: /Xem xét hồ sơ/ })).toBeDefined();
-    expect(screen.getByRole("button", { name: /Nhận kết quả/ })).toBeDefined();
     expect(
-      screen.getByText("Cổng gửi hồ sơ được mở theo từng giai đoạn."),
+      screen.getByRole("heading", { name: "Đủ điều kiện đi tiếp" }),
     ).toBeDefined();
     expect(
-      screen.getAllByRole("link", { name: "Xem thông tin mở cổng" }),
-    ).toHaveLength(2);
+      screen
+        .getByRole("link", { name: "Bắt đầu gửi hồ sơ" })
+        .getAttribute("href"),
+    ).toBe("/coming-soon/submission");
     expect(
-      screen.getAllByRole("link", { name: "Tra cứu kết quả" }),
-    ).toHaveLength(2);
+      screen
+        .getByRole("link", { name: "Tạo hồ sơ đề cử" })
+        .getAttribute("href"),
+    ).toBe("/coming-soon/submission");
     expect(
-      screen.queryByRole("link", { name: "Bắt đầu gửi hồ sơ" }),
-    ).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: /Gửi hồ sơ/ }));
-    expect(screen.getAllByText(/Khi cổng gửi hồ sơ mở/)).toHaveLength(2);
+      screen
+        .getByRole("link", { name: "Xem các giai đoạn" })
+        .getAttribute("href"),
+    ).toBe("#process-details");
     expect(
-      screen.getByText(
-        /Gửi đề cử không đồng nghĩa với việc chắc chắn được xác lập/i,
-      ),
+      screen.getByText(/không đồng nghĩa với việc chắc chắn được chấp thuận/i),
     ).toBeDefined();
+    expect(screen.queryByText(/5\.000\.000/)).toBeNull();
   });
 
-  it("shows guidance for the selected step and expands common questions", () => {
+  it("opens stage details and answers supplement questions", () => {
+    const { container } = render(<ProcessPage />);
+
+    const pageCopy =
+      container.querySelector(".process-page")?.textContent ?? "";
+    expect(pageCopy).not.toMatch(/phí|thanh toán|voucher|miễn/i);
+
+    const submissionDetails = document.querySelectorAll<HTMLElement>(
+      ".process-stage__details > summary",
+    )[1]!;
+    fireEvent.click(submissionDetails);
+    expect(screen.getByText(/Trước khi xác nhận/)).toBeDefined();
+
+    fireEvent.click(
+      screen.getByText("Tôi có thể bổ sung tài liệu sau khi gửi không?"),
+    );
+    expect(screen.getByText(/cập nhật phần được yêu cầu/i)).toBeDefined();
+  });
+  it("links to dossier creation in full release mode", () => {
+    vi.stubEnv("NEXT_PUBLIC_RELEASE_MODE", "full");
     render(<ProcessPage />);
 
-    fireEvent.click(screen.getByRole("button", { name: /Gửi hồ sơ/ }));
-    expect(screen.getByRole("region", { name: "Gửi hồ sơ" })).toBeDefined();
     expect(
-      screen.getByText(/thanh toán trước khi hồ sơ chuyển sang xem xét/i),
-    ).toBeDefined();
-
-    fireEvent.click(screen.getByText("Nếu hồ sơ còn thiếu giấy tờ thì sao?"));
-    expect(screen.getByText(/nếu Trung tâm yêu cầu bổ sung/i)).toBeDefined();
+      screen
+        .getByRole("link", { name: "Bắt đầu gửi hồ sơ" })
+        .getAttribute("href"),
+    ).toBe("/dossiers/new");
+    expect(
+      screen
+        .getByRole("link", { name: "Tạo hồ sơ đề cử" })
+        .getAttribute("href"),
+    ).toBe("/dossiers/new");
+    expect(
+      screen
+        .getByRole("link", { name: "Tra cứu kết quả" })
+        .getAttribute("href"),
+    ).toBe("/verify");
   });
 });
