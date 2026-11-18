@@ -43,7 +43,7 @@ async function authenticate(
 test("applicant preparation and submission read as one sequence", async ({
   context,
   page,
-}) => {
+}, testInfo) => {
   await authenticate(context, "applicant");
   await page.goto("/dossiers/new", { waitUntil: "domcontentloaded" });
   await page
@@ -74,18 +74,59 @@ test("applicant preparation and submission read as one sequence", async ({
   await expect(page.locator(".dossier-created-note")).toContainText(
     "Đã lưu bản nháp. Thêm tài liệu cần thiết rồi kiểm tra trước khi gửi.",
   );
-  await page.getByRole("button", { name: /Kiểm tra & nộp/ }).click();
   await expect(
-    page.getByRole("heading", { name: "Kiểm tra & nộp" }),
+    page.getByRole("button", { name: "2. Tài liệu và minh chứng" }),
   ).toBeVisible();
-  expect(
-    await page.locator('[aria-label="Kiểm tra trước khi nộp"] > div').count(),
-  ).toBe(2);
-  expect(
-    await page.evaluate(
-      () => document.documentElement.scrollWidth <= innerWidth + 1,
-    ),
-  ).toBe(true);
+  await expect(page.getByText("Nhận định và căn cứ")).toBeVisible();
+  await page.getByRole("button", { name: "3. Kiểm tra và gửi" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Kiểm tra và gửi" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Thông tin đề cử" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Tài liệu và minh chứng" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Nhận định và căn cứ" }),
+  ).toBeVisible();
+
+  for (const width of [320, 375, 390, 768, 1024, 1440]) {
+    await page.setViewportSize({ width, height: 1000 });
+    await expect(
+      page.getByRole("button", { name: "3. Kiểm tra và gửi" }),
+    ).toBeVisible();
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth + 1,
+      ),
+    ).toBe(true);
+    if (width === 320 || width === 1440) {
+      await page.screenshot({
+        fullPage: true,
+        path: testInfo.outputPath(`dossier-review-${width}-light.png`),
+      });
+    }
+  }
+
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await selectWorkspaceTheme(page, "Giao diện tối");
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  for (const width of [320, 375, 390, 768, 1024, 1440]) {
+    await page.setViewportSize({ width, height: 1000 });
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth + 1,
+      ),
+    ).toBe(true);
+    if (width === 320 || width === 1440) {
+      await page.screenshot({
+        fullPage: true,
+        path: testInfo.outputPath(`dossier-review-${width}-dark.png`),
+      });
+    }
+  }
 });
 
 test("reviewer sees evidence and verdict before optional assistance", async ({

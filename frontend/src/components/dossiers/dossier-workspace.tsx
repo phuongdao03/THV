@@ -8,14 +8,15 @@ import {
   BadgeCheck,
   CheckCircle2,
   CircleAlert,
-  FileCheck2,
+  FileImage,
+  FileSpreadsheet,
   FileText,
+  FileVideo,
   LoaderCircle,
   LockKeyhole,
   Save,
   Send,
   Trash2,
-  UploadCloud,
 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
@@ -63,26 +64,18 @@ type Step = "information" | "evidence" | "review";
 const steps: Array<{
   id: Step;
   label: string;
-  description: string;
-  icon: typeof FileText;
 }> = [
   {
     id: "information",
-    label: "Thông tin",
-    description: "Mô tả tài sản",
-    icon: FileText,
+    label: "Thông tin đề cử",
   },
   {
     id: "evidence",
-    label: "Tài liệu",
-    description: "Tài liệu đã tải lên",
-    icon: UploadCloud,
+    label: "Tài liệu và minh chứng",
   },
   {
     id: "review",
-    label: "Kiểm tra & nộp",
-    description: "Xác nhận nội dung",
-    icon: FileCheck2,
+    label: "Kiểm tra và gửi",
   },
 ];
 
@@ -206,19 +199,49 @@ function evidenceTypeLabel(
   );
 }
 
+function evidenceFileType(evidence: DossierEvidence): string {
+  const extension = evidence.filename?.split(".").at(-1)?.toUpperCase();
+  if (extension && extension !== evidence.filename?.toUpperCase()) {
+    return extension;
+  }
+  if (evidence.mimeType.startsWith("image/")) return "ẢNH";
+  if (evidence.mimeType.startsWith("video/")) return "VIDEO";
+  if (evidence.mimeType === "application/pdf") return "PDF";
+  return "TÀI LIỆU";
+}
+
+function EvidenceFileIcon({ mimeType }: { mimeType: string }) {
+  if (mimeType.startsWith("image/")) {
+    return <FileImage aria-hidden="true" className="size-5" />;
+  }
+  if (mimeType.startsWith("video/")) {
+    return <FileVideo aria-hidden="true" className="size-5" />;
+  }
+  if (
+    mimeType.includes("spreadsheet") ||
+    mimeType === "application/vnd.ms-excel"
+  ) {
+    return <FileSpreadsheet aria-hidden="true" className="size-5" />;
+  }
+  return <FileText aria-hidden="true" className="size-5" />;
+}
+
 function EvidenceItem({
   canEdit,
   documentTypeLabel,
   evidence,
+  removing = false,
   onRemove,
 }: {
   canEdit: boolean;
   documentTypeLabel: string;
   evidence: DossierEvidence;
+  removing?: boolean;
   onRemove: (id: string) => void;
 }) {
   const [viewError, setViewError] = useState(false);
   const [viewPending, setViewPending] = useState(false);
+  const [confirmRemove, setConfirmRemove] = useState(false);
 
   const openEvidence = async () => {
     const tab = window.open("about:blank", "_blank");
@@ -241,33 +264,35 @@ function EvidenceItem({
   };
 
   return (
-    <article className="grid gap-3 rounded-xl border border-[var(--theme-border)] bg-[var(--theme-elevated)] p-4 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center">
-      <span className="grid size-10 place-items-center rounded-full bg-emerald-50 text-emerald-700">
-        <FileCheck2 aria-hidden="true" className="size-5" />
+    <li className="grid min-w-0 gap-3 py-3 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center">
+      <span className="grid size-10 place-items-center rounded-lg bg-[var(--theme-elevated)] text-[var(--theme-accent)]">
+        <EvidenceFileIcon mimeType={evidence.mimeType} />
       </span>
       <div className="min-w-0">
         <h3
-          className="break-words text-sm font-bold text-neutral-950"
+          className="break-words text-sm font-bold text-[var(--theme-text)]"
           title={evidence.filename ?? evidence.title}
         >
           {evidence.filename ?? evidence.title}
         </h3>
-        <p className="mt-1 text-xs text-neutral-600">
-          {evidence.mimeType} · {formatBytes(evidence.bytes)}
+        <p className="mt-1 text-xs text-[var(--theme-muted)]">
+          {evidenceFileType(evidence)} · {formatBytes(evidence.bytes)}
         </p>
         <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
-          <span className="font-semibold text-primary-800">
+          <span className="font-semibold text-[var(--theme-accent)]">
             {documentTypeLabel}
           </span>
           {evidence.title !== documentTypeLabel &&
           evidence.title !== evidence.filename ? (
-            <span className="text-neutral-600">· {evidence.title}</span>
+            <span className="text-[var(--theme-muted)]">
+              · {evidence.title}
+            </span>
           ) : null}
         </div>
-        <p className="mt-1 text-xs font-medium text-emerald-800">
+        <p className="mt-1 text-xs font-medium text-emerald-800 dark:text-emerald-300">
           Đã tải lên và kiểm tra an toàn
         </p>
-        <p className="mt-1 text-xs text-neutral-600">
+        <p className="mt-1 text-xs text-[var(--theme-muted)]">
           {evidenceScopeLabel(evidence.accessScope)}
         </p>
       </div>
@@ -281,15 +306,19 @@ function EvidenceItem({
           {viewPending ? "Đang mở…" : "Xem tệp"}
         </Button>
         {canEdit ? (
-          <Button
-            aria-label={`Xóa ${evidence.title}`}
-            className="text-red-700 hover:bg-red-50"
-            onClick={() => onRemove(evidence.id)}
-            variant="ghost"
-          >
-            <Trash2 aria-hidden="true" className="size-4" />
-            Xóa
-          </Button>
+          !confirmRemove ? (
+            <Button
+              aria-label={`Gỡ ${evidence.filename ?? evidence.title} khỏi hồ sơ`}
+              className="min-h-10 text-red-700 hover:bg-red-50"
+              disabled={removing}
+              onClick={() => setConfirmRemove(true)}
+              type="button"
+              variant="ghost"
+            >
+              <Trash2 aria-hidden="true" className="size-4" />
+              Gỡ
+            </Button>
+          ) : null
         ) : (
           <span className="inline-flex items-center gap-1.5 text-xs font-bold text-neutral-600">
             <LockKeyhole aria-hidden="true" className="size-4" />
@@ -302,6 +331,36 @@ function EvidenceItem({
           </p>
         ) : null}
       </div>
+      {confirmRemove ? (
+        <div className="rounded-lg bg-amber-50 p-3 text-amber-950 dark:bg-amber-950/40 dark:text-amber-100 sm:col-span-3">
+          <p className="text-sm leading-5">
+            Gỡ tệp khỏi hồ sơ. Nhận định đang liên kết sẽ được giữ lại và cần
+            chọn minh chứng thay thế.
+          </p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Button
+              onClick={() => setConfirmRemove(false)}
+              type="button"
+              disabled={removing}
+              variant="outline"
+            >
+              Hủy
+            </Button>
+            <Button
+              className="border border-red-700 text-red-800 hover:bg-red-50 dark:text-red-300"
+              disabled={removing}
+              onClick={() => {
+                onRemove(evidence.id);
+                setConfirmRemove(false);
+              }}
+              type="button"
+              variant="ghost"
+            >
+              Gỡ khỏi hồ sơ
+            </Button>
+          </div>
+        </div>
+      ) : null}
       <details className="sm:col-span-3">
         <summary className="cursor-pointer text-sm font-semibold text-[var(--theme-muted)]">
           Đối chiếu tính toàn vẹn
@@ -310,7 +369,7 @@ function EvidenceItem({
           <PrivateDocumentVerification mediaId={evidence.mediaAssetId} />
         </div>
       </details>
-    </article>
+    </li>
   );
 }
 
@@ -590,15 +649,19 @@ function SubmittedDossier({
         <h2 className="text-lg font-bold">
           Tài liệu đã nộp · {dossier.evidences.length} tệp
         </h2>
-        {dossier.evidences.map((evidence) => (
-          <EvidenceItem
-            key={evidence.id}
-            canEdit={false}
-            documentTypeLabel={evidenceTypeLabel(dossier, evidence)}
-            evidence={evidence}
-            onRemove={() => undefined}
-          />
-        ))}
+        {dossier.evidences.length ? (
+          <ul className="divide-y divide-[var(--theme-border)]">
+            {dossier.evidences.map((evidence) => (
+              <EvidenceItem
+                key={evidence.id}
+                canEdit={false}
+                documentTypeLabel={evidenceTypeLabel(dossier, evidence)}
+                evidence={evidence}
+                onRemove={() => undefined}
+              />
+            ))}
+          </ul>
+        ) : null}
         {!dossier.evidences.length ? (
           <p className="text-sm text-[var(--theme-muted)]">Chưa có tài liệu.</p>
         ) : null}
@@ -812,6 +875,7 @@ export function DossierWorkspace({
       />
     );
   }
+  const dossierClaims = dossier.claims ?? [];
   const submissionComplete =
     submit.isSuccess && dossier.status !== "NEEDS_SUPPLEMENT";
   const supplementRequest = timeline.data
@@ -965,30 +1029,17 @@ export function DossierWorkspace({
       ) : null}
 
       <div className="space-y-4">
-        <div className={step !== "evidence" ? "hidden" : undefined}>
-          <DossierClaimsEditor
-            key={`${dossier.id}-${dossier.status}`}
-            dossierId={dossier.id}
-            initialClaims={dossier.claims}
-            initialRevision={dossier.claimsRevision}
-            criteria={dossier.claimCriteria ?? []}
-            evidences={dossier.evidences}
-            readOnly={!dossier.canEdit || step === "review"}
-            onSaved={() => void refresh()}
-            onUnsavedChange={setClaimsUnsaved}
-          />
-        </div>
         <nav
           aria-label="Các bước hoàn thiện hồ sơ"
           className="grid gap-2 sm:grid-cols-3"
           id="dossier-steps"
         >
           {steps.map((item, index) => {
-            const Icon = item.icon;
             const active = item.id === step;
             return (
               <button
                 aria-current={active ? "step" : undefined}
+                aria-label={`${index + 1}. ${item.label}`}
                 disabled={
                   (claimsUnsaved && item.id !== "evidence") ||
                   (queueLocked && item.id !== "evidence") ||
@@ -997,7 +1048,7 @@ export function DossierWorkspace({
                     item.id !== "information")
                 }
                 className={cn(
-                  "flex min-h-12 min-w-0 w-full items-center gap-2 rounded-xl border px-3 py-2 text-left transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-16 sm:gap-3 sm:px-4 sm:py-3",
+                  "flex min-h-14 min-w-0 w-full items-center gap-2 rounded-lg border px-2 py-2 text-left transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-14 sm:gap-3 sm:px-4",
                   active
                     ? "border-primary-600 bg-primary-50 text-primary-900 dark:bg-primary-950/40 dark:text-primary-100"
                     : "border-[var(--theme-border)] bg-[var(--theme-surface)] text-[var(--theme-muted)] hover:bg-[var(--theme-elevated)]",
@@ -1008,21 +1059,16 @@ export function DossierWorkspace({
               >
                 <span
                   className={cn(
-                    "grid size-8 shrink-0 place-items-center rounded-full",
+                    "grid size-7 shrink-0 place-items-center rounded-full text-xs font-bold",
                     active
                       ? "bg-primary-600 text-white"
                       : "bg-[var(--theme-elevated)] text-[var(--theme-muted)]",
                   )}
                 >
-                  <Icon aria-hidden="true" className="size-4" />
+                  {index + 1}
                 </span>
-                <span>
-                  <span className="block text-xs font-bold sm:text-sm">
-                    {index + 1}. {item.label}
-                  </span>
-                  <span className="mt-0.5 hidden text-xs opacity-70 sm:block">
-                    {item.description}
-                  </span>
+                <span className="min-w-0 text-xs font-bold leading-4 sm:text-sm">
+                  {item.label}
                 </span>
               </button>
             );
@@ -1037,225 +1083,228 @@ export function DossierWorkspace({
             />
           ) : null}
 
-          {step === "evidence" ? (
-            <section className="dossier-evidence-step space-y-6">
-              <div>
-                <h2 className="text-xl font-bold tracking-tight">
-                  Tài liệu cho hồ sơ của bạn
-                </h2>
-                <p className="mt-1 text-sm leading-6 text-neutral-500">
-                  Chọn loại tài liệu và tệp cần gửi. Tệp đã thêm sẽ hiện bên
-                  dưới.
-                </p>
-              </div>
-              {dossier.canEdit && !submissionComplete ? (
-                <div className="space-y-4">
-                  {documentRules.length > 0 ? (
-                    <fieldset className="space-y-3">
-                      <legend className="text-sm font-bold">
-                        Loại tài liệu
-                      </legend>
-                      <select
-                        aria-label="Loại tài liệu cần thêm"
-                        className="mt-2 min-h-12 w-full rounded-xl border border-[var(--theme-border)] bg-[var(--theme-surface)] px-3 text-sm font-semibold text-[var(--theme-text)]"
-                        disabled={queueLocked || attach.isPending}
-                        onChange={(event) => {
-                          setEvidenceType(event.target.value);
-                          setEvidenceTitle("");
-                        }}
-                        value={selectedRule?.key ?? evidenceType}
-                      >
-                        {documentRules.map((rule) => (
-                          <option key={rule.key} value={rule.key}>
-                            {rule.label} ·{" "}
-                            {rule.required ? "Bắt buộc" : "Tùy chọn"} ·{" "}
-                            {ruleProgress(rule, dossier.evidences)}/
-                            {rule.maxCount} tệp
-                          </option>
-                        ))}
-                      </select>
-                    </fieldset>
-                  ) : null}
-                  {documentRules.length === 0 ? (
-                    <div>
-                      <label
-                        className="text-sm font-bold"
-                        htmlFor="evidence-type"
-                      >
-                        Loại tài liệu
-                      </label>
-                      <select
-                        className="mt-2 min-h-12 w-full rounded-xl border border-[var(--theme-border)] bg-[var(--theme-surface)] px-3 text-sm font-semibold text-[var(--theme-text)]"
-                        id="evidence-type"
-                        onChange={(event) =>
-                          setEvidenceType(event.target.value)
-                        }
-                        value={evidenceType}
-                        disabled={queueLocked || attach.isPending}
-                      >
-                        <option value="OWNERSHIP_DOCUMENT">
-                          Bằng chứng về quyền hoặc nguồn gốc
+          <section
+            aria-labelledby="dossier-evidence-heading"
+            className="dossier-evidence-step space-y-6"
+            hidden={step !== "evidence"}
+            role="group"
+          >
+            <h2 className="sr-only" id="dossier-evidence-heading">
+              Tài liệu và minh chứng
+            </h2>
+            {dossier.canEdit && !submissionComplete ? (
+              <div className="space-y-4">
+                {missingRequiredRules.length ? (
+                  <div className="border-l-2 border-amber-500 pl-3 text-sm text-amber-950">
+                    <p className="font-semibold">Tài liệu bắt buộc còn thiếu</p>
+                    <ul className="mt-1 list-disc space-y-1 pl-5">
+                      {missingRequiredRules.map((rule) => (
+                        <li key={rule.key}>{rule.label}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+                {documentRules.length > 0 ? (
+                  <fieldset className="space-y-3">
+                    <legend className="text-sm font-bold">Loại tài liệu</legend>
+                    <select
+                      aria-label="Loại tài liệu cần thêm"
+                      className="mt-2 min-h-12 w-full rounded-xl border border-[var(--theme-border)] bg-[var(--theme-surface)] px-3 text-sm font-semibold text-[var(--theme-text)]"
+                      disabled={queueLocked || attach.isPending}
+                      onChange={(event) => {
+                        setEvidenceType(event.target.value);
+                        setEvidenceTitle("");
+                      }}
+                      value={selectedRule?.key ?? evidenceType}
+                    >
+                      {documentRules.map((rule) => (
+                        <option key={rule.key} value={rule.key}>
+                          {rule.label} ·{" "}
+                          {rule.required ? "Bắt buộc" : "Tùy chọn"} ·{" "}
+                          {ruleProgress(rule, dossier.evidences)}/
+                          {rule.maxCount} tệp
                         </option>
-                        <option value="CREATIVE_WORK">
-                          Nội dung hoặc đối tượng đề cử
-                        </option>
-                        <option value="OTHER">Tài liệu khác</option>
-                      </select>
-                    </div>
-                  ) : null}
-                  {queueLocked ? (
+                      ))}
+                    </select>
+                  </fieldset>
+                ) : null}
+                {documentRules.length === 0 ? (
+                  <div>
+                    <label
+                      className="text-sm font-bold"
+                      htmlFor="evidence-type"
+                    >
+                      Loại tài liệu
+                    </label>
+                    <select
+                      className="mt-2 min-h-12 w-full rounded-xl border border-[var(--theme-border)] bg-[var(--theme-surface)] px-3 text-sm font-semibold text-[var(--theme-text)]"
+                      id="evidence-type"
+                      onChange={(event) => setEvidenceType(event.target.value)}
+                      value={evidenceType}
+                      disabled={queueLocked || attach.isPending}
+                    >
+                      <option value="OWNERSHIP_DOCUMENT">
+                        Bằng chứng về quyền hoặc nguồn gốc
+                      </option>
+                      <option value="CREATIVE_WORK">
+                        Nội dung hoặc đối tượng đề cử
+                      </option>
+                      <option value="OTHER">Tài liệu khác</option>
+                    </select>
+                  </div>
+                ) : null}
+                {queueLocked ? (
+                  <p
+                    className="text-xs font-medium text-primary-800"
+                    role="status"
+                  >
+                    Hoàn tất hoặc xóa tệp đang chọn trước khi đổi loại tài liệu.
+                  </p>
+                ) : null}
+                {selectedRule ? (
+                  <p className="text-xs leading-5 text-[var(--theme-muted)]">
+                    {selectedRule.required
+                      ? "Cần có để nộp hồ sơ"
+                      : "Không bắt buộc"}{" "}
+                    · {evidenceScopeLabel(selectedRule.defaultVisibility)}.
+                  </p>
+                ) : null}
+                <details className="rounded-lg border border-[var(--theme-border)] px-3 py-2.5">
+                  <summary className="cursor-pointer text-sm font-semibold">
+                    Đặt tên hiển thị cho tài liệu (tùy chọn)
+                  </summary>
+                  <div className="mt-3">
+                    <label
+                      className="text-sm font-bold"
+                      htmlFor="evidence-title"
+                    >
+                      Tên tài liệu
+                    </label>
+                    <input
+                      className="mt-2 min-h-12 w-full rounded-xl border border-[var(--theme-border)] bg-[var(--theme-surface)] px-3 text-sm text-[var(--theme-text)]"
+                      id="evidence-title"
+                      disabled={queueLocked || attach.isPending}
+                      onChange={(event) => setEvidenceTitle(event.target.value)}
+                      placeholder={
+                        selectedRule?.label ?? "Ví dụ: Video tác phẩm gốc"
+                      }
+                      value={evidenceTitle}
+                    />
+                    <p className="mt-1 text-xs leading-5 text-[var(--theme-muted)]">
+                      Có thể để trống; hệ thống sẽ dùng tên loại tài liệu.
+                    </p>
+                  </div>
+                </details>
+                <div className="min-w-0">
+                  <FileUploader
+                    compact
+                    chooseButtonLabel="Chọn tệp"
+                    constraints={
+                      selectedRule
+                        ? {
+                            allowedMimeTypes: selectedRule.allowedMimeTypes,
+                            maxBytes: selectedRule.maxBytes,
+                          }
+                        : undefined
+                    }
+                    disabled={attach.isPending || selectedRuleAtCapacity}
+                    description="Chọn tệp để bổ sung thông tin và minh chứng cho đề cử."
+                    documentTypeLabel={selectedRule?.label ?? "Tài liệu hồ sơ"}
+                    existingFiles={dossier.evidences.map((evidence) => ({
+                      filename: evidence.filename,
+                      bytes: evidence.bytes,
+                      mimeType: evidence.mimeType,
+                    }))}
+                    idleMessage={
+                      dossier.evidences.length
+                        ? "Tài liệu đã lưu trong hồ sơ."
+                        : "Chưa có tài liệu trong hồ sơ."
+                    }
+                    label="Tài liệu và minh chứng"
+                    maxFiles={
+                      selectedRule
+                        ? selectedRule.maxCount - selectedRuleCount
+                        : undefined
+                    }
+                    multiple
+                    onQueueChange={setQueueLocked}
+                    onComplete={async (asset, index) => {
+                      await attach.mutateAsync({
+                        asset,
+                        displayOrder: dossier.evidences.length + index,
+                      });
+                    }}
+                    purpose="DOSSIER_EVIDENCE"
+                  >
+                    {dossier.evidences.length ? (
+                      dossier.evidences.map((evidence) => (
+                        <EvidenceItem
+                          canEdit={dossier.canEdit}
+                          documentTypeLabel={evidenceTypeLabel(
+                            dossier,
+                            evidence,
+                          )}
+                          evidence={evidence}
+                          removing={remove.isPending}
+                          key={evidence.id}
+                          onRemove={(id) => remove.mutate(id)}
+                        />
+                      ))
+                    ) : (
+                      <li className="py-3 text-sm text-[var(--theme-muted)]">
+                        Chưa có tài liệu trong hồ sơ.
+                      </li>
+                    )}
+                  </FileUploader>
+                  {selectedRuleAtCapacity ? (
                     <p
-                      className="text-xs font-medium text-primary-800"
+                      className="mt-3 text-sm font-medium text-amber-700"
                       role="status"
                     >
-                      Hoàn tất hoặc xóa tệp đang chọn trước khi đổi loại tài
-                      liệu.
+                      Đã đạt số lượng tối đa cho loại tài liệu này.
                     </p>
                   ) : null}
-                  {selectedRule ? (
-                    <p className="text-xs leading-5 text-[var(--theme-muted)]">
-                      {selectedRule.required
-                        ? "Cần có để nộp hồ sơ"
-                        : "Không bắt buộc"}{" "}
-                      · {evidenceScopeLabel(selectedRule.defaultVisibility)}.
-                    </p>
-                  ) : null}
-                  <details className="rounded-lg border border-[var(--theme-border)] px-3 py-2.5">
-                    <summary className="cursor-pointer text-sm font-semibold">
-                      Đặt tên hiển thị cho tài liệu (tùy chọn)
-                    </summary>
-                    <div className="mt-3">
-                      <label
-                        className="text-sm font-bold"
-                        htmlFor="evidence-title"
-                      >
-                        Tên tài liệu
-                      </label>
-                      <input
-                        className="mt-2 min-h-12 w-full rounded-xl border border-[var(--theme-border)] bg-[var(--theme-surface)] px-3 text-sm text-[var(--theme-text)]"
-                        id="evidence-title"
-                        disabled={queueLocked || attach.isPending}
-                        onChange={(event) =>
-                          setEvidenceTitle(event.target.value)
-                        }
-                        placeholder={
-                          selectedRule?.label ?? "Ví dụ: Video tác phẩm gốc"
-                        }
-                        value={evidenceTitle}
-                      />
-                      <p className="mt-1 text-xs leading-5 text-[var(--theme-muted)]">
-                        Có thể để trống; hệ thống sẽ dùng tên loại tài liệu.
-                      </p>
-                    </div>
-                  </details>
-                  <div className="min-w-0">
-                    <FileUploader
-                      compact
-                      constraints={
-                        selectedRule
-                          ? {
-                              allowedMimeTypes: selectedRule.allowedMimeTypes,
-                              maxBytes: selectedRule.maxBytes,
-                            }
-                          : undefined
-                      }
-                      disabled={attach.isPending || selectedRuleAtCapacity}
-                      existingFiles={dossier.evidences.map((evidence) => ({
-                        filename: evidence.filename,
-                        bytes: evidence.bytes,
-                        mimeType: evidence.mimeType,
-                      }))}
-                      idleMessage={
-                        dossier.evidences.length
-                          ? "Chưa chọn thêm tệp. Tài liệu đã tải vẫn ở danh sách bên dưới."
-                          : undefined
-                      }
-                      label="Tệp cần thêm"
-                      maxFiles={
-                        selectedRule
-                          ? selectedRule.maxCount - selectedRuleCount
-                          : undefined
-                      }
-                      multiple
-                      onQueueChange={setQueueLocked}
-                      onComplete={async (asset, index) => {
-                        await attach.mutateAsync({
-                          asset,
-                          displayOrder: dossier.evidences.length + index,
-                        });
-                      }}
-                      purpose="DOSSIER_EVIDENCE"
-                    />
-                    {selectedRuleAtCapacity ? (
-                      <p
-                        className="mt-3 text-sm font-medium text-amber-700"
-                        role="status"
-                      >
-                        Đã đạt số lượng tối đa cho loại tài liệu này.
-                      </p>
-                    ) : null}
-                  </div>
                 </div>
-              ) : null}
-              {attach.error ? (
-                <p
-                  className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-800"
-                  role="alert"
-                >
-                  Tệp đã tải lên nhưng chưa gắn được vào hồ sơ. Vui lòng thử
-                  lại.
-                </p>
-              ) : null}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between gap-3">
-                  <h3 className="font-bold text-[var(--theme-text)]">
-                    Tệp đã thêm
-                  </h3>
-                  <span className="text-xs font-semibold text-neutral-500">
-                    {dossier.evidences.length} tệp
-                  </span>
-                </div>
-                {dossier.evidences.length ? (
-                  dossier.evidences.map((evidence) => (
-                    <EvidenceItem
-                      canEdit={dossier.canEdit}
-                      documentTypeLabel={evidenceTypeLabel(dossier, evidence)}
-                      evidence={evidence}
-                      key={evidence.id}
-                      onRemove={(id) => remove.mutate(id)}
-                    />
-                  ))
-                ) : (
-                  <div className="flex items-start gap-3 rounded-xl border border-dashed border-[var(--theme-border)] bg-[var(--theme-elevated)] p-4">
-                    <span className="grid size-9 shrink-0 place-items-center text-[var(--theme-muted)]">
-                      <FileCheck2 aria-hidden="true" className="size-4" />
-                    </span>
-                    <div>
-                      <p className="text-sm font-bold">Chưa có tài liệu</p>
-                      <p className="mt-1 text-xs leading-5 text-neutral-500">
-                        Chọn tệp ở phía trên; tệp hợp lệ sẽ xuất hiện tại đây.
-                      </p>
-                    </div>
-                  </div>
-                )}
               </div>
-              <div className="flex flex-wrap justify-between gap-3 pt-2">
-                <Button
-                  variant="outline"
-                  disabled={queueLocked}
-                  onClick={() => setStep("information")}
-                >
-                  Quay lại thông tin
-                </Button>
-                <Button
-                  disabled={queueLocked}
-                  onClick={() => setStep("review")}
-                >
-                  Tiếp tục kiểm tra →
-                </Button>
-              </div>
-            </section>
-          ) : null}
+            ) : null}
+            {attach.error ? (
+              <p
+                className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-800"
+                role="alert"
+              >
+                Tệp đã tải lên nhưng chưa gắn được vào hồ sơ. Vui lòng thử lại.
+              </p>
+            ) : null}
+            {remove.error ? (
+              <p className="text-sm text-red-700" role="alert">
+                Chưa gỡ được tài liệu khỏi hồ sơ. Tài liệu vẫn được giữ lại; vui
+                lòng thử lại.
+              </p>
+            ) : null}
+            <DossierClaimsEditor
+              key={`${dossier.id}-${dossier.status}`}
+              dossierId={dossier.id}
+              initialClaims={dossierClaims}
+              initialRevision={dossier.claimsRevision}
+              criteria={dossier.claimCriteria ?? []}
+              evidences={dossier.evidences}
+              readOnly={!dossier.canEdit}
+              onSaved={() => void refresh()}
+              onUnsavedChange={setClaimsUnsaved}
+            />
+            <div className="flex flex-wrap justify-between gap-3 pt-2">
+              <Button
+                variant="outline"
+                disabled={queueLocked}
+                onClick={() => setStep("information")}
+              >
+                Quay lại thông tin
+              </Button>
+              <Button disabled={queueLocked} onClick={() => setStep("review")}>
+                Tiếp tục kiểm tra →
+              </Button>
+            </div>
+          </section>
 
           {step === "review" ? (
             <section className="space-y-6">
@@ -1270,7 +1319,7 @@ export function DossierWorkspace({
               ) : null}
               <div>
                 <h2 className="text-xl font-bold tracking-tight">
-                  Kiểm tra & nộp
+                  Kiểm tra và gửi
                 </h2>
                 <p className="mt-1 text-sm leading-6 text-neutral-500">
                   Kiểm tra lại thông tin và tài liệu trước khi gửi Tinh Hoa Việt
@@ -1296,59 +1345,152 @@ export function DossierWorkspace({
               ) : null}
               <div
                 aria-label="Kiểm tra trước khi nộp"
-                className="grid gap-3 sm:grid-cols-2"
+                className="divide-y divide-[var(--theme-border)] border-y border-[var(--theme-border)]"
               >
-                <div className="flex items-start gap-3 rounded-xl border border-[var(--theme-border)] bg-[var(--theme-elevated)] p-4">
-                  <CheckCircle2
-                    aria-hidden="true"
-                    className="mt-0.5 size-5 text-emerald-600"
-                  />
-                  <div>
-                    <p className="text-sm font-bold">Thông tin hồ sơ</p>
-                    <p className="mt-1 text-xs text-neutral-500">
-                      Tên và danh mục hợp lệ
-                    </p>
-                    <p className="mt-2 text-sm font-semibold break-words">
-                      {dossier.title}
-                    </p>
+                <section className="py-4" aria-labelledby="review-information">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <h3 className="font-bold" id="review-information">
+                        Thông tin đề cử
+                      </h3>
+                      <p className="mt-1 break-words text-sm font-semibold">
+                        {dossier.title}
+                      </p>
+                      <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-6 text-[var(--theme-muted)]">
+                        {dossier.summary || "Chưa có mô tả."}
+                      </p>
+                    </div>
                     <Button
-                      className="mt-2 px-0 text-[var(--theme-accent)]"
+                      className="min-h-11 px-2 text-[var(--theme-accent)]"
                       variant="ghost"
                       onClick={() => setStep("information")}
                     >
-                      Xem / sửa thông tin
+                      Sửa thông tin
                     </Button>
                   </div>
-                </div>
-                <div className="flex items-start gap-3 rounded-xl border border-[var(--theme-border)] bg-[var(--theme-elevated)] p-4">
+                </section>
+                <section className="py-4" aria-labelledby="review-evidence">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <h3 className="font-bold" id="review-evidence">
+                        Tài liệu và minh chứng
+                      </h3>
+                      <p className="mt-1 text-sm text-[var(--theme-muted)]">
+                        {evidenceReady
+                          ? `${dossier.evidences.length} tệp; đã đáp ứng tài liệu bắt buộc.`
+                          : "Chưa đáp ứng đầy đủ tài liệu bắt buộc."}
+                      </p>
+                    </div>
+                    <Button
+                      className="min-h-11 px-2 text-[var(--theme-accent)]"
+                      variant="ghost"
+                      onClick={() => setStep("evidence")}
+                    >
+                      Sửa tài liệu
+                    </Button>
+                  </div>
+                  {dossier.evidences.length ? (
+                    <ul className="mt-3 divide-y divide-[var(--theme-border)]">
+                      {dossier.evidences.map((evidence) => (
+                        <li
+                          className="flex min-w-0 flex-wrap items-baseline justify-between gap-x-4 gap-y-1 py-2 text-sm"
+                          key={evidence.id}
+                        >
+                          <span className="min-w-0 break-words font-medium">
+                            {evidence.filename ?? evidence.title}
+                          </span>
+                          <span className="text-xs text-[var(--theme-muted)]">
+                            {evidenceTypeLabel(dossier, evidence)} ·{" "}
+                            {evidenceFileType(evidence)} ·{" "}
+                            {formatBytes(evidence.bytes)}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="mt-2 text-sm text-[var(--theme-muted)]">
+                      Chưa có tài liệu trong hồ sơ.
+                    </p>
+                  )}
+                </section>
+                <section className="py-4" aria-labelledby="review-claims">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <h3 className="font-bold" id="review-claims">
+                        Nhận định và căn cứ
+                      </h3>
+                      <p className="mt-1 text-sm text-[var(--theme-muted)]">
+                        {claimsReady
+                          ? `${dossierClaims.length} nhận định đã lưu.`
+                          : "Cần hoàn thiện nội dung và tài liệu liên kết."}
+                      </p>
+                    </div>
+                    <Button
+                      className="min-h-11 px-2 text-[var(--theme-accent)]"
+                      variant="ghost"
+                      onClick={() => setStep("evidence")}
+                    >
+                      Xem nhận định
+                    </Button>
+                  </div>
+                  {dossierClaims.length ? (
+                    <ol className="mt-3 list-decimal space-y-3 pl-5">
+                      {dossierClaims.map((claim) => {
+                        const criterion = dossier.claimCriteria?.find(
+                          ({ key }) => key === claim.criterionKey,
+                        );
+                        const linkedEvidence = dossier.evidences.filter(
+                          (evidence) =>
+                            claim.evidenceMediaIds.includes(
+                              evidence.mediaAssetId,
+                            ),
+                        );
+                        return (
+                          <li className="min-w-0 pl-1 text-sm" key={claim.id}>
+                            <p className="font-semibold">
+                              {criterion?.label ?? claim.criterionKey}
+                            </p>
+                            <p className="mt-1 whitespace-pre-wrap break-words leading-6">
+                              {claim.statement}
+                            </p>
+                            <p className="mt-1 break-words text-xs text-[var(--theme-muted)]">
+                              Tài liệu:{" "}
+                              {linkedEvidence.length
+                                ? linkedEvidence
+                                    .map(
+                                      (evidence) =>
+                                        evidence.filename ?? evidence.title,
+                                    )
+                                    .join(", ")
+                                : "Chưa liên kết"}
+                            </p>
+                          </li>
+                        );
+                      })}
+                    </ol>
+                  ) : (
+                    <p className="mt-2 text-sm text-[var(--theme-muted)]">
+                      Chưa thêm nhận định.
+                    </p>
+                  )}
+                </section>
+                <div className="flex items-center gap-2 py-4 text-sm">
                   {isComplete ? (
                     <CheckCircle2
                       aria-hidden="true"
-                      className="mt-0.5 size-5 text-emerald-600"
+                      className="size-5 shrink-0 text-emerald-600"
                     />
                   ) : (
                     <CircleAlert
                       aria-hidden="true"
-                      className="mt-0.5 size-5 text-amber-600"
+                      className="size-5 shrink-0 text-amber-600"
                     />
                   )}
-                  <div>
-                    <p className="text-sm font-bold">Bằng chứng xác minh</p>
-                    <p className="mt-1 text-xs text-neutral-500">
-                      {documentRules.length
-                        ? evidenceReady
-                          ? "Đã đáp ứng các tài liệu bắt buộc"
-                          : "Chưa đáp ứng các tài liệu bắt buộc"
-                        : `${dossier.evidences.length} tệp sẵn sàng`}
-                    </p>
-                    <Button
-                      className="mt-2 px-0 text-[var(--theme-accent)]"
-                      variant="ghost"
-                      onClick={() => setStep("evidence")}
-                    >
-                      Xem / sửa tài liệu
-                    </Button>
-                  </div>
+                  <span>
+                    {isComplete
+                      ? "Hồ sơ đã sẵn sàng để gửi."
+                      : "Hoàn thiện các mục còn thiếu trước khi gửi."}
+                  </span>
                 </div>
               </div>
               {dossier.canEdit && !submissionComplete ? (

@@ -48,6 +48,7 @@ it("saves applicant statements with explicit criterion/evidence and acknowledged
     claimsRevision: 1,
   }));
   render(<DossierClaimsEditor {...props} />);
+  await user.click(screen.getByText("Nhận định và căn cứ"));
   await user.click(screen.getByRole("button", { name: "Thêm nhận định" }));
   await user.type(
     screen.getByRole("textbox", { name: "Nội dung nhận định 1" }),
@@ -64,7 +65,7 @@ it("saves applicant statements with explicit criterion/evidence and acknowledged
     ]),
   );
   expect(props.onSaved).toHaveBeenCalled();
-  expect(screen.getByRole("status").textContent).toBe("Nhận định đã lưu");
+  expect(screen.getByText("Nhận định đã lưu")).toBeDefined();
 });
 
 it("retains edits after conflict and blocks navigation until save or discard", async () => {
@@ -78,6 +79,7 @@ it("retains edits after conflict and blocks navigation until save or discard", a
       <DossierClaimsEditor {...props} />
     </>,
   );
+  await user.click(screen.getByText("Nhận định và căn cứ"));
   await user.click(screen.getByRole("button", { name: "Thêm nhận định" }));
   await user.type(
     screen.getByRole("textbox", { name: "Nội dung nhận định 1" }),
@@ -100,7 +102,8 @@ it("retains edits after conflict and blocks navigation until save or discard", a
   expect(screen.queryByRole("textbox")).toBeNull();
 });
 
-it("renders frozen claims without editable controls", () => {
+it("renders frozen claims without editable controls", async () => {
+  const user = userEvent.setup();
   render(
     <DossierClaimsEditor
       {...props}
@@ -115,10 +118,72 @@ it("renders frozen claims without editable controls", () => {
       ]}
     />,
   );
+  await user.click(screen.getByText("Nhận định và căn cứ"));
   expect(
     screen
       .getByRole("textbox", { name: "Nội dung nhận định 1" })
       .closest("fieldset"),
   ).toHaveProperty("disabled", true);
   expect(screen.queryByRole("button", { name: "Lưu nhận định" })).toBeNull();
+});
+
+it("warns about incomplete claims before submit and keeps them editable", async () => {
+  const user = userEvent.setup();
+  render(<DossierClaimsEditor {...props} />);
+  await user.click(screen.getByText("Nhận định và căn cứ"));
+  await user.click(screen.getByRole("button", { name: "Thêm nhận định" }));
+
+  const statement = screen.getByRole("textbox", {
+    name: "Nội dung nhận định 1",
+  });
+  expect(statement.getAttribute("aria-invalid")).toBe("true");
+  expect(
+    screen.getByText("Cần ít nhất 20 ký tự trước khi gửi hồ sơ."),
+  ).toBeDefined();
+  expect(
+    screen.getByText("Liên kết ít nhất một tài liệu trước khi gửi hồ sơ."),
+  ).toBeDefined();
+  expect(screen.getByRole("button", { name: "Lưu nhận định" })).toHaveProperty(
+    "disabled",
+    true,
+  );
+
+  await user.type(statement, "Nội dung đủ dài để đánh giá.");
+  expect(statement.getAttribute("aria-invalid")).toBe("false");
+  expect(
+    screen.queryByText("Cần ít nhất 20 ký tự trước khi gửi hồ sơ."),
+  ).toBeNull();
+});
+
+it("keeps stale evidence links until the applicant explicitly removes them", async () => {
+  const user = userEvent.setup();
+  render(
+    <DossierClaimsEditor
+      {...props}
+      initialClaims={[
+        {
+          id: "claim-1",
+          criterionKey: "origin",
+          statement: "Nhận định vẫn giữ tài liệu đã gỡ khỏi hồ sơ.",
+          evidenceMediaIds: ["removed-media"],
+        },
+      ]}
+    />,
+  );
+  await user.click(screen.getByText("Nhận định và căn cứ"));
+
+  expect(
+    screen.getByText(/Tài liệu đã gỡ khỏi hồ sơ\. Nhận định vẫn được giữ/),
+  ).toBeDefined();
+  expect(screen.getByRole("button", { name: "Lưu nhận định" })).toHaveProperty(
+    "disabled",
+    true,
+  );
+  await user.click(screen.getByRole("button", { name: "Gỡ liên kết cũ" }));
+  expect(
+    screen.queryByText(/Tài liệu đã gỡ khỏi hồ sơ\. Nhận định vẫn được giữ/),
+  ).toBeNull();
+  expect(
+    screen.getByText("Liên kết ít nhất một tài liệu trước khi gửi hồ sơ."),
+  ).toBeDefined();
 });

@@ -127,6 +127,50 @@ describe("DossierWorkspace", () => {
     expect(openTab).toHaveBeenCalledWith("about:blank", "_blank");
   });
 
+  it("keeps claims within the evidence step", async () => {
+    const user = userEvent.setup();
+    api.get.mockResolvedValue({
+      ...dossier,
+      claimCriteria: [{ key: "ORIGINALITY", label: "Tính sáng tạo" }],
+      claims: [
+        {
+          id: "claim-1",
+          criterionKey: "ORIGINALITY",
+          statement: "Tuyên bố đủ dài cho nội dung nhận định.",
+          evidenceMediaIds: [dossier.evidences[0]!.mediaAssetId],
+        },
+      ],
+    });
+    api.versions.mockResolvedValue([]);
+    api.timeline.mockResolvedValue([]);
+    api.submissionFee.mockResolvedValue({
+      feeAvailable: true,
+      feeRequired: false,
+    });
+    render(
+      <QueryClientProvider
+        client={
+          new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        }
+      >
+        <DossierWorkspace dossierId={dossier.id} />
+      </QueryClientProvider>,
+    );
+    await screen.findByRole("heading", { level: 1, name: dossier.title });
+
+    expect(
+      screen.queryByRole("group", { name: "Tài liệu và minh chứng" }),
+    ).toBeNull();
+    await user.click(
+      screen.getByRole("button", { name: /Tài liệu và minh chứng/ }),
+    );
+
+    const evidenceStep = screen.getByRole("group", {
+      name: "Tài liệu và minh chứng",
+    });
+    expect(within(evidenceStep).getByText("Nhận định và căn cứ")).toBeDefined();
+  });
+
   it("blocks submission while fee lookup fails and preserves the draft for retry", async () => {
     const user = userEvent.setup();
     api.get.mockResolvedValue({ ...dossier, submissionFeeRequired: true });
@@ -143,7 +187,7 @@ describe("DossierWorkspace", () => {
       </QueryClientProvider>,
     );
     await screen.findByRole("heading", { level: 1, name: dossier.title });
-    await user.click(screen.getByRole("button", { name: /Kiểm tra & nộp/ }));
+    await user.click(screen.getByRole("button", { name: /Kiểm tra và gửi/ }));
     expect(
       await screen.findByText(
         "Chưa tải được phí nộp. Dữ liệu hồ sơ vẫn được giữ.",
@@ -171,9 +215,7 @@ describe("DossierWorkspace", () => {
       "disabled",
       false,
     );
-    expect(
-      screen.getByRole("button", { name: "Xem / sửa tài liệu" }),
-    ).toBeDefined();
+    expect(screen.getByRole("button", { name: "Sửa tài liệu" })).toBeDefined();
   });
 
   it("keeps a draft unsubmitted until an active global fee policy exists", async () => {
@@ -201,7 +243,7 @@ describe("DossierWorkspace", () => {
     );
 
     await screen.findByRole("heading", { level: 1, name: dossier.title });
-    await user.click(screen.getByRole("button", { name: /Kiểm tra & nộp/ }));
+    await user.click(screen.getByRole("button", { name: /Kiểm tra và gửi/ }));
     expect(await screen.findByText(/Hồ sơ nháp vẫn được lưu/)).toBeDefined();
     expect(screen.getByRole("button", { name: "Nộp hồ sơ" })).toHaveProperty(
       "disabled",
@@ -253,7 +295,7 @@ describe("DossierWorkspace", () => {
     );
 
     await screen.findByRole("heading", { level: 1, name: dossier.title });
-    await user.click(screen.getByRole("button", { name: /Kiểm tra & nộp/ }));
+    await user.click(screen.getByRole("button", { name: /Kiểm tra và gửi/ }));
     expect(
       screen.getByText("Phí nộp hồ sơ được miễn theo quyền kiểm thử."),
     ).toBeDefined();
@@ -309,7 +351,7 @@ describe("DossierWorkspace", () => {
       </QueryClientProvider>,
     );
     await screen.findByRole("heading", { level: 1, name: dossier.title });
-    await user.click(screen.getByRole("button", { name: /Kiểm tra & nộp/ }));
+    await user.click(screen.getByRole("button", { name: /Kiểm tra và gửi/ }));
     expect(screen.getByRole("alert").textContent).toContain(
       "Nhận định đã lưu còn thiếu",
     );
@@ -334,7 +376,12 @@ describe("DossierWorkspace", () => {
         "Đã lưu bản nháp. Thêm tài liệu cần thiết rồi kiểm tra trước khi gửi.",
       ),
     ).toBeTruthy();
-    expect(screen.getByText("Tài liệu cho hồ sơ của bạn")).toBeTruthy();
+    expect(
+      screen.getByRole("heading", {
+        level: 3,
+        name: "Tài liệu và minh chứng",
+      }),
+    ).toBeTruthy();
   });
 
   it("autosaves draft information and submits a complete dossier", async () => {
@@ -382,10 +429,8 @@ describe("DossierWorkspace", () => {
       { timeout: 2000 },
     );
 
-    await user.click(screen.getByRole("button", { name: /Kiểm tra & nộp/ }));
-    expect(
-      screen.getByRole("button", { name: "Xem / sửa tài liệu" }),
-    ).toBeDefined();
+    await user.click(screen.getByRole("button", { name: /Kiểm tra và gửi/ }));
+    expect(screen.getByRole("button", { name: "Sửa tài liệu" })).toBeDefined();
     await user.click(screen.getByRole("button", { name: "Nộp hồ sơ" }));
     expect(api.submit.mock.calls[0]?.[0]).toBe(dossier.id);
     expect(api.submit.mock.calls[0]?.[1]).toEqual(expect.any(String));
@@ -449,7 +494,7 @@ describe("DossierWorkspace", () => {
     );
 
     await screen.findByLabelText("Tên hồ sơ");
-    await user.click(screen.getByRole("button", { name: /Kiểm tra & nộp/ }));
+    await user.click(screen.getByRole("button", { name: /Kiểm tra và gửi/ }));
     await user.click(screen.getByRole("button", { name: "Nộp hồ sơ" }));
     await screen.findByText("Hồ sơ đã được gửi thành công");
 
@@ -493,7 +538,7 @@ describe("DossierWorkspace", () => {
 
     expect(api.update).toHaveBeenCalledTimes(1);
     expect(
-      screen.getByRole("button", { name: /Kiểm tra & nộp/ }),
+      screen.getByRole("button", { name: /Kiểm tra và gửi/ }),
     ).toHaveProperty("disabled", true);
     expect(api.submit).not.toHaveBeenCalled();
   });
@@ -560,12 +605,12 @@ describe("DossierWorkspace", () => {
       await screen.findByRole("button", { name: "Thử lưu lại" }),
     ).toBeDefined();
     expect(
-      screen.getByRole("button", { name: /Kiểm tra & nộp/ }),
+      screen.getByRole("button", { name: /Kiểm tra và gửi/ }),
     ).toHaveProperty("disabled", true);
     await user.click(screen.getByRole("button", { name: "Thử lưu lại" }));
     await vi.waitFor(() =>
       expect(
-        screen.getByRole("button", { name: /Kiểm tra & nộp/ }),
+        screen.getByRole("button", { name: /Kiểm tra và gửi/ }),
       ).toHaveProperty("disabled", false),
     );
     expect(api.update).toHaveBeenCalledTimes(2);
@@ -622,16 +667,22 @@ describe("DossierWorkspace", () => {
       level: 1,
       name: "Bộ nhận diện CNS",
     });
-    await user.click(screen.getByRole("button", { name: /Kiểm tra & nộp/ }));
+    await user.click(screen.getByRole("button", { name: /Kiểm tra và gửi/ }));
 
     expect(screen.getByText("Cần bổ sung trước khi nộp")).toBeDefined();
     expect(
-      screen.getByText("Chưa đáp ứng các tài liệu bắt buộc"),
+      screen.getByText("Chưa đáp ứng đầy đủ tài liệu bắt buộc."),
     ).toBeDefined();
     await user.click(screen.getByRole("button", { name: "Bổ sung tài liệu" }));
-    expect(screen.getByText(/Chọn loại tài liệu và tệp cần gửi/)).toBeDefined();
-    await user.click(screen.getByRole("button", { name: /Kiểm tra & nộp/ }));
-    expect(screen.getByText("Tài liệu quyền sở hữu")).toBeDefined();
+    expect(
+      screen.getByText(
+        "Chọn tệp để bổ sung thông tin và minh chứng cho đề cử.",
+      ),
+    ).toBeDefined();
+    await user.click(screen.getByRole("button", { name: /Kiểm tra và gửi/ }));
+    expect(screen.getAllByText("Tài liệu quyền sở hữu").length).toBeGreaterThan(
+      1,
+    );
     expect(screen.getByRole("button", { name: "Nộp hồ sơ" })).toHaveProperty(
       "disabled",
       true,
@@ -674,7 +725,7 @@ describe("DossierWorkspace", () => {
     await user.selectOptions(ruleSelect, "OTHER");
     expect(ruleSelect).toHaveProperty("value", "OTHER");
     await user.upload(
-      screen.getByLabelText("Chọn tệp cần thêm"),
+      screen.getByLabelText("Chọn tài liệu và minh chứng"),
       new File(["proof"], "proof.pdf", { type: "application/pdf" }),
     );
     expect(ruleSelect.hasAttribute("disabled")).toBe(true);

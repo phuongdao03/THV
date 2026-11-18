@@ -32,7 +32,9 @@ export function DossierClaimsEditor({
   const [baseline, setBaseline] = useState(JSON.stringify(initialClaims));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const dirty = !readOnly && JSON.stringify(claims) !== baseline;
+  const [claimToRemove, setClaimToRemove] = useState<string | null>(null);
+  const effectiveReadOnly = readOnly || criteria.length === 0;
+  const dirty = !effectiveReadOnly && JSON.stringify(claims) !== baseline;
   useEffect(
     () => onUnsavedChange(dirty || saving),
     [dirty, onUnsavedChange, saving],
@@ -88,186 +90,270 @@ export function DossierClaimsEditor({
   }
   if (!criteria.length && !claims.length) return null;
   return (
-    <section
-      aria-labelledby="dossier-claims-heading"
-      className="space-y-4 rounded-xl border border-[var(--theme-border)] bg-[var(--theme-surface)] p-4 sm:p-6"
-    >
-      <div>
-        <h2 className="text-xl font-bold" id="dossier-claims-heading">
+    <details className="border-y border-[var(--theme-border)] py-3">
+      <summary className="min-h-11 cursor-pointer py-2">
+        <span className="block text-base font-bold text-[var(--theme-text)]">
           Nhận định và căn cứ
-        </h2>
-        <p className="mt-1 text-sm leading-6 text-[var(--theme-muted)]">
-          Trình bày thông tin cần chứng minh theo tiêu chí và chọn tài liệu hỗ
-          trợ. Đây là nội dung tự khai, chưa phải kết luận kiểm chứng.
-        </p>
-      </div>
-      <fieldset className="space-y-4" disabled={readOnly || saving}>
-        <legend className="sr-only">Các nhận định của người nộp</legend>
-        {claims.map((claim, index) => (
-          <div
-            className="space-y-3 border-t border-[var(--theme-border)] pt-4"
-            key={claim.id}
-          >
-            <label className="block text-sm font-semibold">
-              Tiêu chí cho nhận định {index + 1}
-              <select
-                aria-label={`Tiêu chí nhận định ${index + 1}`}
-                className="mt-1 min-h-11 w-full rounded-lg border border-[var(--theme-border)] bg-[var(--theme-surface)] px-3"
-                value={claim.criterionKey}
-                onChange={(event) =>
-                  update(claim.id, { criterionKey: event.target.value })
-                }
+        </span>
+        <span className="mt-1 block text-sm leading-5 text-[var(--theme-muted)]">
+          Nêu căn cứ theo tiêu chí và liên kết tài liệu hỗ trợ.
+        </span>
+      </summary>
+      <div className="space-y-4 pt-4">
+        {!criteria.length && claims.length ? (
+          <p className="text-sm text-amber-900" role="status">
+            Tiêu chí hiện không có sẵn. Nhận định lịch sử được giữ nguyên ở chế
+            độ chỉ xem.
+          </p>
+        ) : null}
+        <fieldset className="space-y-4" disabled={effectiveReadOnly || saving}>
+          <legend className="sr-only">Các nhận định của người nộp</legend>
+          {claims.map((claim, index) => {
+            const criterionValid = criteria.some(
+              ({ key }) => key === claim.criterionKey,
+            );
+            const statementLength = claim.statement.trim().length;
+            const staleEvidence = claim.evidenceMediaIds.some(
+              (id) =>
+                !evidences.some((evidence) => evidence.mediaAssetId === id),
+            );
+            const criterionErrorId = `claim-${claim.id}-criterion-error`;
+            const statementErrorId = `claim-${claim.id}-statement-error`;
+            return (
+              <div
+                className="space-y-3 border-t border-[var(--theme-border)] pt-4"
+                key={claim.id}
               >
-                <option value="">Chọn tiêu chí</option>
-                {criteria.map(({ key, label }) => (
-                  <option key={key} value={key}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="block text-sm font-semibold">
-              Nội dung nhận định {index + 1}
-              <textarea
-                className="mt-1 min-h-28 w-full rounded-lg border border-[var(--theme-border)] bg-[var(--theme-surface)] p-3 font-normal"
-                maxLength={2000}
-                value={claim.statement}
-                onChange={(event) =>
-                  update(claim.id, { statement: event.target.value })
-                }
-              />
-            </label>
-            <fieldset className="space-y-2">
-              <legend className="mb-2 text-sm font-semibold">
-                Tài liệu hỗ trợ nhận định {index + 1}
-              </legend>
-              {evidences.map((evidence) => (
-                <label
-                  className="flex min-h-11 items-center gap-2 text-sm"
-                  key={evidence.id}
-                >
-                  <input
-                    type="checkbox"
-                    checked={claim.evidenceMediaIds.includes(
-                      evidence.mediaAssetId,
-                    )}
+                <label className="block text-sm font-semibold">
+                  Tiêu chí cho nhận định {index + 1}
+                  <select
+                    aria-describedby={
+                      !criterionValid ? criterionErrorId : undefined
+                    }
+                    aria-invalid={!criterionValid}
+                    aria-label={`Tiêu chí nhận định ${index + 1}`}
+                    className="mt-1 min-h-11 w-full rounded-lg border border-[var(--theme-border)] bg-[var(--theme-surface)] px-3"
+                    value={claim.criterionKey}
                     onChange={(event) =>
-                      update(claim.id, {
-                        evidenceMediaIds: event.target.checked
-                          ? [...claim.evidenceMediaIds, evidence.mediaAssetId]
-                          : claim.evidenceMediaIds.filter(
-                              (id) => id !== evidence.mediaAssetId,
-                            ),
-                      })
+                      update(claim.id, { criterionKey: event.target.value })
+                    }
+                  >
+                    <option value="">Chọn tiêu chí</option>
+                    {criteria.map(({ key, label }) => (
+                      <option key={key} value={key}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                  {!criterionValid ? (
+                    <span
+                      className="mt-1 block text-sm font-normal text-red-700"
+                      id={criterionErrorId}
+                      role="alert"
+                    >
+                      Chọn một tiêu chí hợp lệ cho nhận định này.
+                    </span>
+                  ) : null}
+                </label>
+                <label className="block text-sm font-semibold">
+                  Nội dung nhận định {index + 1}
+                  <textarea
+                    aria-describedby={
+                      statementLength < 20 ? statementErrorId : undefined
+                    }
+                    aria-invalid={statementLength < 20}
+                    aria-label={`Nội dung nhận định ${index + 1}`}
+                    className="mt-1 min-h-28 w-full rounded-lg border border-[var(--theme-border)] bg-[var(--theme-surface)] p-3 font-normal"
+                    maxLength={2000}
+                    value={claim.statement}
+                    onChange={(event) =>
+                      update(claim.id, { statement: event.target.value })
                     }
                   />
-                  {evidence.title}
-                </label>
-              ))}
-              {!evidences.length ? (
-                <p className="text-sm text-[var(--theme-muted)]">
-                  Thêm tài liệu vào hồ sơ để liên kết minh chứng.
-                </p>
-              ) : null}
-              {claim.evidenceMediaIds.some(
-                (id) =>
-                  !evidences.some((evidence) => evidence.mediaAssetId === id),
-              ) ? (
-                <p role="alert" className="text-sm text-red-700">
-                  Một tài liệu đã bị gỡ. Chọn lại căn cứ cho nhận định này.
-                  {!readOnly ? (
-                    <button
-                      type="button"
-                      className="ml-2 underline"
-                      onClick={() =>
-                        update(claim.id, {
-                          evidenceMediaIds: claim.evidenceMediaIds.filter(
-                            (id) =>
-                              evidences.some(
-                                (evidence) => evidence.mediaAssetId === id,
-                              ),
-                          ),
-                        })
-                      }
+                  {statementLength < 20 ? (
+                    <span
+                      className="mt-1 block text-sm font-normal text-amber-800"
+                      id={statementErrorId}
+                      role="status"
                     >
-                      Gỡ liên kết không còn trong hồ sơ
-                    </button>
+                      Cần ít nhất 20 ký tự trước khi gửi hồ sơ.
+                    </span>
                   ) : null}
-                </p>
-              ) : null}
-            </fieldset>
-            {!readOnly ? (
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() =>
-                  setClaims((current) =>
-                    current.filter(({ id }) => id !== claim.id),
+                </label>
+                <fieldset className="space-y-1">
+                  <legend className="mb-1 text-sm font-semibold">
+                    Tài liệu hỗ trợ nhận định {index + 1}
+                  </legend>
+                  {evidences.map((evidence) => (
+                    <label
+                      className="flex min-h-11 items-center gap-2 text-sm"
+                      key={evidence.id}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={claim.evidenceMediaIds.includes(
+                          evidence.mediaAssetId,
+                        )}
+                        onChange={(event) =>
+                          update(claim.id, {
+                            evidenceMediaIds: event.target.checked
+                              ? [
+                                  ...claim.evidenceMediaIds,
+                                  evidence.mediaAssetId,
+                                ]
+                              : claim.evidenceMediaIds.filter(
+                                  (id) => id !== evidence.mediaAssetId,
+                                ),
+                          })
+                        }
+                      />
+                      {evidence.title}
+                    </label>
+                  ))}
+                  {!claim.evidenceMediaIds.some((id) =>
+                    evidences.some((evidence) => evidence.mediaAssetId === id),
+                  ) ? (
+                    <p className="pt-1 text-sm text-amber-800" role="status">
+                      Liên kết ít nhất một tài liệu trước khi gửi hồ sơ.
+                    </p>
+                  ) : null}
+                  {staleEvidence ? (
+                    <p role="alert" className="text-sm text-red-700">
+                      Tài liệu đã gỡ khỏi hồ sơ. Nhận định vẫn được giữ; hãy
+                      chọn minh chứng thay thế hoặc chủ động gỡ liên kết cũ.
+                      {!effectiveReadOnly ? (
+                        <button
+                          type="button"
+                          className="ml-2 min-h-11 font-semibold underline underline-offset-2"
+                          onClick={() =>
+                            update(claim.id, {
+                              evidenceMediaIds: claim.evidenceMediaIds.filter(
+                                (id) =>
+                                  evidences.some(
+                                    (evidence) => evidence.mediaAssetId === id,
+                                  ),
+                              ),
+                            })
+                          }
+                        >
+                          Gỡ liên kết cũ
+                        </button>
+                      ) : null}
+                    </p>
+                  ) : null}
+                </fieldset>
+                {!effectiveReadOnly ? (
+                  claimToRemove === claim.id ? (
+                    <div className="border-l-2 border-amber-500 pl-3">
+                      <p className="text-sm text-amber-950">
+                        Nhận định sẽ bị xóa khỏi bản nháp khi bạn lưu thay đổi.
+                      </p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => setClaimToRemove(null)}
+                        >
+                          Hủy
+                        </Button>
+                        <Button
+                          type="button"
+                          className="border border-red-700 text-red-800 hover:bg-red-50"
+                          variant="ghost"
+                          onClick={() => {
+                            setClaims((current) =>
+                              current.filter(({ id }) => id !== claim.id),
+                            );
+                            setClaimToRemove(null);
+                          }}
+                        >
+                          Xóa nhận định
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      onClick={() => setClaimToRemove(claim.id)}
+                    >
+                      Xóa nhận định {index + 1}
+                    </Button>
                   )
-                }
-              >
-                Xóa nhận định {index + 1}
-              </Button>
-            ) : null}
-          </div>
-        ))}
-        {!readOnly ? (
-          <Button
-            type="button"
-            variant="outline"
-            disabled={claims.length >= 50}
-            onClick={() =>
-              setClaims((current) => [
-                ...current,
-                {
-                  id: crypto.randomUUID(),
-                  criterionKey: criteria[0]?.key ?? "",
-                  statement: "",
-                  evidenceMediaIds: [],
-                },
-              ])
-            }
-          >
-            Thêm nhận định
-          </Button>
-        ) : null}
-      </fieldset>
-      {!readOnly ? (
-        <div className="flex flex-wrap items-center gap-3">
-          <Button
-            type="button"
-            disabled={
-              !dirty ||
-              saving ||
-              claims.some((claim) => !claim.statement.trim())
-            }
-            onClick={() => void save()}
-          >
-            {saving ? "Đang lưu nhận định…" : "Lưu nhận định"}
-          </Button>
-          {dirty ? (
+                ) : null}
+              </div>
+            );
+          })}
+          {!effectiveReadOnly ? (
             <Button
-              variant="ghost"
               type="button"
-              disabled={saving}
-              onClick={() => {
-                setClaims(JSON.parse(baseline) as DossierClaim[]);
-                setError("");
-              }}
+              variant="outline"
+              disabled={claims.length >= 50}
+              onClick={() =>
+                setClaims((current) => [
+                  ...current,
+                  {
+                    id: crypto.randomUUID(),
+                    criterionKey: criteria[0]?.key ?? "",
+                    statement: "",
+                    evidenceMediaIds: [],
+                  },
+                ])
+              }
             >
-              Hủy thay đổi nhận định
+              Thêm nhận định
             </Button>
           ) : null}
-          <span className="text-sm text-[var(--theme-muted)]" role="status">
-            {dirty ? "Có nội dung chưa lưu" : "Nhận định đã lưu"}
-          </span>
-        </div>
-      ) : null}
-      {error ? (
-        <p className="text-sm text-red-700" role="alert">
-          {error}
-        </p>
-      ) : null}
-    </section>
+        </fieldset>
+        {!effectiveReadOnly ? (
+          <div className="flex flex-wrap items-center gap-3 border-t border-[var(--theme-border)] pt-4">
+            <Button
+              type="button"
+              disabled={
+                !dirty ||
+                saving ||
+                claims.some(
+                  (claim) =>
+                    !criteria.some(({ key }) => key === claim.criterionKey) ||
+                    !claim.statement.trim() ||
+                    claim.statement.trim().length > 2000 ||
+                    claim.evidenceMediaIds.some(
+                      (id) =>
+                        !evidences.some(
+                          (evidence) => evidence.mediaAssetId === id,
+                        ),
+                    ),
+                )
+              }
+              onClick={() => void save()}
+            >
+              {saving ? "Đang lưu nhận định…" : "Lưu nhận định"}
+            </Button>
+            {dirty ? (
+              <Button
+                variant="ghost"
+                type="button"
+                disabled={saving}
+                onClick={() => {
+                  setClaims(JSON.parse(baseline) as DossierClaim[]);
+                  setClaimToRemove(null);
+                  setError("");
+                }}
+              >
+                Hủy thay đổi nhận định
+              </Button>
+            ) : null}
+            <span className="text-sm text-[var(--theme-muted)]" role="status">
+              {dirty ? "Có nội dung chưa lưu" : "Nhận định đã lưu"}
+            </span>
+          </div>
+        ) : null}
+        {error ? (
+          <p className="text-sm text-red-700" role="alert">
+            {error}
+          </p>
+        ) : null}
+      </div>
+    </details>
   );
 }
