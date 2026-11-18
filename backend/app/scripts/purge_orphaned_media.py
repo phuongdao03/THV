@@ -143,8 +143,7 @@ def _unreferenced_filter(
         )
         column_name = preparer.quote(reference.column_name)
         checks.append(
-            f"NOT EXISTS (SELECT 1 FROM {table_name} "
-            f"WHERE {column_name} = {media_id})"
+            f"NOT EXISTS (SELECT 1 FROM {table_name} WHERE {column_name} = {media_id})"
         )
     return " AND ".join(checks) if checks else "TRUE"
 
@@ -500,15 +499,13 @@ async def _run(args: argparse.Namespace) -> dict[str, Any]:
             request_count,
             bytes_seen,
             cloudinary_candidates_truncated,
-        ) = (
-            await _scan_cloudinary(
-                config,
-                environment=environment,
-                tracked=tracked,
-                min_age_hours=args.min_age_hours,
-                max_requests=args.max_requests,
-                limit=args.limit,
-            )
+        ) = await _scan_cloudinary(
+            config,
+            environment=environment,
+            tracked=tracked,
+            min_age_hours=args.min_age_hours,
+            max_requests=args.max_requests,
+            limit=args.limit,
         )
         report: dict[str, Any] = {
             "environment": environment,
