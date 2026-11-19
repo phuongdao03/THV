@@ -19,6 +19,7 @@ from app.modules.historical_nominations.models import HistoricalNomination
 from app.modules.media.models import MediaAsset, MediaStatus
 from app.modules.organizations.models import Organization
 from app.modules.public.cloudinary_variants import cloudinary_video_variant
+from app.modules.public.cover import resolve_publication_cover
 from app.modules.public.models import (
     DerivativeStatus,
     PublicationStatus,
@@ -170,24 +171,9 @@ class PublicWorkRepository:
             candidates[media.public_work_id].append(media)
         selected: dict[UUID, PublicWorkMedia] = {}
         for work in works:
-            work_candidates = candidates[work.id]
-            if not work_candidates:
-                continue
-            selected[work.id] = next(
-                (
-                    media
-                    for media in work_candidates
-                    if media.media_asset_id == work.thumbnail_media_id
-                ),
-                next(
-                    (
-                        media
-                        for media in work_candidates
-                        if media.media_kind is PublicMediaKind.IMAGE
-                    ),
-                    work_candidates[0],
-                ),
-            )
+            explicit_cover = resolve_publication_cover(work, candidates[work.id])
+            if explicit_cover is not None:
+                selected[work.id] = explicit_cover
         return selected
 
     async def ready_cover_kind(

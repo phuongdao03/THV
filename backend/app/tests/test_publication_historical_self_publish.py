@@ -3,6 +3,7 @@ import base64
 from sqlite3 import Connection
 from uuid import uuid4
 
+import pytest
 from sqlalchemy import event, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
@@ -14,20 +15,38 @@ from app.modules.auth.security import OutboxPayloadCipher
 from app.modules.auth.session_service import AuthPrincipal
 from app.modules.dossiers.models import Category
 from app.modules.historical_nominations.models import (
+    HistoricalMediaKind,
+    HistoricalMediaLink,
     HistoricalNomination,
     HistoricalNominationContentVersion,
     HistoricalPublicContentDraft,
     HistoricalSourceKind,
     HistoricalSubjectType,
 )
+from app.modules.historical_nominations.service import HistoricalNominationService
+from app.modules.media.models import MediaAsset, MediaStatus
 from app.modules.public.models import (
     PublicationStatus,
+    PublicWorkMedia,
     PublicWorkVisibility,
 )
 from app.modules.public.publication_service import PublicationService
 
 
-def test_admin_and_data_manager_can_publish_legacy_work() -> None:
+@pytest.mark.parametrize(
+    "document_types",
+    [
+        ("application/vnd.openxmlformats-officedocument.wordprocessingml.document",),
+        ("application/pdf",),
+        (
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        ),
+    ],
+)
+def test_admin_and_data_manager_can_publish_legacy_work(
+    document_types: tuple[str, ...],
+) -> None:
     async def scenario() -> None:
         assert app.title
         engine = create_async_engine("sqlite+aiosqlite://")
@@ -82,8 +101,34 @@ def test_admin_and_data_manager_can_publish_legacy_work() -> None:
         async with factory() as session:
             session.add_all([user, record, category, draft])
             await session.commit()
+            for mime_type in document_types:
+                document = MediaAsset(
+                    owner_user_id=user.id,
+                    purpose="HISTORICAL_NOMINATION",
+                    cloudinary_public_id=f"private/{uuid4()}",
+                    resource_type="raw",
+                    access_mode="authenticated",
+                    status=MediaStatus.ACTIVE,
+                    mime_type=mime_type,
+                    original_filename="evidence",
+                    bytes=100,
+                )
+                session.add(document)
+                await session.flush()
+                session.add(
+                    HistoricalMediaLink(
+                        nomination_id=record.id,
+                        media_asset_id=document.id,
+                        media_kind=HistoricalMediaKind.SUPPORTING_DOCUMENT,
+                        attached_by_user_id=user.id,
+                    )
+                )
+            await session.commit()
             await session.refresh(draft)
             await session.commit()
+            draft = await HistoricalNominationService(
+                session
+            ).submit_public_content_draft(principal, record.id, draft.updated_at)
 
             service = PublicationService(
                 session=session,
@@ -103,6 +148,8 @@ def test_admin_and_data_manager_can_publish_legacy_work() -> None:
             assert work.show_certificate is False
             assert work.publication_status is PublicationStatus.PUBLISHED
             assert work.visibility is PublicWorkVisibility.PUBLIC
+            assert work.thumbnail_media_id is None
+            assert await session.scalar(select(PublicWorkMedia.id)) is None
 
             history = await session.scalars(
                 select(HistoricalNominationContentVersion).where(

@@ -40,6 +40,9 @@ const api = vi.hoisted(() => {
     listAwards: vi.fn().mockResolvedValue([]),
     listMedia: vi.fn().mockResolvedValue([]),
     publicContentDraft: vi.fn().mockResolvedValue(null),
+    savePublicContentDraft: vi.fn().mockResolvedValue(null),
+    linkMedia: vi.fn().mockResolvedValue(null),
+    uploadMedia: vi.fn(),
     publication: vi.fn().mockResolvedValue(null),
     recordActivity: vi.fn().mockResolvedValue([]),
   };
@@ -51,6 +54,8 @@ vi.mock("@/lib/api/client", () => ({
   mediaApi: { signedUrl: vi.fn() },
   publicApi: { categories: vi.fn().mockResolvedValue([]) },
 }));
+
+vi.mock("@/lib/media/upload", () => ({ uploadMedia: api.uploadMedia }));
 
 const record: HistoricalNomination = {
   id: "record-1",
@@ -189,6 +194,97 @@ it("shows readable history without database field names", async () => {
     await screen.findByText("Lưu bản nháp nội dung công khai"),
   ).toBeTruthy();
   expect(screen.queryByText("revision")).toBeNull();
+});
+
+it("defaults to an automatic publication cover and saves without an upload", async () => {
+  renderDetail();
+  fireEvent.click(screen.getByRole("tab", { name: "Nội dung công khai" }));
+  const auto = await screen.findByRole("radio", {
+    name: "Tạo ảnh đại diện tự động",
+  });
+  expect(auto).toHaveProperty("checked", true);
+  fireEvent.click(screen.getByRole("radio", { name: "Chọn ảnh có sẵn" }));
+  expect(screen.getByText(/Hồ sơ chưa có ảnh phù hợp/)).toBeTruthy();
+  fireEvent.click(auto);
+  fireEvent.change(screen.getByLabelText("Tiêu đề công khai"), {
+    target: { value: "Đề cử chỉ có tài liệu" },
+  });
+  expect(
+    screen.getByLabelText("Bìa mặc định: Đề cử chỉ có tài liệu"),
+  ).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Lưu nội dung dự kiến" }));
+  await waitFor(() =>
+    expect(api.savePublicContentDraft).toHaveBeenCalledWith(
+      record.id,
+      expect.objectContaining({
+        coverMediaId: null,
+        title: "Đề cử chỉ có tài liệu",
+      }),
+    ),
+  );
+});
+
+it("uploads a dedicated custom cover and persists its asset ID", async () => {
+  api.uploadMedia.mockResolvedValueOnce({ id: "custom-cover" });
+  renderDetail();
+  fireEvent.click(screen.getByRole("tab", { name: "Nội dung công khai" }));
+  fireEvent.click(
+    await screen.findByRole("radio", { name: "Tải ảnh riêng để công bố" }),
+  );
+  const file = new File(["cover"], "cover.png", { type: "image/png" });
+  fireEvent.change(screen.getByLabelText("Chọn ảnh JPEG, PNG hoặc WebP"), {
+    target: { files: [file] },
+  });
+  await waitFor(() =>
+    expect(
+      screen.getByRole("button", { name: "Lưu nội dung dự kiến" }),
+    ).toHaveProperty("disabled", false),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Lưu nội dung dự kiến" }));
+  await waitFor(() =>
+    expect(api.savePublicContentDraft).toHaveBeenCalledWith(
+      record.id,
+      expect.objectContaining({ coverMediaId: "custom-cover" }),
+    ),
+  );
+  expect(api.uploadMedia).toHaveBeenCalledWith(file, "PUBLIC_COVER");
+  expect(api.linkMedia).toHaveBeenCalledWith(
+    record.id,
+    expect.objectContaining({
+      mediaId: "custom-cover",
+      mediaKind: "PHOTO",
+    }),
+  );
+});
+
+it("keeps AUTO for a record with photos until an image is explicitly selected", async () => {
+  api.listMedia.mockResolvedValueOnce([
+    {
+      mediaId: "photo-1",
+      mediaKind: "PHOTO",
+      mimeType: "image/jpeg",
+      filename: "Ảnh đề cử",
+    },
+  ]);
+  renderDetail();
+  fireEvent.click(screen.getByRole("tab", { name: "Nội dung công khai" }));
+  expect(
+    await screen.findByRole("radio", {
+      name: "Tạo ảnh đại diện tự động",
+    }),
+  ).toHaveProperty("checked", true);
+  fireEvent.click(screen.getByRole("radio", { name: "Chọn ảnh có sẵn" }));
+  fireEvent.change(screen.getByLabelText("Ảnh bạn cho phép dùng công khai"), {
+    target: { value: "photo-1" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Lưu nội dung dự kiến" }));
+  await waitFor(() =>
+    expect(api.savePublicContentDraft).toHaveBeenCalledWith(
+      record.id,
+      expect.objectContaining({ coverMediaId: "photo-1" }),
+    ),
+  );
+  expect(api.uploadMedia).not.toHaveBeenCalled();
 });
 
 it("directs an empty record to basic information before publication", async () => {

@@ -5,6 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
 
+import { PublicationCover } from "@/components/public/publication-cover";
 import { trackPublicCatalog } from "@/lib/analytics/public-catalog";
 import type { PublicCatalogWork } from "@/lib/api/types";
 import {
@@ -97,20 +98,7 @@ export function PublicWorkCard({
               }
             />
           ) : (
-            <div
-              aria-label={"Bìa mặc định: " + work.title}
-              className="catalog-work-card__fallback"
-            >
-              <span className="catalog-work-card__fallback-brand">
-                Tinh Hoa Việt
-              </span>
-              <span aria-hidden="true" className="catalog-work-card__monogram">
-                THV
-              </span>
-              <span className="catalog-work-card__fallback-index">
-                {String(position).padStart(2, "0")}
-              </span>
-            </div>
+            <PublicationCover title={work.title} category={work.categoryName} />
           )}
           {hasImage && loadedUrl !== imageUrl ? (
             <span

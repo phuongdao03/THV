@@ -18,7 +18,6 @@ export async function generateMetadata({
     };
   }
   const work = result.detail;
-  const thumbnail = work.media.find((item) => item.isThumbnail && item.url);
   return {
     title: work.title,
     description: work.shortDescription,
@@ -32,9 +31,12 @@ export async function generateMetadata({
       description: work.shortDescription,
       type: "article",
       publishedTime: work.publishedAt,
-      images: thumbnail?.url
-        ? [{ url: thumbnail.url, alt: thumbnail.altText || work.title }]
-        : undefined,
+      images: [
+        {
+          url: `/works/${encodeURIComponent(work.canonicalSlug)}/share-image`,
+          alt: work.title,
+        },
+      ],
     },
   };
 }

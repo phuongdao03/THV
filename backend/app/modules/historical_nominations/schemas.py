@@ -338,6 +338,7 @@ class HistoricalMediaLinkWrite(HistoricalSchema):
 
 
 class HistoricalMediaLinkData(HistoricalSchema):
+    upload_purpose: str | None = None
     id: UUID
     media_id: UUID
     media_kind: HistoricalMediaKind

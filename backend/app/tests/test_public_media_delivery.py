@@ -8,6 +8,7 @@ import pytest
 from fastapi import HTTPException
 
 from app.modules.blockchain.models import CertificateStatus
+from app.modules.historical_nominations.models import HistoricalArchiveStatus
 from app.modules.media.models import MediaEncryptionStatus, MediaStatus
 from app.modules.public.errors import PublicWorkNotFoundError
 from app.modules.public.media_delivery import (
@@ -20,6 +21,83 @@ from app.modules.public.models import (
     PublicWorkVisibility,
     VideoQualityProfile,
 )
+
+
+@pytest.mark.parametrize("blocked", [None, "private", "unapproved", "document"])
+def test_historical_cover_delivery_requires_publication_and_consent(
+    blocked: str | None,
+) -> None:
+    async def exercise() -> None:
+        work_id, media_id = uuid4(), uuid4()
+        work = SimpleNamespace(
+            historical_nomination_id=uuid4(),
+            thumbnail_media_id=media_id,
+            publication_status=PublicationStatus.PUBLISHED,
+            published_at=datetime.now(UTC),
+            visibility=(
+                PublicWorkVisibility.PRIVATE
+                if blocked == "private"
+                else PublicWorkVisibility.PUBLIC
+            ),
+        )
+        relation = SimpleNamespace(
+            public_work_id=work_id,
+            derivative_status=DerivativeStatus.READY,
+        )
+        asset = SimpleNamespace(
+            id=media_id,
+            status=MediaStatus.ACTIVE,
+            deleted_at=None,
+            access_mode="authenticated",
+            encryption_status=MediaEncryptionStatus.ENCRYPTED,
+            mime_type="application/pdf" if blocked == "document" else "image/png",
+            sha256=None,
+        )
+        session = MagicMock()
+        with (
+            patch("app.modules.public.media_delivery.PublicMediaRepository") as media,
+            patch("app.modules.public.media_delivery.PublicWorkRepository") as catalog,
+            patch(
+                "app.modules.public.media_delivery.read_retained_content",
+                new=AsyncMock(return_value=b"private pixels"),
+            ) as reader,
+            patch("app.modules.public.media_delivery.crop_cover", return_value=b"jpeg"),
+        ):
+            media.return_value.get_relation_with_asset = AsyncMock(
+                return_value=(relation, asset)
+            )
+            media.return_value.is_source_evidence_asset = AsyncMock(
+                return_value=blocked != "unapproved"
+            )
+            catalog.return_value.get_publication_context = AsyncMock(
+                return_value=SimpleNamespace(
+                    work=work,
+                    certificate=None,
+                    category=SimpleNamespace(is_active=True),
+                    historical_nomination=SimpleNamespace(
+                        archive_status=HistoricalArchiveStatus.ACTIVE, deleted_at=None
+                    ),
+                )
+            )
+            service = PublicMediaDeliveryService(session, MagicMock(), None)
+            if blocked is not None:
+                with pytest.raises(PublicWorkNotFoundError):
+                    await service.deliver(work_id, uuid4(), None, None, cover=True)
+                reader.assert_not_awaited()
+                return
+            response = await service.deliver(
+                work_id,
+                uuid4(),
+                None,
+                None,
+                cover=True,
+                cover_x=50,
+                cover_y=50,
+                cover_zoom=100,
+            )
+            assert response.body == b"jpeg"
+
+    asyncio.run(exercise())
 
 
 @pytest.mark.parametrize(
@@ -74,6 +152,7 @@ def test_encrypted_video_poster_delivers_real_frame_without_upload(
         work_id, dossier_id = uuid4(), uuid4()
         work = SimpleNamespace(
             dossier_id=dossier_id,
+            historical_nomination_id=None,
             publication_status=PublicationStatus.PUBLISHED,
             published_at=datetime.now(UTC),
             visibility=PublicWorkVisibility.PUBLIC,
@@ -194,6 +273,7 @@ def test_public_delivery_checks_policy_before_provider_access(
         work_id, dossier_id = uuid4(), uuid4()
         work = SimpleNamespace(
             dossier_id=dossier_id,
+            historical_nomination_id=None,
             publication_status=PublicationStatus.PUBLISHED,
             published_at=datetime.now(UTC),
             visibility=PublicWorkVisibility.PUBLIC,

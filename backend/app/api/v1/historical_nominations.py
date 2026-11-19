@@ -1027,6 +1027,7 @@ async def list_historical_media(
                 display_order=link.display_order,
                 award_id=link.award_id,
                 public_candidate=link.public_candidate,
+                upload_purpose=asset.purpose,
                 filename=asset.original_filename,
                 mime_type=asset.mime_type,
                 bytes=asset.bytes,

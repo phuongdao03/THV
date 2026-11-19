@@ -1,8 +1,15 @@
+from collections.abc import Iterable
 from io import BytesIO
 
 from PIL import Image, ImageOps
 
 from app.modules.media.models import MediaAsset
+from app.modules.public.models import (
+    DerivativeStatus,
+    PublicMediaKind,
+    PublicWork,
+    PublicWorkMedia,
+)
 
 
 def is_editorial_cover(asset: MediaAsset) -> bool:
@@ -46,3 +53,36 @@ def crop_cover(
         output = BytesIO()
         background.save(output, "JPEG", quality=85, optimize=True)
         return output.getvalue()
+
+
+def resolve_publication_cover(
+    work: PublicWork, media: Iterable[PublicWorkMedia]
+) -> PublicWorkMedia | None:
+    if work.thumbnail_media_id is None:
+        return None
+    return next(
+        (
+            item
+            for item in media
+            if item.media_asset_id == work.thumbnail_media_id
+            and item.derivative_url
+            and (
+                (
+                    item.media_kind is PublicMediaKind.IMAGE
+                    and item.derivative_status is DerivativeStatus.READY
+                )
+                or (
+                    work.historical_nomination_id is None
+                    and item.media_kind is PublicMediaKind.VIDEO
+                    and (
+                        item.derivative_status is DerivativeStatus.READY
+                        or (
+                            item.poster_ready
+                            and item.derivative_url.startswith("/api/v1/public/works/")
+                        )
+                    )
+                )
+            )
+        ),
+        None,
+    )

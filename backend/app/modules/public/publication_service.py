@@ -354,6 +354,15 @@ class PublicationService:
                         )
                     )
                 media_by_id = {asset.id: (link, asset) for link, asset in selected_rows}
+                cover_id = draft.cover_media_id
+                if (
+                    cover_id is not None
+                    and cover_id not in media_by_id
+                    and cover_id != draft.featured_video_media_id
+                    and str(cover_id) not in draft.public_media_ids
+                ):
+                    selected_ids.discard(cover_id)
+                    cover_id = None
                 if set(media_by_id) != selected_ids:
                     raise PublicWorkNotPublishableError(
                         ["selected_public_media_unavailable"]
@@ -364,10 +373,7 @@ class PublicationService:
                         raise PublicWorkNotPublishableError(
                             ["selected_public_media_unsupported"]
                         )
-                    if (
-                        media_id == draft.cover_media_id
-                        and kind is not PublicMediaKind.IMAGE
-                    ):
+                    if media_id == cover_id and kind is not PublicMediaKind.IMAGE:
                         raise PublicWorkNotPublishableError(["cover_must_be_image"])
                     if (
                         media_id == draft.featured_video_media_id
@@ -409,7 +415,7 @@ class PublicationService:
                     )
                     self._session.add(relation)
                     queued_media_ids.append(relation.id)
-                work.thumbnail_media_id = draft.cover_media_id
+                work.thumbnail_media_id = cover_id
                 work.publication_status = PublicationStatus.PUBLISHED
                 work.visibility = PublicWorkVisibility.PUBLIC
                 work.published_at = self._clock()

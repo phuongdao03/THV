@@ -435,6 +435,39 @@ button visibility is not an authorization control.
 - Shared views support keyboard navigation and responsive layouts at 320px,
   768px, 1024px, and 1440px.
 
+## Publication cover proposal
+
+The public-content submission service and the historical record form both
+require a cover ID. The catalog can also choose the first derivative when
+the selected cover is unavailable, while share metadata only uses a
+thumbnail from the detail response.
+
+1. Treat a null draft cover ID and a null published thumbnail ID as AUTO
+   for this workflow. Infer EXISTING or CUSTOM from the selected asset's
+   validated provenance. Reuse the nullable IDs and the dedicated
+   `PUBLIC_COVER` upload purpose. If provenance cannot distinguish the
+   modes safely, return for schema approval before adding fields.
+2. Keep the existing publication roles and review transitions. Validate
+   EXISTING against the record, image type and explicit public eligibility.
+   Bind CUSTOM uploads to the publication editor's authorization and scope.
+   The upload stays private until the existing publication approval creates
+   a public derivative. Document evidence stays private.
+3. Share one resolution policy across catalog, detail, publish preview and
+   share metadata. Use the selected eligible derivative when available and
+   AUTO when it is absent, invalid or fails to load. Preserve legacy cover
+   selections that still point to eligible public images.
+4. Render AUTO from approved public title and category with the existing
+   Tinh Hoa Viet emblem and restrained brand artwork. Use the same layout
+   for the editor preview and public cards. Generate the share image on
+   request from the published record, without a per-record storage upload.
+5. Verify document-only submissions, the three cover modes, missing and
+   legacy covers, authorization, mobile and dark mode, and share images.
+   Assert that AUTO creates no upload or media derivative and that private
+   records and document URLs are inaccessible through public routes.
+
+Approval is required before changing publication readiness or upload
+authorization. Verify on isolated fixtures before changing the rollout state.
+
 ## Assumptions to confirm
 
 - DATA_MANAGER can edit digital certificate content; post-issue changes remain

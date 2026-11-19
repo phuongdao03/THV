@@ -748,7 +748,7 @@ export function PublicWorkEditor({
                             ? media.data?.find(
                                 (relation) => relation.id === item.id,
                               )?.mediaAssetId === selectedThumbnail
-                            : item.isThumbnail,
+                            : false,
                         })),
                       }
                     : undefined
@@ -1374,7 +1374,7 @@ function Gallery({
   items: PublicWorkMedia[];
   onChanged: () => void;
   onRetry: () => void;
-  onThumbnail: (assetId: string) => void;
+  onThumbnail: (assetId: string | null) => void;
   selectedThumbnail: string | null;
   sourceError: unknown;
   sourceLoading: boolean;

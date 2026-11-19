@@ -345,7 +345,7 @@ def test_public_media_permissions_validation_order_removal_and_retry(
             gallery = await service.list_public(work_id)
             assert len(gallery) == 1
             assert gallery[0].kind is PublicMediaKind.IMAGE
-            assert gallery[0].is_thumbnail is True
+            assert gallery[0].is_thumbnail is False
             serialized = repr(gallery[0])
             assert "first-source" not in serialized
             assert gallery[0].url is not None
@@ -694,6 +694,7 @@ def test_public_video_worker_creates_a_safe_playable_derivative(tmp_path: Path) 
             relation.derivative_public_id = None
             await session.commit()
             relation.derivative_status = DerivativeStatus.PROCESSING
+            work.thumbnail_media_id = relation.media_asset_id
             await session.commit()
             during_repair = await service.list_public(work_id)
             assert len(during_repair) == 1

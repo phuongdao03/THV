@@ -4,7 +4,7 @@ import Image from "next/image";
 import { Check } from "lucide-react";
 import { useEffect, useState } from "react";
 import { FileUploader } from "@/components/media/file-uploader";
-import { WorkCoverPlaceholder } from "@/components/public/work-cover-placeholder";
+import { PublicationCover } from "@/components/public/publication-cover";
 import { Button } from "@/components/ui/button";
 import { publicWorkAdminApi } from "@/lib/api/client";
 import type { PublicWorkMedia, PublicWorkPreviewMedia } from "@/lib/api/types";
@@ -25,10 +25,12 @@ export function ImageCoverPicker({
   images: PublicWorkPreviewMedia[];
   items: PublicWorkMedia[];
   initialSelection?: string;
-  onThumbnail: (id: string) => void;
+  onThumbnail: (id: string | null) => void;
   onChanged: () => void;
 }) {
-  const [source, setSource] = useState<"submitted" | "upload">("submitted");
+  const [source, setSource] = useState<"auto" | "submitted" | "upload">(
+    initialSelection ? "submitted" : "auto",
+  );
   const current = items.find((item) => item.id === initialSelection);
   const [selected, setSelected] = useState<string | null>(current?.id ?? null);
   const [crop, setCrop] = useState({
@@ -81,7 +83,22 @@ export function ImageCoverPicker({
   };
   return (
     <div className="mt-4 space-y-4">
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+      <div
+        aria-label="Hình đại diện công khai"
+        className="grid grid-cols-1 gap-2 sm:grid-cols-3"
+      >
+        <Button
+          type="button"
+          variant={source === "auto" ? "default" : "outline"}
+          aria-pressed={source === "auto"}
+          onClick={() => {
+            setSource("auto");
+            setSelected(null);
+            onThumbnail(null);
+          }}
+        >
+          Tạo ảnh đại diện tự động
+        </Button>
         <Button
           type="button"
           variant={source === "submitted" ? "default" : "outline"}
@@ -103,7 +120,7 @@ export function ImageCoverPicker({
         Ảnh bìa chỉ dùng để trình bày tác phẩm. Không thay đổi tài liệu gốc hoặc
         bằng xác lập; không sử dụng giấy tờ riêng tư làm bìa.
       </p>
-      {source === "upload" ? (
+      {source === "auto" ? null : source === "upload" ? (
         <FileUploader
           label="Ảnh bìa riêng"
           purpose="PUBLIC_COVER"
@@ -247,7 +264,9 @@ export function ImageCoverPicker({
           )}
         </div>
       ) : (
-        <WorkCoverPlaceholder title={title} label={category} />
+        <div className="aspect-video overflow-hidden rounded-xl">
+          <PublicationCover title={title} category={category} />
+        </div>
       )}
       {error ? (
         <p role="alert" className="text-sm text-red-800">

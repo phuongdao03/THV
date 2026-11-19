@@ -52,3 +52,11 @@ it("marks historical records in the public catalog", () => {
 
   expect(screen.getByText("Hồ sơ lịch sử · 2018")).toBeDefined();
 });
+
+it("uses the same branded cover when a selected image disappears", () => {
+  render(<PublicWorkCard work={work} position={1} source="list" />);
+  fireEvent.error(screen.getByRole("img", { name: "Ảnh bìa tác phẩm" }));
+  const fallback = screen.getByLabelText("Bìa mặc định: Tác phẩm");
+  expect(fallback.textContent).toContain("Nghệ thuật");
+  expect(fallback.textContent).toContain("Tinh Hoa Việt");
+});

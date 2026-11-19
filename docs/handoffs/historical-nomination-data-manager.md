@@ -414,3 +414,23 @@ and any backfill/migration need separate proposals if the audit finds gaps.
   rendered the save/reload flow, then hung in the separate browser Back
   confirmation case and was stopped; full E2E status remains unverified.
 - No commit, push, deployment, API change, or database migration.
+
+## Publication covers
+
+- The historical draft editor and public work editor support automatic,
+  selected and uploaded covers. The existing nullable cover IDs persist
+  automatic mode, and upload provenance distinguishes dedicated covers.
+- Catalog cards, detail and share images use the explicit public cover
+  when available. The branded fallback uses public title and category,
+  with the existing emblem and drum artwork in the UI.
+- AUTO creates no media asset. The share route generates a PNG at request
+  time or requests the selected derivative through the public media API.
+  The historical cover endpoint checks active publication, attachment
+  consent and image type before reading content.
+- The implementation uses the existing schema. Review the publication
+  cover section in the specification for the acceptance matrix.
+- Backend changes are in `historical_nominations/service.py`,
+  `media/service.py`, and the public module's cover, catalog, delivery and
+  publication policies. Frontend changes are in the two publication
+  editors, the public card and detail, and the work share-image route.
+  The API adds upload provenance to the authorized historical media list.

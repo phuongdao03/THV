@@ -23,6 +23,7 @@ import { AdaptiveVideo } from "@/components/public/adaptive-video";
 import { ImageLoadingStatus } from "@/components/media/image-loading-status";
 import { CommunityWorkDiscussions } from "@/components/community/community-work-discussions";
 import { WorkCoverPlaceholder } from "@/components/public/work-cover-placeholder";
+import { PublicationCover } from "@/components/public/publication-cover";
 import { PublicWorkCard } from "@/components/public/public-work-card";
 import { PublicWorkShareControls } from "@/components/public/public-work-share-controls";
 import { Button } from "@/components/ui/button";
@@ -198,7 +199,21 @@ export function PublicWorkPresentation({
       </header>
 
       <div className="mx-auto max-w-[90rem] px-4 py-6 @min-[40rem]/work:px-6 @min-[64rem]/work:px-8 @min-[64rem]/work:py-12">
-        <PublicGallery media={detail.media} title={detail.title} />
+        {!detail.media.some((item) => item.isThumbnail) ? (
+          <div className="aspect-video overflow-hidden rounded-xl">
+            <PublicationCover
+              title={detail.title}
+              category={detail.categoryName}
+            />
+          </div>
+        ) : null}
+        {detail.media.length > 0 ? (
+          <PublicGallery
+            media={detail.media}
+            title={detail.title}
+            coverCategory={detail.categoryName}
+          />
+        ) : null}
         <div className="mt-8 grid grid-cols-1 gap-8 @min-[64rem]/work:mt-12 @min-[64rem]/work:grid-cols-[minmax(0,1fr)_24rem]">
           <div className="min-w-0">
             <section
@@ -298,9 +313,11 @@ export function PublicWorkPresentation({
 function PublicGallery({
   media,
   title,
+  coverCategory,
 }: {
   media: PublicWorkDetailMedia[];
   title: string;
+  coverCategory?: string;
 }) {
   const [selectedId, setSelectedId] = useState(
     media.find((item) => item.isThumbnail)?.id ?? media[0]?.id,
@@ -312,20 +329,28 @@ function PublicGallery({
     return (
       <WorkCoverPlaceholder title={title} label="Tác phẩm được ghi nhận" />
     );
+  const imageUrl =
+    coverCategory && selected.isThumbnail
+      ? (selected.posterUrl ?? selected.url)
+      : selected.url;
   return (
     <section aria-label="Thư viện nội dung đề cử">
       <div className="relative grid aspect-video min-h-0 place-items-center overflow-hidden rounded-xl border border-white/10 bg-ink-900 @min-[40rem]/work:aspect-auto @min-[40rem]/work:min-h-[28rem] @min-[40rem]/work:rounded-3xl">
         {selected.kind === "IMAGE" &&
-        selected.url &&
+        imageUrl &&
         failedImageId === selected.id ? (
-          <WorkCoverPlaceholder
-            title={title}
-            label="Ảnh chưa tải được"
-            kind="IMAGE"
-          />
+          coverCategory && selected.isThumbnail ? (
+            <PublicationCover title={title} category={coverCategory} />
+          ) : (
+            <WorkCoverPlaceholder
+              title={title}
+              label="Ảnh chưa tải được"
+              kind="IMAGE"
+            />
+          )
         ) : null}
         {selected.kind === "IMAGE" &&
-        selected.url &&
+        imageUrl &&
         failedImageId !== selected.id ? (
           <Image
             alt={selected.altText || title}
@@ -333,7 +358,7 @@ function PublicGallery({
             fill
             key={selected.id}
             loader={
-              isCloudinaryPublicImage(selected.url)
+              isCloudinaryPublicImage(imageUrl)
                 ? cloudinaryPublicImageLoader
                 : undefined
             }
@@ -341,12 +366,12 @@ function PublicGallery({
             onLoad={() => setLoadedImageId(selected.id)}
             priority
             sizes="100vw"
-            src={selected.url}
-            unoptimized={!isCloudinaryPublicImage(selected.url)}
+            src={imageUrl}
+            unoptimized={!isCloudinaryPublicImage(imageUrl)}
           />
         ) : null}
         {selected.kind === "IMAGE" &&
-        selected.url &&
+        imageUrl &&
         loadedImageId !== selected.id &&
         failedImageId !== selected.id ? (
           <ImageLoadingStatus />

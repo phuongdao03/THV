@@ -31,7 +31,7 @@ from app.modules.media.retained_content import read_retained_content
 from app.modules.public.cloudinary_variants import (
     cloudinary_video_variant as _cloudinary_video_variant,
 )
-from app.modules.public.cover import is_editorial_cover
+from app.modules.public.cover import is_editorial_cover, resolve_publication_cover
 from app.modules.public.errors import (
     PublicMediaConflictError,
     PublicMediaNotFoundError,
@@ -161,13 +161,7 @@ class PublicMediaQueryService:
                     in {DerivativeStatus.PENDING, DerivativeStatus.PROCESSING}
                 )
             )
-        fallback = next(
-            (row for row in rows if row.media_kind is PublicMediaKind.IMAGE), None
-        )
-        thumbnail_id = work.thumbnail_media_id
-        selected = next(
-            (row for row in rows if row.media_asset_id == thumbnail_id), fallback
-        )
+        selected = resolve_publication_cover(work, rows)
         ready_images = {
             row.media_asset_id: row.derivative_url
             for row in rows

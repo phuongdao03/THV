@@ -215,3 +215,11 @@ test("public portal is professional, responsive and verifiable", async ({
   expect(consoleProblems, JSON.stringify(unauthorizedResponses)).toEqual([]);
   expect(searchHistoryRequests).toEqual([]);
 });
+
+test("serves a publication cover for link sharing", async ({ request }) => {
+  const image = await request.get(
+    "/works/video-chao-mung-tinh-hoa-viet/share-image",
+  );
+  expect(image.ok()).toBe(true);
+  expect(image.headers()["content-type"]).toMatch(/^image\//);
+});

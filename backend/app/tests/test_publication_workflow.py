@@ -217,6 +217,30 @@ def test_publication_context_locks_only_the_public_work_on_postgresql() -> None:
     asyncio.run(exercise())
 
 
+def test_publication_accepts_an_automatic_cover_without_media(tmp_path: Path) -> None:
+    async def exercise() -> None:
+        engine = create_async_engine(
+            f"sqlite+aiosqlite:///{(tmp_path / 'publication-auto.sqlite3').as_posix()}"
+        )
+        async with engine.begin() as connection:
+            await connection.run_sync(Base.metadata.create_all)
+        factory = async_sessionmaker(engine, expire_on_commit=False)
+        async with factory() as session:
+            work_id, owner_id = await _seed(session, thumbnail=False)
+            published = await _service(session).publish(
+                _principal(owner_id, "SUPER_ADMIN"),
+                work_id,
+                expected_version=1,
+                visibility=PublicWorkVisibility.PUBLIC,
+                request_id="request-auto-cover",
+            )
+            assert published.thumbnail_media_id is None
+            assert published.publication_status is PublicationStatus.PUBLISHED
+        await engine.dispose()
+
+    asyncio.run(exercise())
+
+
 def test_publish_checklist_permission_version_and_reason(tmp_path: Path) -> None:
     async def exercise() -> None:
         engine = create_async_engine(
@@ -236,16 +260,6 @@ def test_publish_checklist_permission_version_and_reason(tmp_path: Path) -> None
                     visibility=PublicWorkVisibility.PUBLIC,
                     request_id="request-forbidden",
                 )
-            with pytest.raises(PublicWorkNotPublishableError) as error:
-                await service.publish(
-                    _principal(owner_id, "SUPER_ADMIN"),
-                    work_id,
-                    expected_version=1,
-                    visibility=PublicWorkVisibility.PUBLIC,
-                    request_id="request-checklist",
-                )
-            assert error.value.details == {"reasons": ["thumbnail_not_ready"]}
-
             async with session.begin():
                 work = await session.get(PublicWork, work_id)
                 media_id = await session.scalar(select(MediaAsset.id))

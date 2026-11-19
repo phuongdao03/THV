@@ -252,7 +252,16 @@ class MediaService:
             intent.purpose is MediaPurpose.PUBLIC_COVER
             and "SUPER_ADMIN" not in principal.roles
         ):
-            raise MediaForbiddenError()
+            if "DATA_MANAGER" not in principal.roles:
+                raise MediaForbiddenError()
+            AuthorizationPolicy.require_capability(
+                principal,
+                PolicyRequirement(
+                    permission="historical.records.manage",
+                    compatible_roles=frozenset(),
+                ),
+                MediaForbiddenError,
+            )
         policy = self._validate_intent(intent)
         if (
             intent.dossier_id is not None

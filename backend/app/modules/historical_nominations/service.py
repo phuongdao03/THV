@@ -1247,10 +1247,6 @@ class HistoricalNominationService:
                     "Complete the public title, URL, summary, and category before "
                     "sending it to Admin."
                 )
-            if draft.cover_media_id is None:
-                raise HistoricalNominationValidationError(
-                    "Choose a cover image before sending public content to Admin."
-                )
             await self._validate_public_draft_media(record, draft)
             if draft.status is HistoricalPublicContentDraftStatus.SUBMITTED:
                 raise HistoricalNominationStateError(
@@ -1268,6 +1264,7 @@ class HistoricalNominationService:
                 after={"revision": draft.revision},
             )
             await self._session.flush()
+            await self._session.refresh(draft)
             return draft
 
     async def _validate_public_draft_media(
@@ -1295,6 +1292,15 @@ class HistoricalNominationService:
             )
         )
         media_by_id = {asset.id: asset for _, asset in rows}
+        cover_id = draft.cover_media_id
+        if (
+            cover_id is not None
+            and cover_id not in media_by_id
+            and cover_id != draft.featured_video_media_id
+            and str(cover_id) not in draft.public_media_ids
+        ):
+            selected_ids.discard(cover_id)
+            draft.cover_media_id = None
         if set(media_by_id) != selected_ids:
             raise HistoricalNominationValidationError(
                 "One or more proposed public media files are no longer available."
@@ -1742,13 +1748,36 @@ class HistoricalNominationService:
             if (
                 asset is None
                 or asset.owner_user_id != principal.user_id
-                or asset.purpose != MediaPurpose.HISTORICAL_NOMINATION.value
+                or asset.purpose
+                not in {
+                    MediaPurpose.HISTORICAL_NOMINATION.value,
+                    MediaPurpose.PUBLIC_COVER.value,
+                }
+                or asset.deleted_at is not None
                 or asset.status is not MediaStatus.ACTIVE
                 or asset.confidentiality.value != "PRIVATE"
             ):
                 raise HistoricalNominationValidationError(
                     "Attach a completed private historical document you uploaded."
                 )
+            if asset.purpose == MediaPurpose.PUBLIC_COVER.value:
+                _require_manager(principal, "historical.records.manage")
+                if (
+                    media_kind is not HistoricalMediaKind.PHOTO
+                    or award_id is not None
+                    or not asset.mime_type.startswith("image/")
+                    or await self._session.scalar(
+                        select(HistoricalMediaLink.id)
+                        .where(
+                            HistoricalMediaLink.media_asset_id == media_id,
+                            HistoricalMediaLink.nomination_id != record.id,
+                        )
+                        .limit(1)
+                    )
+                ):
+                    raise HistoricalNominationValidationError(
+                        "A custom cover must be an image reserved for this nomination."
+                    )
             if award_id is not None:
                 award = await self._session.get(HistoricalAward, award_id)
                 if award is None or award.nomination_id != record.id:

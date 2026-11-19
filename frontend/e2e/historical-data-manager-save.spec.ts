@@ -178,8 +178,18 @@ test("data manager saves historical dates and sees persisted edits after reload"
   await expect(
     page.getByRole("heading", { name: "Nội dung dự kiến công bố" }),
   ).toBeVisible();
-  const publicTitle = page.getByLabel("Tiêu đề công khai");
+  const publicTitle = page.getByRole("textbox", { name: "Tiêu đề công khai" });
   await publicTitle.fill("Nghề thủ công truyền thống");
+  await expect(
+    page.getByRole("radio", { name: "Tạo ảnh đại diện tự động" }),
+  ).toBeChecked();
+  const coverPreview = page.getByLabel(
+    "Bìa mặc định: Nghề thủ công truyền thống",
+  );
+  await expect(coverPreview).toBeVisible();
+  await coverPreview.screenshot({
+    path: info.outputPath("publication-cover-auto.png"),
+  });
   const savePublicDraftButton = page.getByRole("button", {
     name: "Lưu nội dung dự kiến",
   });
@@ -193,6 +203,10 @@ test("data manager saves historical dates and sees persisted edits after reload"
   }
   await page.getByRole("button", { name: "Giao diện tối" }).click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await expect(coverPreview).toBeVisible();
+  await coverPreview.screenshot({
+    path: info.outputPath("publication-cover-auto-dark.png"),
+  });
   const darkButtonBackground = await savePublicDraftButton.evaluate(
     (button) => getComputedStyle(button).backgroundColor,
   );

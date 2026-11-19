@@ -55,6 +55,11 @@ def publication_checklist(
         reasons.append("category_inactive")
     if not (context.category.slug or "").strip():
         reasons.append("category_slug_required")
-    if not context.has_ready_video and not context.has_ready_image:
+    if (
+        work.historical_nomination_id is None
+        and work.thumbnail_media_id is not None
+        and not context.has_ready_video
+        and not context.has_ready_image
+    ):
         reasons.append("thumbnail_not_ready")
     return tuple(reasons)

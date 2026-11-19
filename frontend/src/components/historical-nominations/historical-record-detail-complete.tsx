@@ -29,6 +29,7 @@ import type {
 import { categoryLabels } from "@/lib/categories";
 import { formatDateInput } from "@/lib/dates";
 import { uploadMedia } from "@/lib/media/upload";
+import { PublicationCover } from "@/components/public/publication-cover";
 import { HistoricalCertificatePresentation } from "@/components/certificates/historical-certificate-presentation";
 
 import { HistoricalDateField } from "./historical-date-field";
@@ -351,7 +352,10 @@ export function HistoricalRecordDetailComplete({
       authorDisplayName:
         String(values.get("authorDisplayName") ?? "").trim() || null,
       categoryId: String(values.get("publicCategoryId") ?? "") || null,
-      coverMediaId: String(values.get("coverMediaId") ?? "") || null,
+      coverMediaId:
+        values.get("coverMode") === "AUTO"
+          ? null
+          : String(values.get("coverMediaId") ?? "") || null,
       featuredVideoMediaId:
         String(values.get("featuredVideoMediaId") ?? "") || null,
       publicMediaIds: selectedMediaIds,
@@ -1208,6 +1212,23 @@ export function HistoricalRecordDetailComplete({
             onHide={hidePublicDraft}
             onPublish={publishPublicDraft}
             onSave={(event) => void savePublicDraft(event)}
+            onUploadCover={async (file) => {
+              const asset = await uploadMedia(file, "PUBLIC_COVER");
+              try {
+                await historicalNominationApi.linkMedia(record.id, {
+                  mediaId: asset.id,
+                  mediaKind: "PHOTO",
+                  displayOrder: mediaLinks.length,
+                });
+              } catch (error) {
+                await mediaApi.deleteAsset(asset.id).catch(() => undefined);
+                throw error;
+              }
+              await queryClient.invalidateQueries({
+                queryKey: ["historical-nomination-media", record.id],
+              });
+              return asset.id;
+            }}
           />
         </div>
       ) : null}
@@ -1428,6 +1449,7 @@ function PublicContentSection({
   onHide,
   onPublish,
   onSave,
+  onUploadCover,
 }: {
   canEdit: boolean;
   busy: boolean;
@@ -1440,6 +1462,7 @@ function PublicContentSection({
   onHide: () => void;
   onPublish: () => void;
   onSave: (event: FormEvent<HTMLFormElement>) => void;
+  onUploadCover: (file: File) => Promise<string>;
 }) {
   if (draftLoading)
     return (
@@ -1460,6 +1483,7 @@ function PublicContentSection({
       onHide={onHide}
       onPublish={onPublish}
       onSave={onSave}
+      onUploadCover={onUploadCover}
     />
   );
 }
@@ -1475,6 +1499,7 @@ function PublicContentDraftEditor({
   onHide,
   onPublish,
   onSave,
+  onUploadCover,
 }: Omit<Parameters<typeof PublicContentSection>[0], "draftLoading">) {
   const categoryNames = categoryLabels(categories);
   const missingPublicationFields = [
@@ -1482,17 +1507,46 @@ function PublicContentDraftEditor({
     !draft?.slug?.trim() && "Đường dẫn dự kiến",
     !draft?.shortDescription?.trim() && "Mô tả ngắn",
     !draft?.categoryId && "Danh mục",
-    !draft?.coverMediaId && "Ảnh bìa",
   ].filter(Boolean);
-  const availableMedia = media.filter((item) =>
-    ["PHOTO", "VIDEO", "AWARD_SCAN"].includes(item.mediaKind),
+  const availableMedia = media.filter(
+    (item) =>
+      item.uploadPurpose !== "PUBLIC_COVER" &&
+      ["PHOTO", "VIDEO", "AWARD_SCAN"].includes(item.mediaKind),
   );
   const [selectedMediaIds, setSelectedMediaIds] = useState<string[]>(() => {
     const availableIds = new Set(availableMedia.map((item) => item.mediaId));
     return (draft?.publicMediaIds ?? []).filter((id) => availableIds.has(id));
   });
   const photos = media.filter(
-    (item) => item.mediaKind === "PHOTO" && item.mimeType?.startsWith("image/"),
+    (item) =>
+      item.mediaKind === "PHOTO" &&
+      item.mimeType?.startsWith("image/") &&
+      (item.status == null || item.status === "ACTIVE"),
+  );
+  const initialCover = photos.find(
+    (item) => item.mediaId === draft?.coverMediaId,
+  );
+  const [chosenMode, setCoverMode] = useState<"AUTO" | "EXISTING" | "CUSTOM">();
+  const coverMode =
+    chosenMode ??
+    (initialCover
+      ? initialCover.uploadPurpose === "PUBLIC_COVER"
+        ? "CUSTOM"
+        : "EXISTING"
+      : "AUTO");
+  const [chosenCoverId, setCoverId] = useState<string>();
+  const coverId = chosenCoverId ?? initialCover?.mediaId ?? "";
+  const [coverUpload, setCoverUpload] = useState(false);
+  const [coverError, setCoverError] = useState<string | null>(null);
+  const [previewTitle, setPreviewTitle] = useState(draft?.title ?? "");
+  const [previewCategory, setPreviewCategory] = useState(
+    draft?.categoryId ?? "",
+  );
+  const automaticCover = (
+    <PublicationCover
+      title={previewTitle.trim() || "Tiêu đề công khai"}
+      category={categoryNames.get(previewCategory) ?? "Danh mục"}
+    />
   );
   const videos = media.filter((item) => item.mediaKind === "VIDEO");
 
@@ -1554,6 +1608,7 @@ function PublicContentDraftEditor({
                 className={fieldClass}
                 defaultValue={draft?.categoryId ?? ""}
                 name="publicCategoryId"
+                onChange={(event) => setPreviewCategory(event.target.value)}
               >
                 <option value="">Chọn danh mục</option>
                 {categories.map((category) => (
@@ -1570,6 +1625,7 @@ function PublicContentDraftEditor({
                 defaultValue={draft?.title ?? ""}
                 maxLength={255}
                 name="publicTitle"
+                onChange={(event) => setPreviewTitle(event.target.value)}
                 placeholder="Tên hiển thị trên Danh sách đề cử"
               />
             </label>
@@ -1602,21 +1658,115 @@ function PublicContentDraftEditor({
             </label>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
-            <label className="space-y-1.5 text-sm">
-              <span>Ảnh bìa</span>
-              <select
-                className={fieldClass}
-                defaultValue={draft?.coverMediaId ?? ""}
-                name="coverMediaId"
-              >
-                <option value="">Chưa chọn ảnh bìa</option>
-                {photos.map((item) => (
-                  <option key={item.mediaId} value={item.mediaId}>
-                    {item.filename ?? item.mediaId.slice(0, 8)}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <fieldset className="space-y-3 text-sm" disabled={coverUpload}>
+              <legend className="font-semibold">Hình đại diện công khai</legend>
+              {(
+                [
+                  ["AUTO", "Tạo ảnh đại diện tự động"],
+                  ["EXISTING", "Chọn ảnh có sẵn"],
+                  ["CUSTOM", "Tải ảnh riêng để công bố"],
+                ] as const
+              ).map(([mode, label]) => (
+                <label className="flex items-center gap-2" key={mode}>
+                  <input
+                    checked={coverMode === mode}
+                    name="coverMode"
+                    onChange={() => {
+                      setCoverMode(mode);
+                      setCoverId("");
+                      setCoverError(null);
+                    }}
+                    type="radio"
+                    value={mode}
+                  />
+                  {label}
+                </label>
+              ))}
+              {coverMode === "EXISTING" ? (
+                <label className="block space-y-1">
+                  <span>Ảnh bạn cho phép dùng công khai</span>
+                  <select
+                    className={fieldClass}
+                    value={coverId}
+                    onChange={(event) => setCoverId(event.target.value)}
+                    required
+                  >
+                    <option value="">Chọn ảnh</option>
+                    {photos
+                      .filter((item) => item.uploadPurpose !== "PUBLIC_COVER")
+                      .map((item) => (
+                        <option key={item.mediaId} value={item.mediaId}>
+                          {item.filename ?? item.mediaId.slice(0, 8)}
+                        </option>
+                      ))}
+                  </select>
+                  {!photos.some(
+                    (item) => item.uploadPurpose !== "PUBLIC_COVER",
+                  ) ? (
+                    <p>
+                      Hồ sơ chưa có ảnh phù hợp. Bạn có thể chọn tạo ảnh tự
+                      động.
+                    </p>
+                  ) : null}
+                </label>
+              ) : null}
+              {coverMode === "CUSTOM" ? (
+                <div className="space-y-2">
+                  {photos.some(
+                    (item) => item.uploadPurpose === "PUBLIC_COVER",
+                  ) ? (
+                    <label className="block space-y-1">
+                      <span>Ảnh công bố đã tải</span>
+                      <select
+                        className={fieldClass}
+                        value={coverId}
+                        onChange={(event) => setCoverId(event.target.value)}
+                      >
+                        <option value="">Chọn ảnh</option>
+                        {photos
+                          .filter(
+                            (item) => item.uploadPurpose === "PUBLIC_COVER",
+                          )
+                          .map((item) => (
+                            <option key={item.mediaId} value={item.mediaId}>
+                              {item.filename ?? item.mediaId}
+                            </option>
+                          ))}
+                      </select>
+                    </label>
+                  ) : null}
+                  <label className="block space-y-1">
+                    <span>
+                      {coverUpload
+                        ? "Đang kiểm tra ảnh…"
+                        : "Chọn ảnh JPEG, PNG hoặc WebP"}
+                    </span>
+                    <input
+                      accept="image/jpeg,image/png,image/webp"
+                      required={!coverId}
+                      type="file"
+                      onChange={async (event) => {
+                        const file = event.target.files?.[0];
+                        if (!file) return;
+                        setCoverError(null);
+                        setCoverUpload(true);
+                        try {
+                          setCoverId(await onUploadCover(file));
+                        } catch {
+                          setCoverError(
+                            "Không tải được ảnh bìa. Hãy thử lại hoặc chọn tạo ảnh tự động.",
+                          );
+                        } finally {
+                          setCoverUpload(false);
+                        }
+                      }}
+                    />
+                  </label>
+                </div>
+              ) : null}
+              {coverError ? <p role="alert">{coverError}</p> : null}
+              <input name="coverMediaId" type="hidden" value={coverId} />
+            </fieldset>
             <label className="space-y-1.5 text-sm">
               <span>Video nổi bật</span>
               <select
@@ -1719,7 +1869,9 @@ function PublicContentDraftEditor({
             </span>
             <button
               className="min-h-11 rounded-md bg-primary-700 px-4 text-sm font-semibold text-white hover:bg-primary-800 disabled:opacity-60"
-              disabled={busy}
+              disabled={
+                busy || coverUpload || (coverMode !== "AUTO" && !coverId)
+              }
             >
               {busy ? "Đang lưu…" : "Lưu nội dung dự kiến"}
             </button>
@@ -1740,52 +1892,25 @@ function PublicContentDraftEditor({
           </p>
         </div>
       )}
-      {draft && !draft.coverMediaId ? (
-        <section
-          className="rounded-lg border border-[var(--theme-border)] bg-[var(--theme-surface)] p-4"
-          aria-label="Bản xem trước nội dung công khai"
-        >
-          <p className="text-xs font-medium uppercase tracking-wide text-[var(--theme-muted)]">
-            Bản xem trước
-          </p>
-          <h4 className="mt-2 text-lg font-semibold">
-            {draft.title || "Tiêu đề công khai"}
-          </h4>
-          <p className="mt-1 text-sm text-[var(--theme-muted)]">
-            {draft.shortDescription || "Mô tả ngắn sẽ hiển thị tại đây."}
-          </p>
-          {draft.fullDescription ? (
-            <p className="mt-3 whitespace-pre-wrap text-sm leading-6">
-              {draft.fullDescription}
-            </p>
-          ) : null}
-        </section>
-      ) : null}
-      {draft?.coverMediaId ? (
-        <div className="overflow-hidden rounded-lg border border-[var(--theme-border)]">
-          <p className="border-b border-[var(--theme-border)] px-4 py-3 text-sm font-medium">
-            Xem trước nội dung công khai
-          </p>
-          <PrivateCoverPreview
-            mediaId={draft.coverMediaId}
-            filename={
-              media.find((item) => item.mediaId === draft.coverMediaId)
-                ?.filename ?? "Ảnh bìa dự kiến"
-            }
-          />
-          <div className="p-4">
-            <p className="text-lg font-semibold">
-              {draft.title || "Tiêu đề công khai"}
-            </p>
-            <p className="mt-1 text-sm text-[var(--theme-muted)]">
-              {draft.shortDescription || "Mô tả ngắn sẽ hiển thị tại đây."}
-            </p>
-            <p className="mt-3 whitespace-pre-wrap text-sm leading-6">
-              {draft.fullDescription || "Chưa có nội dung chi tiết."}
-            </p>
-          </div>
+      <section
+        aria-labelledby="publication-cover-preview"
+        className="max-w-xl space-y-2"
+      >
+        <h4 className="text-sm font-semibold" id="publication-cover-preview">
+          Xem trước
+        </h4>
+        <div className="aspect-[16/10] overflow-hidden rounded-lg">
+          {coverMode !== "AUTO" && coverId ? (
+            <PrivateCoverPreview
+              key={coverId}
+              mediaId={coverId}
+              fallback={automaticCover}
+            />
+          ) : (
+            automaticCover
+          )}
         </div>
-      ) : null}
+      </section>
       {canEdit ? (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-surface)] p-4">
           <div className="text-sm">
@@ -1833,11 +1958,12 @@ function PublicContentDraftEditor({
 
 function PrivateCoverPreview({
   mediaId,
-  filename,
+  fallback,
 }: {
   mediaId: string;
-  filename: string;
+  fallback: React.ReactNode;
 }) {
+  const [failed, setFailed] = useState(false);
   const delivery = useQuery({
     queryKey: ["historical-media-preview", mediaId],
     queryFn: async () => {
@@ -1848,22 +1974,17 @@ function PrivateCoverPreview({
     },
     retry: false,
   });
-  return delivery.data ? (
+  if (!delivery.data || failed) return fallback;
+  return (
     <Image
-      alt={filename}
-      className="max-h-[420px] w-full object-contain"
+      alt=""
+      className="h-full w-full object-cover"
       height={540}
       unoptimized
       width={960}
       src={delivery.data}
+      onError={() => setFailed(true)}
     />
-  ) : (
-    <div
-      aria-busy="true"
-      className="flex aspect-video items-center justify-center bg-[color-mix(in_srgb,var(--theme-surface)_94%,var(--theme-border))] text-sm text-[var(--theme-muted)]"
-    >
-      Đang tải ảnh bìa…
-    </div>
   );
 }
 

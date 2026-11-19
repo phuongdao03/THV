@@ -154,6 +154,7 @@ export interface HistoricalAwardInput {
 }
 
 export interface HistoricalMediaLink {
+  uploadPurpose?: string | null;
   id: string;
   mediaId: string;
   mediaKind: HistoricalMediaKind;

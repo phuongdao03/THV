@@ -8,6 +8,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app.modules.auth.session_service import AuthPrincipal
 from app.modules.blockchain.models import CertificateStatus
+from app.modules.historical_nominations.models import HistoricalArchiveStatus
 from app.modules.media.encryption import DocumentEncryptionKeyring
 from app.modules.media.gateway import CloudinaryMediaGateway
 from app.modules.media.models import MediaAsset, MediaEncryptionStatus, MediaStatus
@@ -108,6 +109,10 @@ class PublicMediaDeliveryService:
                 raise PublicWorkNotFoundError()
             relation, asset = joined
             work = context.work
+            historical = work.historical_nomination_id is not None
+            source_eligible = (
+                not historical and is_editorial_cover(asset)
+            ) or await repository.is_source_evidence_asset(work, asset.id)
             if (
                 relation.public_work_id != work_id
                 or asset.status is not MediaStatus.ACTIVE
@@ -127,26 +132,38 @@ class PublicMediaDeliveryService:
                         and asset.mime_type.startswith("video/")
                     )
                 )
-                or (
-                    not is_editorial_cover(asset)
-                    and not await repository.is_source_evidence_asset(work, asset.id)
-                )
+                or not source_eligible
             ):
                 raise PublicWorkNotFoundError()
+            record = context.historical_nomination if historical else None
+            eligible_historical_cover = (
+                historical
+                and cover
+                and not poster
+                and work.thumbnail_media_id == asset.id
+                and asset.mime_type.startswith("image/")
+                and record is not None
+                and record.archive_status is HistoricalArchiveStatus.ACTIVE
+                and record.deleted_at is None
+            )
+            certificate = context.certificate
+            eligible_current_work = (
+                not historical
+                and certificate is not None
+                and certificate.status is CertificateStatus.ACTIVE
+                and certificate.dossier_id == work.dossier_id
+                and (
+                    certificate.expires_at is None
+                    or certificate.expires_at.replace(tzinfo=UTC) > datetime.now(UTC)
+                )
+            )
             anonymous_allowed = (
                 work.publication_status is PublicationStatus.PUBLISHED
                 and work.published_at is not None
                 and work.visibility
                 in {PublicWorkVisibility.PUBLIC, PublicWorkVisibility.UNLISTED}
                 and context.category.is_active
-                and context.certificate is not None
-                and context.certificate.status is CertificateStatus.ACTIVE
-                and context.certificate.dossier_id == work.dossier_id
-                and (
-                    context.certificate.expires_at is None
-                    or context.certificate.expires_at.replace(tzinfo=UTC)
-                    > datetime.now(UTC)
-                )
+                and (eligible_historical_cover or eligible_current_work)
             )
             if not anonymous_allowed:
                 if principal is None:
