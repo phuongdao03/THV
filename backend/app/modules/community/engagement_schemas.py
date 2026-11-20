@@ -14,6 +14,7 @@ _HTML_TAG = re.compile(r"<\s*/?\s*[a-zA-Z][^>]*>")
 class CommunityCommentRequest(CommunitySchema):
     content: Annotated[str, Field(min_length=1, max_length=10_000)]
     parent_id: UUID | None = None
+    client_comment_id: UUID | None = None
 
     @field_validator("content")
     @classmethod

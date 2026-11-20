@@ -2,8 +2,8 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import Link from "next/link";
 
+import { CommunityProfilePreview } from "@/components/community/community-user-identity";
 import { Button } from "@/components/ui/button";
 import { ApiError, communityMemberApi, membershipApi } from "@/lib/api/client";
 import type {
@@ -334,9 +334,9 @@ export function MembershipBenefitCenter({ tier }: { tier: MembershipTier }) {
               <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 {directory.data.members.map((member) => (
                   <li key={member.id}>
-                    <Link
+                    <CommunityProfilePreview
                       className="flex min-h-full gap-3 rounded-xl border border-[var(--theme-border)] p-4 transition hover:border-[var(--theme-accent)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-accent)]"
-                      href={`/community/members/${encodeURIComponent(member.username)}`}
+                      user={member}
                     >
                       <span
                         aria-hidden="true"
@@ -364,7 +364,7 @@ export function MembershipBenefitCenter({ tier }: { tier: MembershipTier }) {
                           </span>
                         ) : null}
                       </span>
-                    </Link>
+                    </CommunityProfilePreview>
                   </li>
                 ))}
               </ul>

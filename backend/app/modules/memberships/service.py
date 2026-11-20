@@ -1,9 +1,9 @@
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 from math import ceil
-from uuid import UUID
+from uuid import UUID, uuid4, uuid5
 
-from sqlalchemy import Select, func, or_, select
+from sqlalchemy import Select, case, func, or_, select
 from sqlalchemy.engine import Row
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -39,6 +39,18 @@ from app.modules.wallet.models import WalletJournal
 from app.modules.wallet.service import WalletLedger, valid_key
 
 TIERS = {"MEMBER": 0, "SILVER": 1, "COMPANION": 2, "PRESTIGE": 3}
+ChatMessageRow = tuple[
+    CommunityChatMessage,
+    str | None,
+    str | None,
+    str | None,
+    str | None,
+    UUID | None,
+    str,
+    bool,
+    bool,
+    str | None,
+]
 
 
 def utc(value: datetime) -> datetime:
@@ -1009,7 +1021,12 @@ class MembershipService:
             }
 
     async def send_chat(
-        self, principal: AuthPrincipal, room: str, body: str
+        self,
+        principal: AuthPrincipal,
+        room: str,
+        body: str,
+        *,
+        client_message_id: UUID | None = None,
     ) -> dict[str, object]:
         normalized_body = self._validated_chat_body(body)
         async with self.session.begin():
@@ -1023,6 +1040,29 @@ class MembershipService:
             await self.session.scalar(
                 select(User.id).where(User.id == principal.user_id).with_for_update()
             )
+            message_id = (
+                uuid5(principal.user_id, f"community-chat:{room}:{client_message_id}")
+                if client_message_id is not None
+                else uuid4()
+            )
+            message_query = self._chat_message_select().where(
+                CommunityChatMessage.id == message_id
+            )
+            if client_message_id is not None:
+                previous = (await self.session.execute(message_query)).one_or_none()
+                if previous is not None:
+                    message = previous[0]
+                    if (
+                        message.user_id != principal.user_id
+                        or message.room != room
+                        or message.deleted_at is not None
+                        or message.body != normalized_body
+                    ):
+                        raise PaymentConflictError(
+                            "Chat message ID has already been used."
+                        )
+                    return self._chat_message_data(principal, previous)
+
             latest = await self.session.scalar(
                 select(CommunityChatMessage.created_at)
                 .where(CommunityChatMessage.user_id == principal.user_id)
@@ -1037,6 +1077,7 @@ class MembershipService:
                 )
 
             message = CommunityChatMessage(
+                id=message_id,
                 user_id=principal.user_id,
                 room=room,
                 body=normalized_body,
@@ -1044,9 +1085,7 @@ class MembershipService:
             )
             self.session.add(message)
             await self.session.flush()
-            row = await self.session.execute(
-                self._chat_message_select().where(CommunityChatMessage.id == message.id)
-            )
+            row = await self.session.execute(message_query)
             return self._chat_message_data(principal, row.one())
 
     @staticmethod
@@ -1075,19 +1114,7 @@ class MembershipService:
             raise PaymentForbiddenError()
 
     @staticmethod
-    def _chat_message_select() -> Select[
-        tuple[
-            CommunityChatMessage,
-            str | None,
-            str | None,
-            str | None,
-            str | None,
-            UUID | None,
-            str,
-            bool,
-            bool,
-        ]
-    ]:
+    def _chat_message_select() -> Select[ChatMessageRow]:
         return (
             select(
                 CommunityChatMessage,
@@ -1103,7 +1130,12 @@ class MembershipService:
                 CommunityRepository._has_role(
                     CommunityChatMessage.user_id, "MODERATOR"
                 ),
+                case(
+                    (User.status == UserStatus.ACTIVE, CommunityProfile.username),
+                    else_=None,
+                ),
             )
+            .join(User, User.id == CommunityChatMessage.user_id)
             .outerjoin(
                 CommunityProfile,
                 CommunityProfile.user_id == CommunityChatMessage.user_id,
@@ -1344,19 +1376,7 @@ class MembershipService:
     @staticmethod
     def _chat_message_data(
         principal: AuthPrincipal,
-        row: Row[
-            tuple[
-                CommunityChatMessage,
-                str | None,
-                str | None,
-                str | None,
-                str | None,
-                UUID | None,
-                str,
-                bool,
-                bool,
-            ]
-        ],
+        row: Row[ChatMessageRow],
     ) -> dict[str, object]:
         (
             item,
@@ -1368,6 +1388,7 @@ class MembershipService:
             current_tier,
             is_admin,
             is_moderator,
+            username,
         ) = row
         identity = public_user_identity(
             display_name=profile_name or community_name,
@@ -1378,6 +1399,8 @@ class MembershipService:
         )
         return {
             "id": item.id,
+            "username": username,
+            "role_label": identity.role_label,
             "display_name": identity.display_name,
             "avatar_url": identity.avatar_url,
             "body": item.body,

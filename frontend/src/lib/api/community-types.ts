@@ -52,6 +52,7 @@ export interface CommunityCommentThread extends CommunityCommentFields {
 export interface CommunityCommentInput {
   content: string;
   parentId?: string;
+  clientCommentId?: string;
 }
 
 export interface CommunityCommentCreateResult extends CommunityCommentFields {
@@ -567,6 +568,8 @@ export interface CommunityEventInput {
 }
 export interface CommunityChatMessage {
   id: string;
+  username?: string | null;
+  roleLabel?: string | null;
   displayName: string;
   avatarUrl: string | null;
   body: string;

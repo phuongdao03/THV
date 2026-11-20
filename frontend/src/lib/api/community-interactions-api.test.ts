@@ -121,11 +121,14 @@ describe("community interaction API client", () => {
     expect(
       fetchMock.mock.calls.map(([url, init]) => [url, init?.method]),
     ).toEqual([
-      ["/api/v1/members/me/bookmarks?page=3&pageSize=20", undefined],
-      ["/api/v1/members/nguyen%2Fan", undefined],
-      ["/api/v1/members/nguyen%2Fan/posts?page=4&pageSize=20", undefined],
-      ["/api/v1/members/member%2F1/follow", "PUT"],
-      ["/api/v1/members/member%2F1/follow", "DELETE"],
+      ["/api/v1/community/members/me/bookmarks?page=3&pageSize=20", undefined],
+      ["/api/v1/community/members/nguyen%2Fan", undefined],
+      [
+        "/api/v1/community/members/nguyen%2Fan/posts?page=4&pageSize=20",
+        undefined,
+      ],
+      ["/api/v1/community/members/member%2F1/follow", "PUT"],
+      ["/api/v1/community/members/member%2F1/follow", "DELETE"],
     ]);
     for (const [, init] of fetchMock.mock.calls.slice(3)) {
       expect(new Headers(init?.headers).get("X-CSRF-Token")).toBe(

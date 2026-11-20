@@ -883,10 +883,14 @@ export const membershipApi = {
       `/community/chat/${room}/messages${suffix}`,
     );
   },
-  send(room: import("./types").CommunityChatRoom, body: string) {
+  send(
+    room: import("./types").CommunityChatRoom,
+    body: string,
+    clientMessageId?: string,
+  ) {
     return request<import("./types").CommunityChatMessage>(
       `/community/chat/${room}/messages`,
-      { method: "POST", body: JSON.stringify({ body }) },
+      { method: "POST", body: JSON.stringify({ body, clientMessageId }) },
     );
   },
   editMessage(id: string, body: string) {
@@ -4412,7 +4416,7 @@ export const communityApi = {
 
 export const communityMemberApi = {
   currentProfile(signal?: AbortSignal) {
-    return request<CommunityMemberProfile>("/members/me", { signal });
+    return request<CommunityMemberProfile>("/community/members/me", { signal });
   },
   updateProfile(input: CommunityProfileUpdateInput) {
     return request<CommunityMemberProfile>("/community/members/me", {
@@ -4452,13 +4456,13 @@ export const communityMemberApi = {
       pageSize: "20",
     });
     return requestCommunityPage<CommunityPostSummary[]>(
-      `/members/me/bookmarks?${parameters.toString()}`,
+      `/community/members/me/bookmarks?${parameters.toString()}`,
       signal,
     );
   },
   profile(username: string, signal?: AbortSignal) {
     return request<CommunityMemberProfile>(
-      `/members/${encodeURIComponent(username)}`,
+      `/community/members/${encodeURIComponent(username)}`,
       { signal },
     );
   },
@@ -4479,7 +4483,7 @@ export const communityMemberApi = {
       pageSize: "20",
     });
     return requestCommunityPage<CommunityPostSummary[]>(
-      `/members/${encodeURIComponent(username)}/posts?${parameters.toString()}`,
+      `/community/members/${encodeURIComponent(username)}/posts?${parameters.toString()}`,
       signal,
     );
   },
@@ -4505,13 +4509,13 @@ export const communityMemberApi = {
   },
   follow(memberId: string) {
     return request<CommunityMemberFollowResult>(
-      `/members/${encodeURIComponent(memberId)}/follow`,
+      `/community/members/${encodeURIComponent(memberId)}/follow`,
       { method: "PUT" },
     );
   },
   unfollow(memberId: string) {
     return request<CommunityMemberFollowResult>(
-      `/members/${encodeURIComponent(memberId)}/follow`,
+      `/community/members/${encodeURIComponent(memberId)}/follow`,
       { method: "DELETE" },
     );
   },

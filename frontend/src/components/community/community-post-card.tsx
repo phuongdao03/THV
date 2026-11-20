@@ -15,7 +15,10 @@ import type {
   CommunityPostSummary,
 } from "@/lib/api/community-types";
 
-export function CommunityPostCard(props: { post: CommunityPostSummary }) {
+export function CommunityPostCard(props: {
+  post: CommunityPostSummary;
+  editorial?: boolean;
+}) {
   const user = useAuthUser();
   const viewerKey = user?.id ?? "anonymous";
   const interactionKey = `${props.post.id}:${viewerKey}:${props.post.likeCount}:${props.post.viewerHasLiked}:${props.post.viewerHasBookmarked}`;
@@ -33,10 +36,12 @@ function CommunityPostCardContent({
   post,
   authenticated,
   viewerKey,
+  editorial = false,
 }: {
   post: CommunityPostSummary;
   authenticated: boolean;
   viewerKey: string;
+  editorial?: boolean;
 }) {
   const queryClient = useQueryClient();
   const [liked, setLiked] = useState(post.viewerHasLiked);
@@ -72,6 +77,10 @@ function CommunityPostCardContent({
         });
     },
   });
+  const displayedLiked = like.isPending ? !liked : liked;
+  const displayedLikeCount = like.isPending
+    ? Math.max(0, likeCount + (liked ? -1 : 1))
+    : likeCount;
 
   async function sharePost() {
     const url = `${window.location.origin}/community/posts/${encodeURIComponent(post.slug)}`;
@@ -98,14 +107,33 @@ function CommunityPostCardContent({
 
   const postHref = `/community/posts/${encodeURIComponent(post.slug)}`;
   return (
-    <article className="group flex h-full min-w-0 flex-col overflow-hidden rounded-[var(--radius-surface)] border border-[var(--theme-border)] bg-[var(--theme-surface)] shadow-sm transition-[transform,box-shadow] duration-200 ease-out motion-safe:hover:-translate-y-0.5 motion-safe:hover:shadow-md motion-reduce:transition-none">
-      <CommunityPostImages
-        images={post.images ?? []}
-        postSlug={post.slug}
-        postTitle={post.title}
-        presentation="feed"
-      />
-      <div className="flex flex-1 flex-col p-4 sm:p-5">
+    <article
+      className={
+        editorial
+          ? "group flex min-w-0 flex-col py-5 sm:py-6"
+          : "group flex h-full min-w-0 flex-col overflow-hidden rounded-[var(--radius-surface)] border border-[var(--theme-border)] bg-[var(--theme-surface)] shadow-sm"
+      }
+    >
+      {!editorial ? (
+        <CommunityPostImages
+          images={post.images ?? []}
+          postSlug={post.slug}
+          postTitle={post.title}
+          presentation="feed"
+        />
+      ) : null}
+      <div
+        className={
+          editorial
+            ? "flex min-w-0 flex-col"
+            : "flex flex-1 flex-col p-4 sm:p-5"
+        }
+      >
+        {editorial ? (
+          <div className="mb-3">
+            <CommunityUserIdentity size={36} user={post.author} />
+          </div>
+        ) : null}
         <div className="flex flex-wrap items-center gap-x-2 gap-y-2 text-xs font-semibold text-[var(--theme-muted)]">
           <span className="rounded-full bg-[var(--theme-elevated)] px-2.5 py-1 text-[var(--theme-accent)]">
             {post.category.name}
@@ -114,7 +142,7 @@ function CommunityPostCardContent({
             {formatPublishedDate(post.publishedAt)}
           </time>
         </div>
-        <h2 className="mt-3 min-h-[2.75rem] line-clamp-2 break-words text-lg font-semibold leading-snug tracking-tight text-[var(--theme-text)] sm:text-xl">
+        <h2 className="mt-3 line-clamp-2 break-words text-lg font-semibold leading-snug tracking-tight text-[var(--theme-text)] sm:text-xl">
           <Link
             className="rounded-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--theme-accent)] hover:text-[var(--theme-accent)]"
             href={postHref}
@@ -123,23 +151,37 @@ function CommunityPostCardContent({
           </Link>
         </h2>
         {post.excerpt ? (
-          <p className="mt-2 min-h-[2.75rem] line-clamp-2 whitespace-pre-wrap break-words text-sm leading-6 text-[var(--theme-muted)]">
+          <p className="mt-2 line-clamp-2 whitespace-pre-wrap break-words text-sm leading-6 text-[var(--theme-muted)]">
             {post.excerpt}
           </p>
         ) : null}
-        <Link
-          className="mt-1 inline-flex min-h-10 w-fit items-center text-sm font-bold text-[var(--theme-accent)] underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--theme-accent)]"
-          href={postHref}
-        >
-          Xem thêm{" "}
-          <span aria-hidden="true" className="ml-1">
-            →
-          </span>
-        </Link>
+        {!editorial ? (
+          <Link
+            className="mt-1 inline-flex min-h-10 w-fit items-center text-sm font-bold text-[var(--theme-accent)] underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[var(--theme-accent)]"
+            href={postHref}
+          >
+            Xem thêm{" "}
+            <span aria-hidden="true" className="ml-1">
+              →
+            </span>
+          </Link>
+        ) : null}
         <CommunityRelatedWorkLink work={post.relatedWork} />
-        <div className="mt-auto flex items-center gap-3 border-t border-[var(--theme-border)] pt-4">
-          <CommunityUserIdentity size={32} user={post.author} />
-        </div>
+        {editorial && post.images?.length ? (
+          <div className="mt-4 overflow-hidden rounded-xl">
+            <CommunityPostImages
+              images={post.images}
+              postSlug={post.slug}
+              postTitle={post.title}
+              presentation="feed"
+            />
+          </div>
+        ) : null}
+        {!editorial ? (
+          <div className="mt-auto flex items-center gap-3 border-t border-[var(--theme-border)] pt-4">
+            <CommunityUserIdentity size={32} user={post.author} />
+          </div>
+        ) : null}
         <div
           aria-label="Tương tác bài viết"
           className="mt-4 flex flex-wrap items-center gap-1.5 border-t border-[var(--theme-border)] pt-3 sm:gap-2"
@@ -147,20 +189,21 @@ function CommunityPostCardContent({
           {authenticated ? (
             <>
               <button
-                aria-label={`${liked ? "Bỏ thích" : "Thích"} bài viết (${likeCount})`}
-                aria-pressed={liked}
-                className={quickActionClass(liked)}
+                aria-label={`${displayedLiked ? "Bỏ thích" : "Thích"} bài viết (${displayedLikeCount})`}
+                aria-pressed={displayedLiked}
+                className={quickActionClass(displayedLiked)}
                 disabled={like.isPending || bookmark.isPending}
                 onClick={() => like.mutate()}
                 type="button"
               >
                 <Heart
                   aria-hidden="true"
-                  className={liked ? "size-4 fill-current" : "size-4"}
+                  className={displayedLiked ? "size-4 fill-current" : "size-4"}
                 />
-                <span className="sm:hidden">{likeCount} thích</span>
+                <span className="sm:hidden">{displayedLikeCount} thích</span>
                 <span className="hidden sm:inline">
-                  {liked ? "Bỏ thích" : "Thích"} bài viết ({likeCount})
+                  {displayedLiked ? "Bỏ thích" : "Thích"} bài viết (
+                  {displayedLikeCount})
                 </span>
               </button>
               <button

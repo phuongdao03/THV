@@ -19,7 +19,6 @@ describe("community membership identity", () => {
       <CommunityUserIdentity
         size={40}
         user={{
-          id: "member-1",
           username: "lan-nguyen",
           displayName: "Lan Nguyễn",
           avatarUrl: null,
@@ -47,7 +46,6 @@ describe("community membership identity", () => {
     const { container } = render(
       <CommunityUserIdentity
         user={{
-          id: "admin-1",
           username: "admin",
           displayName: "Quản trị viên THV",
           avatarUrl: null,
@@ -93,7 +91,6 @@ describe("community membership identity", () => {
     const { container } = render(
       <CommunityUserIdentity
         user={{
-          id: "manager-1",
           username: "manager",
           displayName: "Quản lý hội viên",
           avatarUrl: null,

@@ -255,6 +255,20 @@ describe("CommunityFeed", () => {
     );
   });
 
+  it("lists the general room first for guests and explains that it needs no paid plan", async () => {
+    auth.user = null;
+    auth.status = "unauthenticated";
+    render(<CommunityFeed page={1} />, { wrapper });
+
+    const rooms = await screen.findByRole("region", {
+      name: "Trò chuyện hội viên",
+    });
+    const firstRoom = rooms.querySelector("li a");
+    expect(firstRoom?.textContent).toContain("Sảnh cộng đồng");
+    expect(firstRoom?.textContent).toContain("Không cần gói trả phí");
+    expect(firstRoom?.getAttribute("href")).toBe("/community/chat?room=MEMBER");
+  });
+
   it("wraps category navigation without horizontal scrolling", async () => {
     render(<CommunityFeed page={1} />, { wrapper });
     const navigation = await screen.findByRole("navigation", {

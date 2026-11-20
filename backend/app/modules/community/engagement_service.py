@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Literal, TypeVar
 from urllib.parse import quote
-from uuid import UUID, uuid4
+from uuid import UUID, uuid4, uuid5
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -115,16 +115,39 @@ class CommunityEngagementService:
                 if parent is None or parent.post_id != post_id:
                     raise CommunityNotFoundError()
                 recipient_id = parent.author_user_id
+            message_key = payload.client_comment_id
             comment = CommunityComment(
-                id=uuid4(),
+                id=(
+                    uuid5(
+                        principal.user_id, f"community-comment:{post_id}:{message_key}"
+                    )
+                    if message_key is not None
+                    else uuid4()
+                ),
                 post_id=post_id,
                 author_user_id=principal.user_id,
                 parent_id=payload.parent_id,
                 content=payload.content,
                 created_at=datetime.now(UTC),
             )
-            self._repository.add_comment(comment)
-            await self._session.flush()
+            if message_key is None:
+                self._repository.add_comment(comment)
+                await self._session.flush()
+            elif not await self._insert_if_absent(
+                comment, self._repository.add_comment
+            ):
+                previous = await self._repository.get_comment_row(comment.id)
+                if (
+                    previous is None
+                    or previous.comment.author_user_id != principal.user_id
+                    or previous.comment.post_id != post_id
+                    or previous.comment.parent_id != payload.parent_id
+                    or previous.comment.content != payload.content
+                    or previous.comment.deleted_at is not None
+                    or previous.comment.moderation_hidden_at is not None
+                ):
+                    raise CommunityConflictError()
+                return previous
             mentioned_user_ids = set(
                 await self._repository.list_active_mention_recipients(
                     extract_community_mentions(payload.content)

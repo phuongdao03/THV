@@ -3,12 +3,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { LoaderCircle, Quote, RotateCcw, Send } from "lucide-react";
 import Link from "next/link";
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 
 import { CommunityReportAction } from "@/components/community/community-report-action";
 import { communityReplyQuote } from "@/components/community/community-quote";
 import {
   CommunityMembershipBadge,
+  CommunityProfilePreview,
   CommunityRoleBadge,
   isMembershipStaffIdentity,
 } from "@/components/community/community-user-identity";
@@ -27,6 +28,13 @@ import type {
 
 const PAGE_SIZE = 20;
 
+function sendOnEnter(event: KeyboardEvent<HTMLTextAreaElement>) {
+  if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing)
+    return;
+  event.preventDefault();
+  event.currentTarget.form?.requestSubmit();
+}
+
 export function CommunityCommentThreads({
   postId,
   commentCount: initialCommentCount,
@@ -40,6 +48,9 @@ export function CommunityCommentThreads({
   const [commentCount, setCommentCount] = useState(initialCommentCount);
   const [commentDraft, setCommentDraft] = useState("");
   const [replyDraft, setReplyDraft] = useState("");
+  const commentAttempt = useRef<CommunityCommentInput | null>(null);
+  const replyAttempt = useRef<CommunityCommentInput | null>(null);
+  const submitting = useRef(false);
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
   const [quotedReplyId, setQuotedReplyId] = useState<string | null>(null);
   const [sort, setSort] = useState<CommunityCommentSort>("oldest");
@@ -53,21 +64,37 @@ export function CommunityCommentThreads({
     mutationFn: (input: CommunityCommentInput) =>
       communityApi.createComment(postId, input),
     onSuccess: (created, input) => {
-      addCreatedComment(
-        queryClient,
-        commentsKey,
-        created,
-        input.parentId,
-        sort,
+      const cached =
+        queryClient.getQueryData<
+          CommunityPageResponse<CommunityCommentThread[]>
+        >(commentsKey);
+      const known = cached?.data.some(
+        (thread) =>
+          thread.id === created.id ||
+          thread.replies.some((reply) => reply.id === created.id),
       );
-      setCommentCount((count) => count + 1);
+      if (!known) {
+        addCreatedComment(
+          queryClient,
+          commentsKey,
+          created,
+          input.parentId,
+          sort,
+        );
+        setCommentCount((count) => count + 1);
+      }
       if (input.parentId) {
+        replyAttempt.current = null;
         setReplyDraft("");
         setReplyingTo(null);
         setQuotedReplyId(null);
       } else {
+        commentAttempt.current = null;
         setCommentDraft("");
       }
+    },
+    onSettled: () => {
+      submitting.current = false;
     },
   });
   const editComment = useMutation({
@@ -132,18 +159,29 @@ export function CommunityCommentThreads({
     ),
   );
 
+  function submit(input: CommunityCommentInput) {
+    if (!input.content || submitting.current) return;
+    const attempt = input.parentId ? replyAttempt : commentAttempt;
+    if (
+      !attempt.current ||
+      attempt.current.content !== input.content ||
+      attempt.current.parentId !== input.parentId
+    ) {
+      attempt.current = { ...input, clientCommentId: crypto.randomUUID() };
+    }
+    submitting.current = true;
+    createComment.mutate(attempt.current);
+  }
+
   function submitComment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const content = commentDraft.trim();
-    if (!content || createComment.isPending) return;
-    createComment.mutate({ content });
+    submit({ content: commentDraft.trim() });
   }
 
   function submitReply(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const content = replyDraft.trim();
-    if (!content || !replyingTo || createComment.isPending) return;
-    createComment.mutate({ content, parentId: replyingTo });
+    if (replyingTo)
+      submit({ content: replyDraft.trim(), parentId: replyingTo });
   }
 
   return (
@@ -194,6 +232,7 @@ export function CommunityCommentThreads({
             className={inputClass}
             id="community-comment-draft"
             onChange={(event) => setCommentDraft(event.target.value)}
+            onKeyDown={sendOnEnter}
             placeholder="Chia sẻ suy nghĩ của bạn…"
             required
             value={commentDraft}
@@ -202,8 +241,7 @@ export function CommunityCommentThreads({
             id="community-comment-help"
             className="mt-2 text-xs leading-5 text-[var(--theme-muted)]"
           >
-            Hãy trao đổi lịch sự. Nội dung bình luận là văn bản thuần, không
-            nhập HTML.
+            Enter để gửi. Shift + Enter để xuống dòng.
           </p>
           <div className="mt-3 flex justify-end">
             <button
@@ -299,7 +337,6 @@ export function CommunityCommentThreads({
               replyingTo={replyingTo}
               thread={thread}
               userId={user?.id}
-              liking={toggleCommentLike.isPending}
               submitting={createComment.isPending}
               canReply={Boolean(user)}
             />
@@ -353,7 +390,6 @@ function CommentThread({
   submitting,
   thread,
   userId,
-  liking,
 }: {
   canReply: boolean;
   onReply: (commentId: string) => void;
@@ -369,7 +405,6 @@ function CommentThread({
   submitting: boolean;
   thread: CommunityCommentThread;
   userId?: string;
-  liking: boolean;
 }) {
   const authorName = thread.isDeleted
     ? "đã xóa"
@@ -390,96 +425,105 @@ function CommentThread({
         onToggleLike={onToggleLike}
         onUpdate={onUpdateComment}
         userId={userId}
-        liking={liking}
         viewerHasLiked={thread.viewerHasLiked}
         likeCount={thread.likeCount}
       />
       {thread.replies.length ? (
-        <div className="ml-2 mt-3 space-y-3 border-l border-[var(--theme-border)] pl-3 sm:ml-6 sm:mt-4 sm:pl-4">
-          {thread.replies.map((reply) => {
-            const parent =
-              reply.parentId === thread.id
-                ? thread
-                : thread.replies.find(
-                    (candidate) => candidate.id === reply.parentId,
-                  );
-            const replyTargetName =
-              parent?.author?.displayName?.trim() || "thành viên";
-            const replyAuthorName =
-              reply.author?.displayName?.trim() || "thành viên";
-            return (
-              <div
-                className="scroll-mt-28 rounded-xl bg-[var(--theme-elevated)] p-3 sm:p-4"
-                id={`comment-${reply.id}`}
-                key={reply.id}
-              >
-                {reply.parentId !== thread.id ? (
-                  <p className="mb-1 text-xs text-[var(--theme-muted)]">
-                    Trả lời{" "}
-                    <Link
-                      className="underline underline-offset-2 hover:text-[var(--theme-accent)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-accent)]"
-                      href={`#comment-${reply.parentId}`}
-                    >
-                      {replyTargetName}
-                    </Link>
-                  </p>
-                ) : null}
-                <CommentBody
-                  author={reply.author}
-                  commentId={reply.id}
-                  content={reply.content}
-                  createdAt={reply.createdAt}
-                  isDeleted={reply.isDeleted}
-                  onDelete={onDeleteComment}
-                  onToggleLike={onToggleLike}
-                  onUpdate={onUpdateComment}
-                  userId={userId}
-                  liking={liking}
-                  viewerHasLiked={reply.viewerHasLiked}
-                  likeCount={reply.likeCount}
-                />
-                {canReply ? (
-                  <div className="mt-2 flex flex-wrap gap-1">
-                    <button
-                      aria-label={`Trả lời ${replyAuthorName}`}
-                      className="inline-flex min-h-9 items-center rounded-lg px-3 text-sm font-semibold text-[var(--theme-accent)] hover:bg-[var(--theme-surface)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-accent)]"
-                      onClick={() => onReply(reply.id)}
-                      type="button"
-                    >
-                      Trả lời
-                    </button>
-                    {!reply.isDeleted ? (
+        <details
+          className="mt-2 min-w-0"
+          open={
+            thread.replies.length <= 3 ||
+            thread.replies.some((reply) => reply.id === replyingTo)
+          }
+        >
+          <summary className="w-fit cursor-pointer rounded-md px-2 py-3 text-sm font-semibold text-[var(--theme-accent)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-accent)]">
+            {thread.replies.length} phản hồi
+          </summary>
+          <div className="ml-2 mt-3 space-y-3 border-l border-[var(--theme-border)] pl-3 sm:ml-6 sm:mt-4 sm:pl-4">
+            {thread.replies.map((reply) => {
+              const parent =
+                reply.parentId === thread.id
+                  ? thread
+                  : thread.replies.find(
+                      (candidate) => candidate.id === reply.parentId,
+                    );
+              const replyTargetName =
+                parent?.author?.displayName?.trim() || "thành viên";
+              const replyAuthorName =
+                reply.author?.displayName?.trim() || "thành viên";
+              return (
+                <div
+                  className="scroll-mt-28 rounded-xl bg-[var(--theme-elevated)] p-3 sm:p-4"
+                  id={`comment-${reply.id}`}
+                  key={reply.id}
+                >
+                  {reply.parentId !== thread.id ? (
+                    <p className="mb-1 text-xs text-[var(--theme-muted)]">
+                      Trả lời{" "}
+                      <Link
+                        className="underline underline-offset-2 hover:text-[var(--theme-accent)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-accent)]"
+                        href={`#comment-${reply.parentId}`}
+                      >
+                        {replyTargetName}
+                      </Link>
+                    </p>
+                  ) : null}
+                  <CommentBody
+                    author={reply.author}
+                    commentId={reply.id}
+                    content={reply.content}
+                    createdAt={reply.createdAt}
+                    isDeleted={reply.isDeleted}
+                    onDelete={onDeleteComment}
+                    onToggleLike={onToggleLike}
+                    onUpdate={onUpdateComment}
+                    userId={userId}
+                    viewerHasLiked={reply.viewerHasLiked}
+                    likeCount={reply.likeCount}
+                  />
+                  {canReply ? (
+                    <div className="mt-2 flex flex-wrap gap-1">
                       <button
-                        aria-label={`Trích dẫn ${replyAuthorName}`}
-                        className="inline-flex min-h-9 items-center gap-2 rounded-lg px-3 text-sm font-semibold text-[var(--theme-accent)] hover:bg-[var(--theme-surface)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-accent)]"
-                        onClick={() =>
-                          onQuote(reply.id, replyAuthorName, reply.content)
-                        }
+                        aria-label={`Trả lời ${replyAuthorName}`}
+                        className="inline-flex min-h-9 items-center rounded-lg px-3 text-sm font-semibold text-[var(--theme-accent)] hover:bg-[var(--theme-surface)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-accent)]"
+                        onClick={() => onReply(reply.id)}
                         type="button"
                       >
-                        <Quote aria-hidden="true" className="size-4" />
-                        Trích dẫn
+                        Trả lời
                       </button>
-                    ) : null}
-                  </div>
-                ) : null}
-                {replyingTo === reply.id ? (
-                  <ReplyComposer
-                    commentId={reply.id}
-                    onDraftChange={onReplyDraftChange}
-                    onSubmit={onSubmitReply}
-                    draft={replyDraft}
-                    submitting={submitting}
-                    targetName={replyAuthorName}
-                    quotedCommentId={
-                      quotedReplyId === reply.id ? reply.id : null
-                    }
-                  />
-                ) : null}
-              </div>
-            );
-          })}
-        </div>
+                      {!reply.isDeleted ? (
+                        <button
+                          aria-label={`Trích dẫn ${replyAuthorName}`}
+                          className="inline-flex min-h-9 items-center gap-2 rounded-lg px-3 text-sm font-semibold text-[var(--theme-accent)] hover:bg-[var(--theme-surface)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-accent)]"
+                          onClick={() =>
+                            onQuote(reply.id, replyAuthorName, reply.content)
+                          }
+                          type="button"
+                        >
+                          <Quote aria-hidden="true" className="size-4" />
+                          Trích dẫn
+                        </button>
+                      ) : null}
+                    </div>
+                  ) : null}
+                  {replyingTo === reply.id ? (
+                    <ReplyComposer
+                      commentId={reply.id}
+                      onDraftChange={onReplyDraftChange}
+                      onSubmit={onSubmitReply}
+                      draft={replyDraft}
+                      submitting={submitting}
+                      targetName={replyAuthorName}
+                      quotedCommentId={
+                        quotedReplyId === reply.id ? reply.id : null
+                      }
+                    />
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        </details>
       ) : null}
       {canReply ? (
         <div className="mt-2 flex flex-wrap gap-1">
@@ -559,19 +603,28 @@ function ReplyComposer({
         Nội dung trả lời
       </label>
       <textarea
+        aria-describedby={`community-reply-help-${commentId}`}
         className={inputClass}
         id={`community-reply-${commentId}`}
         onChange={(event) => onDraftChange(event.target.value)}
+        onKeyDown={sendOnEnter}
         required
         value={draft}
       />
+      <p
+        id={`community-reply-help-${commentId}`}
+        className="mt-1 text-xs text-[var(--theme-muted)]"
+      >
+        Enter để gửi. Shift + Enter để xuống dòng.
+      </p>
       <div className="mt-3 flex justify-end">
         <button
           className={submitClass}
           disabled={!draft.trim() || submitting}
           type="submit"
         >
-          <Send aria-hidden="true" className="size-4" /> Gửi trả lời
+          <Send aria-hidden="true" className="size-4" />
+          {submitting ? "Đang gửi…" : "Gửi trả lời"}
         </button>
       </div>
     </form>
@@ -588,7 +641,6 @@ function CommentBody({
   onToggleLike,
   onUpdate,
   userId,
-  liking,
   likeCount,
   viewerHasLiked,
 }: {
@@ -601,13 +653,19 @@ function CommentBody({
   onToggleLike: (commentId: string, liked: boolean) => Promise<unknown>;
   onUpdate: (commentId: string, content: string) => Promise<void>;
   userId?: string;
-  liking: boolean;
   likeCount: number;
   viewerHasLiked: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(content);
   const [actionError, setActionError] = useState(false);
+  const pendingLike = useRef(false);
+  const [optimisticLike, setOptimisticLike] = useState<{
+    liked: boolean;
+    count: number;
+  } | null>(null);
+  const displayedLiked = optimisticLike?.liked ?? viewerHasLiked;
+  const displayedLikeCount = optimisticLike?.count ?? likeCount;
   const ownsComment = Boolean(userId && author?.id === userId && !isDeleted);
   const name = author?.displayName?.trim() || "Thành viên";
   const isMembershipStaff = author ? isMembershipStaffIdentity(author) : false;
@@ -634,27 +692,50 @@ function CommentBody({
     }
   }
 
+  async function toggleLike() {
+    if (pendingLike.current) return;
+    pendingLike.current = true;
+    setActionError(false);
+    setOptimisticLike({
+      liked: !viewerHasLiked,
+      count: Math.max(0, likeCount + (viewerHasLiked ? -1 : 1)),
+    });
+    try {
+      await onToggleLike(commentId, viewerHasLiked);
+    } catch {
+      setActionError(true);
+    } finally {
+      pendingLike.current = false;
+      setOptimisticLike(null);
+    }
+  }
+
   return (
     <div>
       <div className="flex min-w-0 items-center gap-2.5">
         {author ? (
           <>
-            <MembershipAvatar
+            <CommunityProfilePreview
               className="shrink-0"
-              displayName={author.displayName}
-              showFrame={!isMembershipStaff}
-              size={36}
-              src={author.avatarUrl}
-              tier={author.membershipTier ?? "MEMBER"}
-            />
+              label={`Xem nhanh hồ sơ ${name}`}
+              user={author}
+            >
+              <MembershipAvatar
+                displayName={author.displayName}
+                showFrame={!isMembershipStaff}
+                size={36}
+                src={author.avatarUrl}
+                tier={author.membershipTier ?? "MEMBER"}
+              />
+            </CommunityProfilePreview>
             <div className="min-w-0">
               <div className="flex max-w-full flex-wrap items-center gap-1.5">
-                <Link
+                <CommunityProfilePreview
                   className="max-w-full truncate text-sm font-bold text-[var(--theme-text)] hover:text-[var(--theme-accent)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-accent)]"
-                  href={`/community/members/${encodeURIComponent(author.username)}`}
+                  user={author}
                 >
                   {name}
-                </Link>
+                </CommunityProfilePreview>
                 <CommunityMembershipBadge
                   isMembershipStaff={isMembershipStaff}
                   tier={author.membershipTier ?? "MEMBER"}
@@ -664,12 +745,13 @@ function CommentBody({
                   roleLabel={author.roleLabel}
                 />
               </div>
-              <time
-                className="mt-0.5 block text-xs text-[var(--theme-muted)]"
-                dateTime={createdAt}
+              <a
+                aria-label={`Liên kết đến bình luận của ${name}`}
+                className="mt-0.5 inline-block rounded-sm text-xs text-[var(--theme-muted)] underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)]"
+                href={`#comment-${commentId}`}
               >
-                {formatDate(createdAt)}
-              </time>
+                <time dateTime={createdAt}>{formatDate(createdAt)}</time>
+              </a>
             </div>
           </>
         ) : (
@@ -748,13 +830,14 @@ function CommentBody({
         <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-[var(--theme-border)] pt-2">
           {userId ? (
             <button
-              aria-pressed={viewerHasLiked}
+              aria-pressed={displayedLiked}
               className={commentActionClass}
-              disabled={liking}
-              onClick={() => void onToggleLike(commentId, viewerHasLiked)}
+              disabled={optimisticLike !== null}
+              onClick={() => void toggleLike()}
               type="button"
             >
-              {viewerHasLiked ? "Bỏ thích" : "Thích"} bình luận ({likeCount})
+              {displayedLiked ? "Bỏ thích" : "Thích"} bình luận (
+              {displayedLikeCount})
             </button>
           ) : (
             <span className="text-xs text-[var(--theme-muted)]">

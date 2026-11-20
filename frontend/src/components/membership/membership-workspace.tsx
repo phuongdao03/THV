@@ -158,7 +158,7 @@ export function MembershipWorkspace({
             được kiểm tra riêng theo vai trò quản trị.
           </p>
         </header>
-        <CommunityChat tier="MEMBER" initialRoom={initialChatRoom} />
+        <CommunityChat initialRoom={initialChatRoom} />
       </div>
     );
   }
@@ -240,11 +240,7 @@ export function MembershipWorkspace({
           </Link>
         </section>
       ) : null}
-      <CommunityChat
-        key={initialChatRoom}
-        tier={current.tier}
-        initialRoom={initialChatRoom}
-      />
+      <CommunityChat key={initialChatRoom} initialRoom={initialChatRoom} />
       <MembershipBenefitCenter tier={current.tier} />
       <section aria-labelledby="tiers-heading">
         <h2 id="tiers-heading" className="text-2xl font-bold">

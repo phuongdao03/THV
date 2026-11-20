@@ -199,12 +199,57 @@ class CommunityEngagementRepository:
             .limit(1)
         )
         row = result.first()
+        if row is not None:
+            return CommunityMemberRecord(*row)
+
+        prefix, separator, identifier = username.partition("-")
+        if prefix != "member" or not separator or len(identifier) != 32:
+            return None
+        try:
+            user_id = UUID(hex=identifier)
+        except ValueError:
+            return None
+        if identifier != user_id.hex:
+            return None
+
+        # Author responses already emit this handle for legacy public posts.
+        # Scope the fallback to public authors so it cannot expose other accounts.
+        authored_public_post = (
+            select(CommunityPost.id)
+            .join(CommunityCategory, CommunityCategory.id == CommunityPost.category_id)
+            .where(
+                CommunityPost.author_user_id == User.id,
+                *self._posts._public_filters(),
+            )
+            .exists()
+        )
+        result = await self._session.execute(
+            select(
+                User,
+                CommunityProfile,
+                UserProfile,
+                self._posts._has_role(User.id, "SUPER_ADMIN"),
+                self._posts._has_role(User.id, "MODERATOR"),
+                self._posts._membership_tier(User.id),
+            )
+            .outerjoin(CommunityProfile, CommunityProfile.user_id == User.id)
+            .outerjoin(UserProfile, UserProfile.user_id == User.id)
+            .where(
+                User.id == user_id,
+                User.status == UserStatus.ACTIVE,
+                authored_public_post,
+            )
+        )
+        row = result.first()
         if row is None:
             return None
         user, profile, public_profile, is_admin, is_moderator, membership_tier = row
         return CommunityMemberRecord(
             user,
-            profile,
+            profile
+            or CommunityProfile(
+                user_id=user_id, username=username, professional_links=[]
+            ),
             public_profile,
             bool(is_admin),
             bool(is_moderator),

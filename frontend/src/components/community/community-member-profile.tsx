@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { LoaderCircle, UserRound, UserRoundCheck } from "lucide-react";
+import { LoaderCircle, Share2, UserRound, UserRoundCheck } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -9,17 +9,17 @@ import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
 
 import { CommunityPostCard } from "@/components/community/community-post-card";
 import {
+  CommunityMembershipBadge,
+  CommunityProfilePreview,
   CommunityRoleBadge,
   isMembershipStaffIdentity,
+  useCommunityFollow,
 } from "@/components/community/community-user-identity";
 import { MembershipAvatar } from "@/components/ui/membership-avatar";
 import { communityMemberApi, mediaApi } from "@/lib/api/client";
 import { useAuthUser } from "@/lib/auth/user-context";
 import { mediaPolicies, uploadMedia } from "@/lib/media/upload";
-import type {
-  CommunityMemberCard,
-  CommunityMemberProfile as MemberProfile,
-} from "@/lib/api/community-types";
+import type { CommunityMemberCard } from "@/lib/api/community-types";
 
 const PAGE_SIZE = 20;
 const profileTierRank = {
@@ -44,6 +44,9 @@ export function CommunityMemberProfile({
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
   const [profileError, setProfileError] = useState(false);
+  const [shareStatus, setShareStatus] = useState<"idle" | "copied" | "manual">(
+    "idle",
+  );
   const [avatarMediaId, setAvatarMediaId] = useState<string | null | undefined>(
     undefined,
   );
@@ -94,6 +97,7 @@ export function CommunityMemberProfile({
   const posts = useQuery({
     queryKey: postsKey,
     queryFn: ({ signal }) => communityMemberApi.posts(username, page, signal),
+    enabled: view === "posts",
     staleTime: 30_000,
   });
   const members = useQuery({
@@ -105,23 +109,7 @@ export function CommunityMemberProfile({
     enabled: view !== "posts",
     staleTime: 30_000,
   });
-  const follow = useMutation({
-    mutationFn: (member: MemberProfile) =>
-      member.viewerIsFollowing
-        ? communityMemberApi.unfollow(member.id)
-        : communityMemberApi.follow(member.id),
-    onSuccess: (result) => {
-      queryClient.setQueryData<MemberProfile>(profileKey, (current) =>
-        current
-          ? {
-              ...current,
-              viewerIsFollowing: result.isFollowing,
-              followerCount: result.followerCount,
-            }
-          : current,
-      );
-    },
-  });
+  const follow = useCommunityFollow(profileKey);
   const updateProfile = useMutation({
     mutationFn: () =>
       communityMemberApi.updateProfile({
@@ -318,6 +306,26 @@ export function CommunityMemberProfile({
     updateProfile.mutate();
   }
 
+  const publicPath = `/community/members/${encodeURIComponent(member.username)}`;
+  async function shareProfile() {
+    const url = new URL(publicPath, window.location.origin).href;
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: member.displayName, url });
+        return;
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError")
+          return;
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      setShareStatus("copied");
+    } catch {
+      setShareStatus("manual");
+    }
+  }
+
   return (
     <div className="public-theme-surface min-h-[calc(100dvh-5rem)]">
       <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 sm:py-12 lg:px-8">
@@ -329,8 +337,21 @@ export function CommunityMemberProfile({
         </Link>
         <section
           aria-labelledby="community-member-name"
-          className="mt-5 rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-surface)] p-5 sm:p-7"
+          className="relative mt-5 overflow-hidden rounded-2xl border border-[var(--theme-border)] bg-[var(--theme-surface)] p-5 pt-24 sm:p-7 sm:pt-28"
+          id="community-member-about"
         >
+          <div
+            aria-hidden="true"
+            className="absolute inset-x-0 top-0 h-16 overflow-hidden bg-[var(--theme-accent)] sm:h-20"
+          >
+            <Image
+              alt=""
+              src="/assets/brand/trong-dong.png"
+              width={240}
+              height={240}
+              className="absolute -top-24 right-0 size-60 opacity-30 sm:right-8"
+            />
+          </div>
           <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex min-w-0 items-start gap-4 sm:gap-5">
               <MembershipAvatar
@@ -341,20 +362,23 @@ export function CommunityMemberProfile({
                 tier={member.membershipTier ?? "MEMBER"}
               />
               <div className="min-w-0">
-                <p className="text-xs font-bold tracking-[0.18em] text-[var(--theme-accent)] uppercase">
-                  Thành viên cộng đồng
-                </p>
                 <h1
                   id="community-member-name"
                   className="mt-2 break-words text-3xl font-bold tracking-tight text-[var(--theme-text)] sm:text-4xl"
                 >
                   {member.displayName || "Thành viên"}
                 </h1>
-                <CommunityRoleBadge
-                  isAdmin={member.isAdmin}
-                  roleLabel={member.roleLabel}
-                />
-                <p className="mt-1 text-sm text-[var(--theme-muted)]">
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  <CommunityRoleBadge
+                    isAdmin={member.isAdmin}
+                    roleLabel={member.roleLabel}
+                  />
+                  <CommunityMembershipBadge
+                    tier={member.membershipTier ?? "MEMBER"}
+                    isMembershipStaff={isMembershipStaff}
+                  />
+                </div>
+                <p className="mt-1 text-sm break-all text-[var(--theme-muted)]">
                   @{member.username}
                 </p>
                 {member.bio ? (
@@ -393,43 +417,69 @@ export function CommunityMemberProfile({
                 ) : null}
               </div>
             </div>
-            {isSelf ? (
+            <div className="flex flex-wrap gap-2">
               <button
                 className={followClass(false)}
-                onClick={beginProfileEdit}
+                onClick={() => void shareProfile()}
                 type="button"
               >
-                Chỉnh sửa hồ sơ
+                <Share2 aria-hidden="true" className="size-4" />
+                Chia sẻ hồ sơ
               </button>
-            ) : user ? (
-              <button
-                aria-pressed={member.viewerIsFollowing}
-                className={followClass(member.viewerIsFollowing)}
-                disabled={follow.isPending}
-                onClick={() => follow.mutate(member)}
-                type="button"
-              >
-                {follow.isPending ? (
-                  <LoaderCircle
-                    aria-hidden="true"
-                    className="size-4 animate-spin"
-                  />
-                ) : member.viewerIsFollowing ? (
-                  <UserRoundCheck aria-hidden="true" className="size-4" />
-                ) : (
-                  <UserRound aria-hidden="true" className="size-4" />
-                )}
-                {member.viewerIsFollowing ? "Đang theo dõi" : "Theo dõi"}
-              </button>
-            ) : (
-              <Link
-                className={followClass(false)}
-                href={`/login?next=${encodeURIComponent(`/community/members/${encodeURIComponent(member.username)}`)}`}
-              >
-                Đăng nhập để theo dõi
-              </Link>
-            )}
+              {isSelf ? (
+                <button
+                  className={followClass(false)}
+                  onClick={beginProfileEdit}
+                  type="button"
+                >
+                  Chỉnh sửa hồ sơ
+                </button>
+              ) : user ? (
+                <button
+                  aria-pressed={member.viewerIsFollowing}
+                  className={followClass(member.viewerIsFollowing)}
+                  disabled={follow.isPending}
+                  onClick={() => follow.mutate(member)}
+                  type="button"
+                >
+                  {follow.isPending ? (
+                    <LoaderCircle
+                      aria-hidden="true"
+                      className="size-4 animate-spin"
+                    />
+                  ) : member.viewerIsFollowing ? (
+                    <UserRoundCheck aria-hidden="true" className="size-4" />
+                  ) : (
+                    <UserRound aria-hidden="true" className="size-4" />
+                  )}
+                  {member.viewerIsFollowing ? "Đang theo dõi" : "Theo dõi"}
+                </button>
+              ) : (
+                <Link
+                  className={followClass(false)}
+                  href={`/login?next=${encodeURIComponent(`/community/members/${encodeURIComponent(member.username)}`)}`}
+                >
+                  Đăng nhập để theo dõi
+                </Link>
+              )}
+            </div>
           </div>
+          {shareStatus === "copied" ? (
+            <p className="mt-3 text-sm text-[var(--theme-muted)]" role="status">
+              Đã sao chép liên kết hồ sơ.
+            </p>
+          ) : null}
+          {shareStatus === "manual" ? (
+            <label className="mt-3 block text-sm text-[var(--theme-muted)]">
+              Liên kết hồ sơ
+              <input
+                className={profileInputClass}
+                readOnly
+                value={new URL(publicPath, window.location.origin).href}
+                onFocus={(event) => event.currentTarget.select()}
+              />
+            </label>
+          ) : null}
           {follow.isError ? (
             <p className="mt-4 text-sm font-semibold text-red-700" role="alert">
               Chưa thể cập nhật theo dõi. Vui lòng thử lại.
@@ -671,7 +721,7 @@ export function CommunityMemberProfile({
 
         <nav
           aria-label="Nội dung hồ sơ"
-          className="mt-8 flex gap-2 border-b border-[var(--theme-border)]"
+          className="mt-8 flex flex-wrap gap-2 border-b border-[var(--theme-border)]"
         >
           <Link
             aria-current={view === "posts" ? "page" : undefined}
@@ -679,6 +729,12 @@ export function CommunityMemberProfile({
             href={memberPageHref(username, 1, "posts")}
           >
             Bài viết
+          </Link>
+          <Link
+            className={profileTabClass(false)}
+            href="#community-member-about"
+          >
+            Giới thiệu
           </Link>
           <Link
             aria-current={view === "followers" ? "page" : undefined}
@@ -904,21 +960,27 @@ function StatLink({
 function MemberRow({ member }: { member: CommunityMemberCard }) {
   return (
     <li className="flex min-w-0 items-center gap-3 py-4">
-      <MembershipAvatar
-        displayName={member.displayName || member.username}
-        size={44}
-        showFrame={!isMembershipStaffIdentity(member)}
-        src={member.avatarUrl}
-        tier={member.membershipTier ?? "MEMBER"}
-      />
+      <CommunityProfilePreview
+        user={member}
+        className="shrink-0"
+        label={`Xem nhanh hồ sơ ${member.displayName}`}
+      >
+        <MembershipAvatar
+          displayName={member.displayName || member.username}
+          size={44}
+          showFrame={!isMembershipStaffIdentity(member)}
+          src={member.avatarUrl}
+          tier={member.membershipTier ?? "MEMBER"}
+        />
+      </CommunityProfilePreview>
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
-          <Link
+          <CommunityProfilePreview
             className="truncate font-bold text-[var(--theme-text)] hover:text-[var(--theme-accent)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-accent)]"
-            href={`/community/members/${encodeURIComponent(member.username)}`}
+            user={member}
           >
             {member.displayName || "Thành viên"}
-          </Link>
+          </CommunityProfilePreview>
           <CommunityRoleBadge
             isAdmin={member.isAdmin}
             roleLabel={member.roleLabel}

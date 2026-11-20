@@ -969,12 +969,22 @@ def test_community_comment_threads_are_public_only_and_flatten_deeper_replies(
         assert edited.json()["data"]["content"] == "Updated top-level comment."
 
         test_app.set_principal(OTHER_ID)
-        reply_response = test_app.client.post(
-            f"/api/v1/community/posts/{post_id}/comments",
-            json={"content": "A direct reply.", "parentId": root_id},
-        )
+        reply_path = f"/api/v1/community/posts/{post_id}/comments"
+        reply_payload = {
+            "content": "A direct reply.",
+            "parentId": root_id,
+            "clientCommentId": str(uuid4()),
+        }
+        reply_response = test_app.client.post(reply_path, json=reply_payload)
         assert reply_response.status_code == 201, reply_response.text
         reply_id = reply_response.json()["data"]["id"]
+        replay = test_app.client.post(reply_path, json=reply_payload)
+        assert replay.status_code == 201, replay.text
+        assert replay.json()["data"]["id"] == reply_id
+        conflict = test_app.client.post(
+            reply_path, json={**reply_payload, "content": "Different reply."}
+        )
+        assert conflict.status_code == 409, conflict.text
 
         deep_reply = test_app.client.post(
             f"/api/v1/community/posts/{post_id}/comments",
@@ -1398,6 +1408,61 @@ def test_public_author_identity_uses_shared_profile_and_persisted_role(
         assert moderator_post.json()["data"]["author"]["roleLabel"] == (
             "Thẩm định viên"
         )
+    finally:
+        test_app.close()
+
+
+def test_public_admin_author_link_resolves_without_community_profile(
+    tmp_path: Path,
+) -> None:
+    test_app = CommunityTestApp(tmp_path)
+    try:
+        _insert_post(
+            test_app,
+            slug="admin-without-profile",
+            status=CommunityPostStatus.PUBLISHED,
+            published_at=NOW,
+            author_id=OTHER_ID,
+        )
+
+        async def set_up_admin() -> None:
+            async with test_app.sessions() as session:
+                assert await session.get(CommunityProfile, OTHER_ID) is None
+                role = Role(id=uuid4(), code="SUPER_ADMIN")
+                session.add(role)
+                await session.flush()
+                session.add(UserRole(user_id=OTHER_ID, role_id=role.id))
+                await session.commit()
+
+        asyncio.run(set_up_admin())
+        post = test_app.client.get("/api/v1/community/posts/admin-without-profile")
+        assert post.status_code == 200, post.text
+        author = post.json()["data"]["author"]
+        assert author["username"] == f"member-{OTHER_ID.hex}"
+        assert author["isAdmin"] is True
+        member_path = f"/api/v1/community/members/{author['username']}"
+        profile = test_app.client.get(member_path)
+        assert profile.status_code == 200, profile.text
+        data = profile.json()["data"]
+        assert data["id"] == str(OTHER_ID)
+        assert data["displayName"] == author["displayName"]
+        assert data["membershipTier"] == "MEMBER"
+        assert data["professionalLinks"] == []
+        posts = test_app.client.get(f"{member_path}/posts")
+        assert posts.status_code == 200, posts.text
+        assert posts.json()["data"][0]["slug"] == "admin-without-profile"
+
+        async def suspend_author() -> None:
+            async with test_app.sessions() as session:
+                assert await session.get(CommunityProfile, OTHER_ID) is None
+                user = await session.get(User, OTHER_ID)
+                assert user is not None
+                user.status = UserStatus.SUSPENDED
+                await session.commit()
+
+        asyncio.run(suspend_author())
+        assert test_app.client.get(member_path).status_code == 404
+        assert test_app.client.get(f"{member_path}/posts").status_code == 404
     finally:
         test_app.close()
 

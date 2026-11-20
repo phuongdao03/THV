@@ -51,7 +51,7 @@ describe("community chat tier access", () => {
           })
         }
       >
-        <CommunityChat tier="SILVER" />
+        <CommunityChat />
       </QueryClientProvider>,
     );
 
@@ -76,6 +76,45 @@ describe("community chat tier access", () => {
         ([requestedRoom]) => requestedRoom === "COMPANION",
       ),
     ).toBe(false);
+  });
+
+  it("shows a pending message and reuses its request ID after a failed send", async () => {
+    let rejectFirstSend!: (error: Error) => void;
+    api.send
+      .mockReturnValueOnce(
+        new Promise((_resolve, reject) => {
+          rejectFirstSend = reject;
+        }),
+      )
+      .mockResolvedValueOnce({
+        id: "sent-message",
+        displayName: "Member",
+        avatarUrl: null,
+        body: "Send this once",
+        tier: "MEMBER",
+        createdAt: "2026-11-20T00:00:00Z",
+        editedAt: null,
+        isAdmin: false,
+        canEdit: true,
+        canRemove: true,
+      });
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <CommunityChat />
+      </QueryClientProvider>,
+    );
+    const composer = await screen.findByRole("textbox", { name: /Tin nhắn/ });
+    fireEvent.change(composer, { target: { value: "Send this once" } });
+    fireEvent.click(screen.getByRole("button", { name: "Gửi tin nhắn" }));
+    expect(
+      await screen.findByText("Send this once", { selector: "p" }),
+    ).toBeDefined();
+    rejectFirstSend(new Error("Network connection lost"));
+    await screen.findByRole("alert");
+    fireEvent.click(screen.getByRole("button", { name: "Thử gửi lại" }));
+    await screen.findByText("Send this once", { selector: "p" });
+    expect(api.send).toHaveBeenCalledTimes(2);
+    expect(api.send.mock.calls[0]).toEqual(api.send.mock.calls[1]);
   });
 
   it("keeps loaded history while polling and supports owner edits and removes", async () => {
@@ -131,7 +170,7 @@ describe("community chat tier access", () => {
 
     render(
       <QueryClientProvider client={queryClient}>
-        <CommunityChat tier="SILVER" />
+        <CommunityChat />
       </QueryClientProvider>,
     );
 
@@ -154,6 +193,13 @@ describe("community chat tier access", () => {
     fireEvent.click(screen.getByRole("button", { name: "Tải tin cũ hơn" }));
     await screen.findByText("Older history");
 
+    const timeline = screen.getByLabelText("Tin nhắn trong phòng");
+    Object.defineProperties(timeline, {
+      scrollHeight: { value: 600 },
+      clientHeight: { value: 200 },
+    });
+    timeline.scrollTop = 110;
+    fireEvent.scroll(timeline);
     queryClient.setQueryData(
       ["membership-chat-history", "member-1", "MEMBER", "latest"],
       {
@@ -171,7 +217,14 @@ describe("community chat tier access", () => {
     );
     await screen.findByText("Newly polled message");
     expect(screen.getByText("Older history")).toBeDefined();
+    expect(timeline.scrollTop).toBe(110);
+    fireEvent.click(screen.getByRole("button", { name: "Tin nhắn mới (1)" }));
+    expect(timeline.scrollTop).toBe(600);
+    expect(screen.queryByRole("button", { name: /Tin nhắn mới/ })).toBeNull();
 
+    fireEvent.click(
+      within(newestArticle).getByLabelText("Thao tác tin nhắn của Member"),
+    );
     fireEvent.click(
       within(newestArticle).getByRole("button", {
         name: "Sửa tin nhắn của Member",
@@ -188,6 +241,9 @@ describe("community chat tier access", () => {
     );
     expect(screen.getByText("Đã chỉnh sửa")).toBeDefined();
 
+    fireEvent.click(
+      within(newestArticle).getByLabelText("Thao tác tin nhắn của Member"),
+    );
     fireEvent.click(
       within(newestArticle).getByRole("button", {
         name: "Gỡ tin nhắn của Member",

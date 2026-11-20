@@ -143,6 +143,33 @@ describe("CommunityCommentThreads", () => {
     ).toBeDefined();
   });
 
+  it("updates the like immediately and rolls it back after a network failure", async () => {
+    const user = userEvent.setup();
+    let rejectLike!: (error: Error) => void;
+    api.likeComment.mockReturnValueOnce(
+      new Promise((_resolve, reject) => {
+        rejectLike = reject;
+      }),
+    );
+    render(<CommunityCommentThreads postId="post-1" commentCount={1} />, {
+      wrapper,
+    });
+
+    const button = await screen.findByRole("button", {
+      name: "Thích bình luận (2)",
+    });
+    await user.click(button);
+    expect(button.getAttribute("aria-pressed")).toBe("true");
+    expect(button.textContent).toBe("Bỏ thích bình luận (3)");
+    await user.click(button);
+    expect(api.likeComment).toHaveBeenCalledTimes(1);
+
+    rejectLike(new Error("Network connection lost"));
+    await screen.findByRole("alert");
+    expect(button.getAttribute("aria-pressed")).toBe("false");
+    expect(button.textContent).toBe("Thích bình luận (2)");
+  });
+
   it("lets members reply to deeper comments and keeps the conversation flat", async () => {
     const user = userEvent.setup();
     api.comments.mockResolvedValue({
@@ -198,22 +225,24 @@ describe("CommunityCommentThreads", () => {
       ],
       meta: { requestId: "comments", page: 1, pageSize: 20, total: 1 },
     });
-    api.createComment.mockResolvedValue({
-      id: "comment-4",
-      postId: "post-1",
-      parentId: "comment-2",
-      content: "Third reply",
-      author: {
-        id: "viewer-1",
-        username: "viewer",
-        displayName: "Reader",
-        avatarUrl: null,
-      },
-      isDeleted: false,
-      createdAt: "2026-10-14T10:03:00Z",
-      likeCount: 0,
-      viewerHasLiked: false,
-    });
+    api.createComment
+      .mockRejectedValueOnce(new Error("Network connection lost"))
+      .mockResolvedValue({
+        id: "comment-4",
+        postId: "post-1",
+        parentId: "comment-2",
+        content: "Third reply",
+        author: {
+          id: "viewer-1",
+          username: "viewer",
+          displayName: "Reader",
+          avatarUrl: null,
+        },
+        isDeleted: false,
+        createdAt: "2026-10-14T10:03:00Z",
+        likeCount: 0,
+        viewerHasLiked: false,
+      });
     render(<CommunityCommentThreads postId="post-1" commentCount={3} />, {
       wrapper,
     });
@@ -221,15 +250,31 @@ describe("CommunityCommentThreads", () => {
     await screen.findByText("Deeper reply");
     await user.click(screen.getByRole("button", { name: "Trả lời Minh" }));
     await user.type(screen.getByLabelText("Nội dung trả lời"), "Third reply");
+    await user.keyboard("{Enter}");
+    await screen.findByRole("alert");
+    expect(
+      screen.getByRole("textbox", { name: "Nội dung trả lời" }),
+    ).toHaveProperty("value", "Third reply");
     await user.click(screen.getByRole("button", { name: "Gửi trả lời" }));
 
     await waitFor(() =>
       expect(api.createComment).toHaveBeenCalledWith("post-1", {
         content: "Third reply",
         parentId: "comment-2",
+        clientCommentId: expect.any(String),
       }),
     );
     expect(await screen.findByText("Third reply")).toBeDefined();
+    expect(api.createComment.mock.calls[1]).toEqual(
+      api.createComment.mock.calls[0],
+    );
+    const replySummary = screen.getByText("3 phản hồi");
+    const branch = replySummary.closest("details");
+    expect(branch?.open).toBe(true);
+    await user.click(replySummary);
+    expect(branch?.open).toBe(false);
+    await user.click(replySummary);
+    expect(branch?.open).toBe(true);
   });
 
   it("prefills a bounded text quote and links back to its source reply", async () => {

@@ -10,6 +10,7 @@ from app.modules.auth.dependencies import (
     get_current_principal,
 )
 from app.modules.auth.session_service import AuthPrincipal
+from app.modules.community.models import CommunityProfile
 from app.tests.test_payment_service import ADMIN_ID, _service
 
 
@@ -26,6 +27,10 @@ def test_chat_api_pages_edits_and_moderator_removes_messages() -> None:
 
         app.dependency_overrides[get_session] = test_session
         try:
+            async with payment._session.begin():
+                payment._session.add(
+                    CommunityProfile(user_id=owner.user_id, username="chat-member")
+                )
             async with (
                 app.router.lifespan_context(app),
                 httpx.AsyncClient(
@@ -38,14 +43,35 @@ def test_chat_api_pages_edits_and_moderator_removes_messages() -> None:
                 )
                 assert invalid_limit.status_code == 422
 
+                request_body = {
+                    "body": "Original",
+                    "clientMessageId": "3e86eaa5-629b-44d2-9da0-7633c7710c19",
+                }
                 created = await client.post(
                     "/api/v1/community/chat/MEMBER/messages",
-                    json={"body": "Original"},
+                    json=request_body,
                 )
                 assert created.status_code == 200
                 message_id = created.json()["data"]["id"]
                 assert created.json()["data"]["canEdit"] is True
                 assert created.json()["data"]["isAdmin"] is False
+                assert created.json()["data"]["username"] == "chat-member"
+                replay = await client.post(
+                    "/api/v1/community/chat/MEMBER/messages",
+                    json=request_body,
+                )
+                assert replay.status_code == 200
+                assert replay.json()["data"]["id"] == message_id
+                changed_replay = await client.post(
+                    "/api/v1/community/chat/MEMBER/messages",
+                    json={**request_body, "body": "Different message"},
+                )
+                assert changed_replay.status_code == 409
+                locked_room = await client.post(
+                    "/api/v1/community/chat/PRESTIGE/messages",
+                    json=request_body,
+                )
+                assert locked_room.status_code == 403
 
                 page = await client.get(
                     "/api/v1/community/chat/MEMBER/messages?limit=1"

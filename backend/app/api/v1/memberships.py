@@ -82,6 +82,10 @@ class ChatRequest(PaymentSchema):
     body: Annotated[str, Field(min_length=1, max_length=2000)]
 
 
+class ChatSendRequest(ChatRequest):
+    client_message_id: UUID | None = None
+
+
 class ChatRoomAccessData(PaymentSchema):
     room: Literal["MEMBER", "COMPANION", "PRESTIGE"]
     allowed: bool
@@ -113,6 +117,8 @@ class ChatRoomGrantRevokeRequest(PaymentSchema):
 
 class ChatMessageData(PaymentSchema):
     id: UUID
+    username: str | None = None
+    role_label: str | None = None
     display_name: str
     avatar_url: str | None
     body: str
@@ -687,12 +693,14 @@ async def get_chat(
 )
 async def send_chat(
     room: Literal["MEMBER", "COMPANION", "PRESTIGE"],
-    payload: ChatRequest,
+    payload: ChatSendRequest,
     request: Request,
     principal: CsrfProtectedPrincipalDependency,
     session: SessionDependency,
 ) -> SuccessEnvelope[ChatMessageData]:
-    result = await MembershipService(session).send_chat(principal, room, payload.body)
+    result = await MembershipService(session).send_chat(
+        principal, room, payload.body, client_message_id=payload.client_message_id
+    )
     return SuccessEnvelope(
         data=ChatMessageData.model_validate(result),
         meta=ResponseMeta(request_id=request.state.request_id),

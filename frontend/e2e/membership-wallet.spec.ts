@@ -45,9 +45,33 @@ for (const { tier, label, cardLabel } of tiers) {
         }),
       }),
     );
-    await page.route("**/api/v1/community/chat/*/messages", (route) =>
-      route.fulfill({ json: envelope([]) }),
-    );
+    const sentRequests: Array<{ body: string; clientMessageId: string }> = [];
+    await page.route("**/api/v1/community/chat/*/messages*", (route) => {
+      if (route.request().method() !== "POST") {
+        return route.fulfill({
+          json: envelope({ items: [], hasMore: false, nextCursor: null }),
+        });
+      }
+      const input = route.request().postDataJSON();
+      sentRequests.push(input);
+      if (sentRequests.length === 1) {
+        return route.fulfill({ status: 503, json: { success: false } });
+      }
+      return route.fulfill({
+        json: envelope({
+          id: "chat-message",
+          displayName: "Hội viên Tinh Hoa Việt",
+          avatarUrl: null,
+          body: input.body,
+          tier: "PRESTIGE",
+          createdAt: "2026-11-20T02:00:00Z",
+          editedAt: null,
+          isAdmin: false,
+          canEdit: true,
+          canRemove: true,
+        }),
+      });
+    });
     await page.route("**/api/v1/community/chat/*/access", (route) =>
       route.fulfill({
         json: envelope({
@@ -119,9 +143,22 @@ for (const { tier, label, cardLabel } of tiers) {
         page.getByRole("button", { name: "Gửi tin nhắn" }),
       ).toHaveCount(0);
     } else {
+      await page.setViewportSize({ width: 390, height: 530 });
+      const composer = page.getByRole("textbox", { name: /Tin nhắn/ });
+      await expect(composer).toBeVisible();
+      await composer.fill("Xin chào phòng Tinh hoa");
+      await expect(composer).toBeInViewport();
+      await page.getByRole("button", { name: "Gửi tin nhắn" }).click();
+      await expect(composer).toHaveValue("Xin chào phòng Tinh hoa");
+      await page.getByRole("button", { name: "Thử gửi lại" }).click();
       await expect(
-        page.getByRole("textbox", { name: /Tin nhắn/ }),
-      ).toBeVisible();
+        page.getByText("Xin chào phòng Tinh hoa", { exact: true }),
+      ).toHaveCount(1);
+      await expect(composer).toHaveValue("");
+      expect(sentRequests).toHaveLength(2);
+      expect(sentRequests[0]).toEqual(sentRequests[1]);
+      expect(sentRequests[0]?.clientMessageId).toMatch(/^[a-f0-9-]{36}$/);
+      await page.screenshot({ path: info.outputPath("chat-retry-390.png") });
     }
     await page.goto("/wallet?returnTo=%2Fmembership");
     await expect(

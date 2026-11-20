@@ -49,6 +49,7 @@ export function NavigationBreadcrumb() {
     .sort((a, b) => b.length - a.length)[0];
   if (!parent) return null;
   const label =
+    (path === "/community/chat" ? "Trò chuyện" : undefined) ??
     pageLabels[path.split("/").at(-1) ?? ""] ??
     (parent === "/works"
       ? "Chi tiết đề cử"

@@ -44,6 +44,7 @@ export function NavigationLoading() {
       const link = target.closest<HTMLAnchorElement>("a[href]");
       if (
         !link ||
+        link.dataset.navigationFeedback === "off" ||
         link.hasAttribute("download") ||
         (link.target && link.target !== "_self")
       )

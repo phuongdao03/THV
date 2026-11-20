@@ -136,6 +136,10 @@ describe("CommunityMemberProfile", () => {
     expect(
       screen.getByRole("link", { name: "Người theo dõi 10" }),
     ).toBeDefined();
+    await user.click(screen.getByRole("button", { name: "Chia sẻ hồ sơ" }));
+    expect(await navigator.clipboard.readText()).toBe(
+      new URL("/community/members/lan-anh", window.location.origin).href,
+    );
   });
 
   it("paginates only the member's published posts", async () => {
