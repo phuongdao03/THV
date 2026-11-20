@@ -172,6 +172,7 @@ describe("CommunityPostEngagement", () => {
     await waitFor(() =>
       expect(api.createComment).toHaveBeenCalledWith("post-1", {
         content: "Ý kiến mới",
+        clientCommentId: expect.any(String),
       }),
     );
     expect(await screen.findByText("Ý kiến mới")).toBeDefined();
@@ -192,6 +193,7 @@ describe("CommunityPostEngagement", () => {
       expect(api.createComment).toHaveBeenLastCalledWith("post-1", {
         content: "Một phản hồi",
         parentId: "reply-1",
+        clientCommentId: expect.any(String),
       }),
     );
     expect(await screen.findByText("Một phản hồi")).toBeDefined();
