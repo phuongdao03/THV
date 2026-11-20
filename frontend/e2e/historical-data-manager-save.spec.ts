@@ -180,6 +180,27 @@ test("data manager saves historical dates and sees persisted edits after reload"
   ).toBeVisible();
   const publicTitle = page.getByRole("textbox", { name: "Tiêu đề công khai" });
   await publicTitle.fill("Nghề thủ công truyền thống");
+  const publicationPreview = page.getByRole("region", {
+    name: "Xem trước trang công khai",
+  });
+  await expect(
+    publicationPreview.getByRole("heading", {
+      name: "Nghề thủ công truyền thống",
+    }),
+  ).toBeVisible();
+  await publicationPreview.getByRole("button", { name: "Điện thoại" }).click();
+  await expect(
+    publicationPreview.getByRole("button", { name: "Điện thoại" }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await publicationPreview.getByRole("button", { name: "Máy tính" }).click();
+  await page.getByRole("radio", { name: "Tải ảnh riêng để công bố" }).check();
+  await expect(
+    page.getByText("JPEG, PNG hoặc WebP · tối đa 5 MB"),
+  ).toBeVisible();
+  await page.getByRole("radio", { name: "Tạo ảnh đại diện tự động" }).check();
+  await publicationPreview.screenshot({
+    path: info.outputPath("publication-page-preview.png"),
+  });
   await expect(
     page.getByRole("radio", { name: "Tạo ảnh đại diện tự động" }),
   ).toBeChecked();

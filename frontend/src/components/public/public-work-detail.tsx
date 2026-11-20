@@ -319,12 +319,13 @@ function PublicGallery({
   title: string;
   coverCategory?: string;
 }) {
-  const [selectedId, setSelectedId] = useState(
-    media.find((item) => item.isThumbnail)?.id ?? media[0]?.id,
-  );
+  const [selectedId, setSelectedId] = useState<string>();
   const [loadedImageId, setLoadedImageId] = useState<string>();
   const [failedImageId, setFailedImageId] = useState<string>();
-  const selected = media.find((item) => item.id === selectedId) ?? media[0];
+  const selected =
+    media.find((item) => item.id === selectedId) ??
+    media.find((item) => item.isThumbnail) ??
+    media[0];
   if (!selected)
     return (
       <WorkCoverPlaceholder title={title} label="Tác phẩm được ghi nhận" />

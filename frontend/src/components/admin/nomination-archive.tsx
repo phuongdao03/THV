@@ -212,87 +212,89 @@ export function NominationArchive() {
             {records.data.data.map((record) => (
               <li
                 key={`${record.source}-${record.id}`}
-                className="grid gap-3 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
+                className="grid gap-3 py-4 sm:grid-cols-[minmax(0,1fr)_10rem] sm:items-start sm:gap-6"
               >
-                <div className="flex flex-wrap gap-2 text-xs text-[var(--theme-muted)]">
-                  <span>
-                    {record.source === "CURRENT"
-                      ? "Hồ sơ mới"
-                      : "Hồ sơ lịch sử"}
-                  </span>
-                  <span>{archiveStatusLabel(record.businessStatus)}</span>
-                  {record.categoryName ? (
-                    <span>{record.categoryName}</span>
-                  ) : null}
-                  {record.publicationStatus ? (
+                <div className="min-w-0">
+                  <div className="flex flex-wrap gap-2 text-xs text-[var(--theme-muted)]">
                     <span>
-                      · {archiveStatusLabel(record.publicationStatus)}
+                      {record.source === "CURRENT"
+                        ? "Hồ sơ mới"
+                        : "Hồ sơ lịch sử"}
                     </span>
-                  ) : null}
-                  {record.archiveStatus === "ARCHIVED" ? (
-                    <span>· Đã lưu trữ</span>
-                  ) : null}
+                    <span>{archiveStatusLabel(record.businessStatus)}</span>
+                    {record.categoryName ? (
+                      <span>{record.categoryName}</span>
+                    ) : null}
+                    {record.publicationStatus ? (
+                      <span>
+                        · {archiveStatusLabel(record.publicationStatus)}
+                      </span>
+                    ) : null}
+                    {record.archiveStatus === "ARCHIVED" ? (
+                      <span>· Đã lưu trữ</span>
+                    ) : null}
+                  </div>
+                  <Link
+                    className="mt-2 block text-lg font-semibold text-[var(--theme-accent)] underline-offset-4 hover:underline"
+                    href={archiveRecordPath(record.source, record.id)}
+                  >
+                    {record.title}
+                  </Link>
+                  <p className="mt-1 break-all text-sm">
+                    {displayCnsDossierCode(record.code)} ·{" "}
+                    {record.year ?? "Chưa rõ năm"}
+                  </p>
+                  <p className="mt-1 break-words text-sm text-[var(--theme-muted)]">
+                    {record.source === "CURRENT" ? "Người nộp" : "Đối tượng"}:{" "}
+                    {record.source === "CURRENT" ? (
+                      <>
+                        {record.ownerName ? (
+                          <span className="font-semibold text-[var(--theme-text)]">
+                            {record.ownerName}
+                          </span>
+                        ) : null}
+                        {record.ownerEmail || record.subject ? (
+                          <span>
+                            {record.ownerName ? " · " : ""}
+                            {record.ownerEmail || record.subject}
+                          </span>
+                        ) : null}
+                        {!record.ownerName &&
+                        !record.ownerEmail &&
+                        !record.subject
+                          ? "Chưa ghi nhận"
+                          : null}
+                      </>
+                    ) : (
+                      record.subject || "Chưa ghi nhận"
+                    )}
+                  </p>
+                  <p className="mt-1 text-xs text-[var(--theme-muted)]">
+                    Ghi nhận {formatArchiveDate(record.recordedAt)}
+                    {record.versionNo ? ` · phiên bản ${record.versionNo}` : ""}
+                    {record.updatedAt
+                      ? ` · cập nhật ${formatArchiveDate(record.updatedAt)}`
+                      : ""}
+                  </p>
+                  <p className="mt-1 text-sm">
+                    {record.documentCount} tài liệu · {record.imageCount} ảnh ·{" "}
+                    {record.videoCount} video
+                    {record.certificateCount > 0 ? (
+                      <span className="text-[var(--theme-muted)]">
+                        {" "}
+                        ·{" "}
+                        {record.source === "CURRENT"
+                          ? "Bằng xác lập"
+                          : "Ghi nhận lịch sử"}
+                        {record.certificateReference
+                          ? `: ${record.certificateReference}`
+                          : ` (${record.certificateCount})`}
+                      </span>
+                    ) : null}
+                  </p>
                 </div>
                 <Link
-                  className="mt-2 block text-lg font-semibold text-[var(--theme-accent)] underline-offset-4 hover:underline"
-                  href={archiveRecordPath(record.source, record.id)}
-                >
-                  {record.title}
-                </Link>
-                <p className="mt-1 break-all text-sm">
-                  {displayCnsDossierCode(record.code)} ·{" "}
-                  {record.year ?? "Chưa rõ năm"}
-                </p>
-                <p className="mt-1 break-words text-sm text-[var(--theme-muted)]">
-                  {record.source === "CURRENT" ? "Người nộp" : "Đối tượng"}:{" "}
-                  {record.source === "CURRENT" ? (
-                    <>
-                      {record.ownerName ? (
-                        <span className="font-semibold text-[var(--theme-text)]">
-                          {record.ownerName}
-                        </span>
-                      ) : null}
-                      {record.ownerEmail || record.subject ? (
-                        <span>
-                          {record.ownerName ? " · " : ""}
-                          {record.ownerEmail || record.subject}
-                        </span>
-                      ) : null}
-                      {!record.ownerName &&
-                      !record.ownerEmail &&
-                      !record.subject
-                        ? "Chưa ghi nhận"
-                        : null}
-                    </>
-                  ) : (
-                    record.subject || "Chưa ghi nhận"
-                  )}
-                </p>
-                <p className="mt-1 text-xs text-[var(--theme-muted)]">
-                  Ghi nhận {formatArchiveDate(record.recordedAt)}
-                  {record.versionNo ? ` · phiên bản ${record.versionNo}` : ""}
-                  {record.updatedAt
-                    ? ` · cập nhật ${formatArchiveDate(record.updatedAt)}`
-                    : ""}
-                </p>
-                <p className="mt-1 text-sm">
-                  {record.documentCount} tài liệu · {record.imageCount} ảnh ·{" "}
-                  {record.videoCount} video
-                  {record.certificateCount > 0 ? (
-                    <span className="text-[var(--theme-muted)]">
-                      {" "}
-                      ·{" "}
-                      {record.source === "CURRENT"
-                        ? "Bằng xác lập"
-                        : "Ghi nhận lịch sử"}
-                      {record.certificateReference
-                        ? `: ${record.certificateReference}`
-                        : ` (${record.certificateCount})`}
-                    </span>
-                  ) : null}
-                </p>
-                <Link
-                  className="inline-flex min-h-11 items-center justify-center rounded-md border border-[var(--theme-border)] px-3 text-sm font-semibold text-[var(--theme-accent)] hover:bg-[var(--theme-elevated)] sm:col-start-2 sm:row-start-1"
+                  className="inline-flex min-h-11 w-full items-center justify-center rounded-lg border border-[var(--theme-border)] px-4 text-sm font-semibold text-[var(--theme-accent)] hover:bg-[var(--theme-elevated)]"
                   href={archiveRecordPath(record.source, record.id)}
                 >
                   Xem bộ hồ sơ
