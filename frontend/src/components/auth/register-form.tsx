@@ -4,7 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { createUserWithEmailAndPassword, signOut } from "firebase/auth";
 import { LoaderCircle } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 
 import { AuthCard, AuthLink } from "@/components/auth/auth-card";
 import { FormField } from "@/components/auth/form-field";
@@ -15,6 +15,8 @@ import { safeLocalDestination } from "@/lib/auth/safe-destination";
 import { registerSchema, type RegisterValues } from "@/lib/auth/schemas";
 import { firebaseConfigured, getFirebaseAuth } from "@/lib/firebase/client";
 import { ensureReferralAttribution } from "@/lib/auth/referral-attribution";
+import { communityMemberApi } from "@/lib/api/client";
+import { saveSignupIdentity, usernameSchema } from "@/lib/auth/username";
 
 export function RegisterForm({
   next,
@@ -39,19 +41,64 @@ export function RegisterForm({
   }, [referralCode]);
   const {
     register,
+    control,
     handleSubmit,
     formState: { errors, isSubmitting },
   } = useForm<RegisterValues>({
     resolver: zodResolver(registerSchema),
     defaultValues: {
+      displayName: "",
+      username: "",
       email: "",
       password: "",
       confirmPassword: "",
     },
   });
+  const enteredUsername = useWatch({ control, name: "username" });
+  const candidate = usernameSchema.safeParse(enteredUsername);
+  const normalizedUsername = candidate.success ? candidate.data : undefined;
+  const [availability, setAvailability] = useState<{
+    username: string;
+    state: "checking" | "available" | "unavailable" | "error";
+  }>();
+  const usernameState =
+    availability?.username === normalizedUsername
+      ? availability?.state
+      : undefined;
+  useEffect(() => {
+    if (!normalizedUsername || acceptedEmail) return;
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      setAvailability({ username: normalizedUsername, state: "checking" });
+      void communityMemberApi
+        .usernameAvailability(normalizedUsername, controller.signal)
+        .then(({ available }) => {
+          if (!controller.signal.aborted)
+            setAvailability({
+              username: normalizedUsername,
+              state: available ? "available" : "unavailable",
+            });
+        })
+        .catch(() => {
+          if (!controller.signal.aborted)
+            setAvailability({
+              username: normalizedUsername,
+              state: "error",
+            });
+        });
+    }, 350);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [normalizedUsername, acceptedEmail]);
 
   const onSubmit = handleSubmit(async (values) => {
     setSubmitError(undefined);
+    if (usernameState === "unavailable") {
+      setSubmitError("Username này không khả dụng. Vui lòng chọn tên khác.");
+      return;
+    }
     setAttempt((value) => value + 1);
     setSubmitPhase("creating");
     let accountCreated = false;
@@ -68,6 +115,10 @@ export function RegisterForm({
         values.password,
       );
       accountCreated = true;
+      saveSignupIdentity(credential.user.uid, {
+        username: values.username,
+        displayName: values.displayName,
+      });
       setAcceptedEmail(values.email.trim());
       setEmailStatus("sending");
       setSubmitPhase("sending");
@@ -141,8 +192,7 @@ export function RegisterForm({
             </p>
           )}
           <p className="mt-2">
-            Bạn có thể bổ sung tên hiển thị và thông tin liên hệ trong mục Tài
-            khoản sau khi đăng nhập.
+            Đăng nhập sau khi xác minh email để lưu tên hiển thị và Username.
           </p>
           <p className="mt-3">
             <AuthLink href={loginHref}>Đăng nhập để tiếp tục</AuthLink>
@@ -154,6 +204,34 @@ export function RegisterForm({
             {submitError ? (
               <p className="text-sm font-medium text-error" role="alert">
                 {submitError}
+              </p>
+            ) : null}
+            <FormField
+              autoComplete="name"
+              error={errors.displayName?.message}
+              label="Tên hiển thị"
+              {...register("displayName")}
+            />
+            <FormField
+              autoComplete="username"
+              autoCapitalize="none"
+              error={errors.username?.message}
+              hint="3–24 ký tự gồm chữ không dấu, số và dấu gạch dưới đơn."
+              label="Username"
+              {...register("username")}
+            />
+            {usernameState ? (
+              <p
+                aria-live="polite"
+                className="text-sm text-[var(--theme-muted)]"
+              >
+                {usernameState === "checking"
+                  ? "Đang kiểm tra Username…"
+                  : usernameState === "available"
+                    ? "Username có thể sử dụng."
+                    : usernameState === "unavailable"
+                      ? "Username này không khả dụng."
+                      : "Chưa kiểm tra được Username. Tên sẽ được kiểm tra khi lưu."}
               </p>
             ) : null}
             <FormField

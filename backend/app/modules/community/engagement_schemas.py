@@ -86,6 +86,7 @@ class CommunityCommentThreadData(CommunitySchema):
 
 class CommunityMemberProfileEditRequest(CommunitySchema):
     username: Annotated[str | None, Field(max_length=64)] = None
+    username_claim_only: bool = False
     display_name: Annotated[str | None, Field(max_length=120)] = None
     avatar_url: Annotated[str | None, Field(max_length=500)] = None
     avatar_media_id: UUID | None = None
@@ -108,7 +109,7 @@ class CommunityMemberProfileEditRequest(CommunitySchema):
             raise ValueError("Username cannot be null.")
         if not isinstance(value, str):
             return value
-        normalized = value.strip().lower()
+        normalized = value.lower()
         if not (
             re.fullmatch(r"[a-z0-9_-]{3,30}", normalized)
             or re.fullmatch(r"member-[0-9a-f]{32}", normalized)

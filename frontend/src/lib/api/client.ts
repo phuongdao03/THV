@@ -4415,6 +4415,12 @@ export const communityApi = {
 };
 
 export const communityMemberApi = {
+  usernameAvailability(username: string, signal?: AbortSignal) {
+    return request<{ available: boolean }>(
+      `/community/username-availability?username=${encodeURIComponent(username)}`,
+      { signal, cache: "no-store" },
+    );
+  },
   currentProfile(signal?: AbortSignal) {
     return request<CommunityMemberProfile>("/community/members/me", { signal });
   },

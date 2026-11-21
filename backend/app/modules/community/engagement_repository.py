@@ -22,6 +22,7 @@ from app.modules.community.models import (
     CommunityPostFollow,
     CommunityPostStatus,
     CommunityProfile,
+    CommunityUsername,
 )
 from app.modules.community.repository import CommunityPostRow, CommunityRepository
 from app.modules.users.models import UserProfile
@@ -181,6 +182,12 @@ class CommunityEngagementRepository:
     async def get_member_by_username(
         self, username: str
     ) -> CommunityMemberRecord | None:
+        normalized = username.lower()
+        registry_owner = (
+            select(CommunityUsername.user_id)
+            .where(CommunityUsername.username == normalized)
+            .scalar_subquery()
+        )
         result = await self._session.execute(
             select(
                 User,
@@ -193,7 +200,11 @@ class CommunityEngagementRepository:
             .join(CommunityProfile, CommunityProfile.user_id == User.id)
             .outerjoin(UserProfile, UserProfile.user_id == User.id)
             .where(
-                CommunityProfile.username == username,
+                or_(
+                    User.id == registry_owner,
+                    registry_owner.is_(None)
+                    & (func.lower(CommunityProfile.username) == normalized),
+                ),
                 User.status == UserStatus.ACTIVE,
             )
             .limit(1)
@@ -237,7 +248,7 @@ class CommunityEngagementRepository:
             .where(
                 User.id == user_id,
                 User.status == UserStatus.ACTIVE,
-                authored_public_post,
+                or_(CommunityProfile.user_id.is_not(None), authored_public_post),
             )
         )
         row = result.first()
@@ -340,13 +351,12 @@ class CommunityEngagementRepository:
             total,
         )
 
-    async def username_taken(self, username: str, *, except_user_id: UUID) -> bool:
+    async def username_taken(self, username: str) -> bool:
         return bool(
             await self._session.scalar(
                 select(CommunityProfile.user_id)
                 .where(
                     func.lower(CommunityProfile.username) == username.lower(),
-                    CommunityProfile.user_id != except_user_id,
                 )
                 .limit(1)
             )

@@ -123,6 +123,29 @@ class CommunityProfile(UtcTimestampMixin, Base):
     )
 
 
+class CommunityUsername(Base):
+    __tablename__ = "community_usernames"
+    __table_args__ = (
+        CheckConstraint(
+            "username = lower(username)", name="community_username_lowercase"
+        ),
+        Index(
+            "uq_community_usernames_current_user",
+            "user_id",
+            unique=True,
+            postgresql_where=text("retired_at IS NULL"),
+            sqlite_where=text("retired_at IS NULL"),
+        ),
+    )
+
+    username: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[UUID] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="RESTRICT")
+    )
+    claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    retired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class CommunityCategory(UtcTimestampMixin, Base):
     __tablename__ = "community_categories"
     __table_args__ = (

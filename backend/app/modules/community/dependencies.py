@@ -59,6 +59,7 @@ async def get_community_engagement_service(
         yield CommunityEngagementService(
             session,
             avatar_max_bytes=settings.media_avatar_max_bytes,
+            username_cooldown_days=settings.community_username_cooldown_days,
         )
         return
     redis_client: Redis = Redis.from_url(settings.redis_url)
@@ -66,6 +67,7 @@ async def get_community_engagement_service(
         yield CommunityEngagementService(
             session,
             avatar_max_bytes=settings.media_avatar_max_bytes,
+            username_cooldown_days=settings.community_username_cooldown_days,
             views=RedisViewDeduplicator(
                 redis_client,
                 visitor_context=EngagementVisitorContext(

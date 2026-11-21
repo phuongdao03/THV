@@ -3,7 +3,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
-import { CommunityProfilePreview } from "@/components/community/community-user-identity";
+import {
+  CommunityProfilePreview,
+  CommunityPublicHandle,
+} from "@/components/community/community-user-identity";
 import { Button } from "@/components/ui/button";
 import { ApiError, communityMemberApi, membershipApi } from "@/lib/api/client";
 import type {
@@ -254,11 +257,10 @@ export function MembershipBenefitCenter({ tier }: { tier: MembershipTier }) {
                   key={need.id}
                 >
                   <p className="font-semibold">{need.displayName}</p>
-                  {need.username ? (
-                    <p className="text-xs text-[var(--theme-muted)]">
-                      @{need.username}
-                    </p>
-                  ) : null}
+                  <CommunityPublicHandle
+                    username={need.username}
+                    className="block text-xs text-[var(--theme-muted)]"
+                  />
                   <p className="mt-2 whitespace-pre-wrap text-sm leading-6">
                     {need.statement}
                   </p>
@@ -348,9 +350,10 @@ export function MembershipBenefitCenter({ tier }: { tier: MembershipTier }) {
                         <strong className="block truncate">
                           {member.displayName}
                         </strong>
-                        <span className="block truncate text-xs text-[var(--theme-muted)]">
-                          @{member.username}
-                        </span>
+                        <CommunityPublicHandle
+                          username={member.username}
+                          className="block truncate text-xs text-[var(--theme-muted)]"
+                        />
                         {member.professionalTitle || member.organization ? (
                           <span className="mt-2 block text-sm leading-5">
                             {[member.professionalTitle, member.organization]

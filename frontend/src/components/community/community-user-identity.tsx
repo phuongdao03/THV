@@ -21,9 +21,11 @@ import { useAuthUser } from "@/lib/auth/user-context";
 export function CommunityUserIdentity({
   user,
   size = 34,
+  showHandle = true,
 }: {
   user: Omit<CommunityAuthor, "id">;
   size?: number;
+  showHandle?: boolean;
 }) {
   const isMembershipStaff = isMembershipStaffIdentity(user);
   return (
@@ -54,6 +56,14 @@ export function CommunityUserIdentity({
             tier={user.membershipTier ?? "MEMBER"}
           />
         </div>
+        {showHandle && hasPublicUsername(user.username) ? (
+          <CommunityProfilePreview
+            user={user}
+            className="max-w-full truncate text-xs text-[var(--theme-muted)]"
+          >
+            <CommunityPublicHandle username={user.username} />
+          </CommunityProfilePreview>
+        ) : null}
         <CommunityRoleBadge isAdmin={user.isAdmin} roleLabel={user.roleLabel} />
       </div>
     </div>
@@ -76,6 +86,9 @@ export function CommunityProfilePreview({
   const trigger = useRef<HTMLAnchorElement>(null);
   const titleId = useId();
   const href = `/community/members/${encodeURIComponent(user.username)}`;
+  const profileHref = hasPublicUsername(user.username)
+    ? `/u/${encodeURIComponent(user.username)}`
+    : href;
 
   function show(event: MouseEvent<HTMLAnchorElement>) {
     const element = panel.current;
@@ -134,9 +147,12 @@ export function CommunityProfilePreview({
             <h2 className="font-semibold break-words" id={titleId}>
               {open ? user.displayName?.trim() || "Thành viên" : null}
             </h2>
-            <p className="text-sm break-all text-[var(--theme-muted)]">
-              {open ? `@${user.username}` : null}
-            </p>
+            {open ? (
+              <CommunityPublicHandle
+                username={user.username}
+                className="block text-sm break-all text-[var(--theme-muted)]"
+              />
+            ) : null}
           </div>
           <button
             aria-label="Đóng hồ sơ nhanh"
@@ -150,7 +166,7 @@ export function CommunityProfilePreview({
         {open ? <CommunityPreviewDetails user={user} /> : null}
         <Link
           className="mt-3 inline-flex min-h-11 items-center font-semibold text-[var(--theme-accent)] underline-offset-4 hover:underline focus-visible:outline-2"
-          href={href}
+          href={profileHref}
           onClick={() => panel.current?.hidePopover()}
         >
           Xem hồ sơ
@@ -258,6 +274,23 @@ export function useCommunityFollow(
       );
     },
   });
+}
+
+export function CommunityPublicHandle({
+  username,
+  className,
+}: {
+  username?: string | null;
+  className?: string;
+}) {
+  if (!hasPublicUsername(username)) return null;
+  return <span className={className}>@{username}</span>;
+}
+
+export function hasPublicUsername(
+  username?: string | null,
+): username is string {
+  return Boolean(username && !/^member-[0-9a-f]{32}$/i.test(username));
 }
 
 export function CommunityMembershipBadge({

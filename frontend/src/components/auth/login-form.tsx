@@ -13,7 +13,8 @@ import { AuthNavigationStatus } from "@/components/auth/auth-navigation-status";
 import { FormField } from "@/components/auth/form-field";
 import { GoogleOAuthButton } from "@/components/auth/google-oauth-button";
 import { Button } from "@/components/ui/button";
-import { ApiError, authApi } from "@/lib/api/client";
+import { ApiError, authApi, communityMemberApi } from "@/lib/api/client";
+import { clearSignupIdentity, readSignupIdentity } from "@/lib/auth/username";
 import type { AccountType, AuthUser } from "@/lib/api/types";
 import { loginSchema, type LoginValues } from "@/lib/auth/schemas";
 import { safeLocalDestination } from "@/lib/auth/safe-destination";
@@ -58,14 +59,30 @@ export function LoginForm({
           }
         : undefined,
     );
+    const pending = readSignupIdentity(user.uid);
+    if (pending) {
+      try {
+        await communityMemberApi.updateProfile({
+          ...pending,
+          usernameClaimOnly: true,
+        });
+      } catch {
+        enterWorkspace(result.user, "/account#username-title");
+        return;
+      } finally {
+        clearSignupIdentity(user.uid);
+      }
+    }
     enterWorkspace(result.user);
   }
 
-  function enterWorkspace(user: AuthUser) {
-    const destination = safeLocalDestination(
-      next,
-      resolveDefaultWorkspace(user.roles, user.permissions ?? []),
-    );
+  function enterWorkspace(user: AuthUser, destinationOverride?: string) {
+    const destination =
+      destinationOverride ??
+      safeLocalDestination(
+        next,
+        resolveDefaultWorkspace(user.roles, user.permissions ?? []),
+      );
     queryClient.setQueryData(["auth", "me"], user);
     broadcastAuthSessionChange();
     setNavigating(true);
@@ -230,7 +247,7 @@ export function LoginForm({
             autoCapitalize="none"
             autoCorrect="off"
             error={errors.email?.message}
-            label="Email hoặc tên đăng nhập"
+            label="Email hoặc Username"
             hint="Dùng email hoặc tên đăng nhập đã đăng ký. Tên hiển thị không dùng để đăng nhập."
             type="text"
             {...register("email")}

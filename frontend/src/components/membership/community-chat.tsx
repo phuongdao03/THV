@@ -645,6 +645,7 @@ export function CommunityChat({
                             {message.username ? (
                               <CommunityUserIdentity
                                 size={36}
+                                showHandle={false}
                                 user={{
                                   ...message,
                                   username: message.username,

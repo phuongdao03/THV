@@ -606,6 +606,7 @@ class Settings(BaseSettings):
         le=20_971_520,
     )
     community_post_image_max_count: int = Field(default=5, ge=1, le=10)
+    community_username_cooldown_days: int = Field(default=30, ge=0, le=365)
     engagement_view_dedupe_ttl_seconds: int = Field(
         default=86_400,
         ge=60,

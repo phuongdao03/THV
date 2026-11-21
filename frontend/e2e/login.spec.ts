@@ -115,7 +115,20 @@ test("a public account can choose an applicant profile without a false expired-s
 test("email signup sends branded verification without exposing internal access", async ({
   page,
 }) => {
+  await page.route("**/api/v1/community/username-availability?*", (route) =>
+    route.fulfill({ json: { success: true, data: { available: true } } }),
+  );
   await page.goto("/register");
+  for (const width of [320, 375, 390, 400, 768]) {
+    await page.setViewportSize({ width, height: 820 });
+    await expect(page.getByLabel("Username")).toBeVisible();
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth),
+    ).toBeLessThanOrEqual(width);
+  }
+  await page.getByLabel("Tên hiển thị").fill("Minh Anh");
+  await page.getByLabel("Username").fill("MinhAnh_03");
+  await expect(page.getByText("Username có thể sử dụng.")).toBeVisible();
   await page
     .getByRole("textbox", { name: /^Email/ })
     .fill("new-applicant@tinhhoaviet.org.vn");

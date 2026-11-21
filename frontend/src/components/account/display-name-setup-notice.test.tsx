@@ -5,11 +5,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DisplayNameSetupNotice } from "@/components/account/display-name-setup-notice";
 
-const api = vi.hoisted(() => ({ get: vi.fn() }));
+const api = vi.hoisted(() => ({ get: vi.fn(), currentProfile: vi.fn() }));
 const location = vi.hoisted(() => ({ path: "/workspace" }));
 vi.mock("next/navigation", () => ({ usePathname: () => location.path }));
 const auth = vi.hoisted(() => ({ user: null as null | { id: string } }));
-vi.mock("@/lib/api/client", () => ({ profileApi: api }));
+vi.mock("@/lib/api/client", () => ({
+  profileApi: api,
+  communityMemberApi: api,
+}));
 vi.mock("@/lib/auth/user-context", () => ({ useAuthUser: () => auth.user }));
 
 function wrapper({ children }: { children: ReactNode }) {
@@ -23,6 +26,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   sessionStorage.clear();
   location.path = "/workspace";
+  api.currentProfile.mockResolvedValue({ username: "lan_anh" });
   auth.user = { id: "member-1" };
 });
 

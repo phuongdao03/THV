@@ -10,8 +10,10 @@ import { communityReplyQuote } from "@/components/community/community-quote";
 import {
   CommunityMembershipBadge,
   CommunityProfilePreview,
+  CommunityPublicHandle,
   CommunityRoleBadge,
   isMembershipStaffIdentity,
+  hasPublicUsername,
 } from "@/components/community/community-user-identity";
 import { MembershipAvatar } from "@/components/ui/membership-avatar";
 import { communityApi } from "@/lib/api/client";
@@ -745,6 +747,14 @@ function CommentBody({
                   roleLabel={author.roleLabel}
                 />
               </div>
+              {hasPublicUsername(author.username) ? (
+                <CommunityProfilePreview
+                  user={author}
+                  className="block max-w-full truncate text-xs text-[var(--theme-muted)]"
+                >
+                  <CommunityPublicHandle username={author.username} />
+                </CommunityProfilePreview>
+              ) : null}
               <a
                 aria-label={`Liên kết đến bình luận của ${name}`}
                 className="mt-0.5 inline-block rounded-sm text-xs text-[var(--theme-muted)] underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)]"

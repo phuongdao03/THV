@@ -5,7 +5,8 @@ import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { LoginForm } from "@/components/auth/login-form";
-import { ApiError, authApi } from "@/lib/api/client";
+import { ApiError, authApi, communityMemberApi } from "@/lib/api/client";
+import { saveSignupIdentity } from "@/lib/auth/username";
 
 const replace = vi.fn();
 const refresh = vi.fn();
@@ -58,6 +59,7 @@ describe("LoginForm", () => {
   });
   beforeEach(() => {
     vi.restoreAllMocks();
+    localStorage.clear();
     replace.mockReset();
     refresh.mockReset();
     signInWithEmailAndPassword.mockReset();
@@ -184,6 +186,51 @@ describe("LoginForm", () => {
     await userEvent.click(screen.getByRole("button", { name: "Đăng nhập" }));
 
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/workspace"));
+  });
+
+  it("claims the signup username only after the verified Firebase exchange", async () => {
+    saveSignupIdentity("firebase-new", {
+      username: "minh_anh",
+      displayName: "Minh Anh",
+    });
+    signInWithEmailAndPassword.mockResolvedValue({
+      user: {
+        uid: "firebase-new",
+        emailVerified: true,
+        getIdToken: async () => "verified-token",
+      },
+    });
+    const exchange = vi
+      .spyOn(authApi, "exchangeFirebaseToken")
+      .mockResolvedValue({
+        user: {
+          id: "new-user",
+          email: "mine@example.com",
+          roles: ["USER"],
+          accountType: null,
+        },
+      });
+    const claim = vi
+      .spyOn(communityMemberApi, "updateProfile")
+      .mockImplementation(async () => {
+        expect(exchange).toHaveBeenCalledOnce();
+        throw new ApiError("Unavailable", "COMMUNITY_CONFLICT", 409);
+      });
+    render(<LoginForm />, { wrapper: Wrapper });
+    await userEvent.type(
+      screen.getByRole("textbox", { name: /^Email/ }),
+      "mine@example.com",
+    );
+    await userEvent.type(screen.getByLabelText("Mật khẩu"), "correct password");
+    await userEvent.click(screen.getByRole("button", { name: "Đăng nhập" }));
+    await waitFor(() =>
+      expect(replace).toHaveBeenCalledWith("/account#username-title"),
+    );
+    expect(claim).toHaveBeenCalledWith({
+      username: "minh_anh",
+      displayName: "Minh Anh",
+      usernameClaimOnly: true,
+    });
   });
 
   it("routes a data manager to the dedicated workspace after direct login", async () => {

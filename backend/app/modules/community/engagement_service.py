@@ -1,6 +1,6 @@
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Literal, TypeVar
 from urllib.parse import quote
 from uuid import UUID, uuid4, uuid5
@@ -9,6 +9,9 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.errors import DomainError
+from app.modules.audit.service import AuditService
+from app.modules.auth.models import AuthSession, User
 from app.modules.auth.session_service import AuthPrincipal
 from app.modules.community.engagement_repository import (
     CommunityCommentPage,
@@ -38,8 +41,10 @@ from app.modules.community.models import (
     CommunityMemberRestriction,
     CommunityPostFollow,
     CommunityProfile,
+    CommunityUsername,
 )
 from app.modules.community.service import CommunityPostPage
+from app.modules.community.usernames import GENERATED_USERNAME, public_username
 from app.modules.engagement.errors import EngagementUnavailableError
 from app.modules.engagement.redis import RedisViewDeduplicator
 from app.modules.media.models import MediaAsset, MediaConfidentiality, MediaStatus
@@ -69,11 +74,13 @@ class CommunityEngagementService:
         *,
         views: RedisViewDeduplicator | None = None,
         avatar_max_bytes: int = 5_242_880,
+        username_cooldown_days: int = 30,
     ) -> None:
         self._session = session
         self._repository = CommunityEngagementRepository(session)
         self._views = views
         self._avatar_max_bytes = avatar_max_bytes
+        self._username_cooldown_days = username_cooldown_days
 
     async def list_comments(
         self,
@@ -436,18 +443,26 @@ class CommunityEngagementService:
                     tier, -1
                 ) < 1:
                     raise CommunityForbiddenError()
-            profile = await self._ensure_community_profile(principal.user_id)
             username = payload.username
-            if (
-                "username" in payload.model_fields_set
-                and username is not None
-                and username != profile.username
-                and await self._repository.username_taken(
-                    username,
-                    except_user_id=principal.user_id,
+            if username is not None:
+                await self._session.scalar(
+                    select(User.id)
+                    .where(User.id == principal.user_id)
+                    .with_for_update()
                 )
-            ):
-                raise CommunityConflictError()
+            profile = await self._ensure_community_profile(principal.user_id)
+            if payload.username_claim_only:
+                if username is None:
+                    raise CommunityValidationError()
+                if not GENERATED_USERNAME.fullmatch(profile.username):
+                    if username != profile.username:
+                        raise CommunityConflictError()
+                    record = await self._repository.get_member_by_id(principal.user_id)
+                    if record is None:
+                        raise CommunityNotFoundError()
+                    return await self._member_view(
+                        record, viewer_user_id=principal.user_id
+                    )
             avatar_media_id = payload.avatar_media_id
             if (
                 "avatar_media_id" in payload.model_fields_set
@@ -487,7 +502,8 @@ class CommunityEngagementService:
                     if "username" in payload.model_fields_set:
                         if username is None:
                             raise CommunityConflictError()
-                        profile.username = username
+                        if username != profile.username:
+                            await self._claim_username(principal, profile, username)
                     if "display_name" in payload.model_fields_set:
                         assert public_profile is not None
                         public_profile.display_name = payload.display_name
@@ -527,6 +543,87 @@ class CommunityEngagementService:
                 record,
                 viewer_user_id=principal.user_id,
             )
+
+    async def username_available(self, value: str) -> bool:
+        name = public_username(value)
+        if name is None:
+            return False
+        async with self._session.begin():
+            if await self._session.get(CommunityUsername, name) is not None:
+                return False
+            return not await self._repository.username_taken(name)
+
+    async def _claim_username(
+        self, principal: AuthPrincipal, profile: CommunityProfile, name: str
+    ) -> None:
+        if public_username(name) != name:
+            raise CommunityValidationError()
+        if await self._session.get(
+            CommunityUsername, name
+        ) is not None or await self._repository.username_taken(name):
+            raise CommunityConflictError()
+        now = datetime.now(UTC)
+        previous = profile.username.lower()
+        if not GENERATED_USERNAME.fullmatch(previous):
+            session = await self._session.get(AuthSession, principal.session_id)
+            if (
+                session is None
+                or session.user_id != principal.user_id
+                or session.revoked_at is not None
+                or session.rotated_from_id is not None
+                or session.created_at.replace(tzinfo=UTC) < now - timedelta(minutes=10)
+            ):
+                raise DomainError(
+                    code="USERNAME_REAUTH_REQUIRED",
+                    message="Sign in again before changing your username.",
+                    status_code=403,
+                )
+            existing = await self._session.get(CommunityUsername, previous)
+            if existing is not None:
+                if (
+                    existing.user_id != principal.user_id
+                    or existing.retired_at is not None
+                ):
+                    raise CommunityConflictError()
+                if (
+                    existing.claimed_at is not None
+                    and existing.claimed_at.replace(tzinfo=UTC)
+                    + timedelta(days=self._username_cooldown_days)
+                    > now
+                ):
+                    raise DomainError(
+                        code="USERNAME_COOLDOWN",
+                        message="The username change cooldown has not elapsed.",
+                        status_code=409,
+                    )
+                existing.retired_at = now
+            else:
+                self._session.add(
+                    CommunityUsername(
+                        username=previous,
+                        user_id=principal.user_id,
+                        retired_at=now,
+                    )
+                )
+            await self._session.flush()
+        self._session.add(
+            CommunityUsername(
+                username=name,
+                user_id=principal.user_id,
+                claimed_at=now,
+            )
+        )
+        profile.username = name
+        AuditService(self._session).record(
+            action="community.username.changed",
+            actor_user_id=principal.user_id,
+            resource_type="user",
+            resource_id=str(principal.user_id),
+            before={
+                "username": None if GENERATED_USERNAME.fullmatch(previous) else previous
+            },
+            after={"username": name},
+        )
 
     async def member_relations(
         self,

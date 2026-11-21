@@ -34,6 +34,7 @@ from app.modules.community.models import (
     CommunityProfile,
     CommunityReport,
     CommunityTag,
+    CommunityUsername,
 )
 from app.modules.media.models import MediaAsset, MediaConfidentiality, MediaStatus
 from app.modules.media.types import (
@@ -163,7 +164,14 @@ class CommunityRepository:
             .join(User, User.id == CommunityProfile.user_id)
             .where(
                 User.status == UserStatus.ACTIVE,
-                func.lower(CommunityProfile.username).in_(usernames),
+                or_(
+                    func.lower(CommunityProfile.username).in_(usernames),
+                    CommunityProfile.user_id.in_(
+                        select(CommunityUsername.user_id).where(
+                            CommunityUsername.username.in_(usernames)
+                        )
+                    ),
+                ),
             )
             .order_by(CommunityProfile.username)
             .limit(20)

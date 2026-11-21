@@ -6,8 +6,9 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 
-import { profileApi } from "@/lib/api/client";
+import { communityMemberApi, profileApi } from "@/lib/api/client";
 import { useAuthUser } from "@/lib/auth/user-context";
+import { hasPublicUsername } from "@/components/community/community-user-identity";
 
 export function DisplayNameSetupNotice() {
   const user = useAuthUser();
@@ -41,8 +42,17 @@ function NameReminder({ userId }: { userId: string }) {
     enabled: !dismissed,
     staleTime: 60_000,
   });
+  const memberProfile = useQuery({
+    queryKey: ["community", "current-profile", userId],
+    queryFn: ({ signal }) => communityMemberApi.currentProfile(signal),
+    enabled: !dismissed && Boolean(profile.data?.displayName?.trim()),
+    staleTime: 60_000,
+  });
+  const hasDisplayName = Boolean(profile.data?.displayName?.trim());
+  const needsUsername =
+    memberProfile.isSuccess && !hasPublicUsername(memberProfile.data.username);
 
-  if (dismissed || !profile.data || profile.data.displayName?.trim())
+  if (dismissed || !profile.data || (hasDisplayName && !needsUsername))
     return null;
 
   return (
@@ -62,20 +72,25 @@ function NameReminder({ userId }: { userId: string }) {
           <div>
             <p>
               <span className="font-medium">
-                Bạn muốn mọi người gọi mình là gì?
+                {hasDisplayName
+                  ? "Chọn Username của bạn"
+                  : "Bạn muốn mọi người gọi mình là gì?"}
               </span>
             </p>
             <p className="text-sm text-[var(--theme-muted)]">
-              Thêm tên hiển thị để dễ nhận ra bạn trong cộng đồng. Bạn vẫn có
-              thể chuẩn bị hồ sơ ngay.
+              {hasDisplayName
+                ? "Username giúp người khác tìm và nhắc đến bạn trong cộng đồng."
+                : "Thêm tên hiển thị để dễ nhận ra bạn trong cộng đồng. Bạn vẫn có thể chuẩn bị hồ sơ ngay."}
             </p>
           </div>
         </div>
         <Link
           className="inline-flex min-h-10 shrink-0 items-center text-sm font-semibold text-[var(--theme-accent)] underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-accent)]"
-          href="/account#display-name"
+          href={
+            hasDisplayName ? "/account#username-title" : "/account#display-name"
+          }
         >
-          Thêm tên
+          {hasDisplayName ? "Chọn Username" : "Thêm tên"}
         </Link>
         <button
           type="button"

@@ -23,7 +23,7 @@ from app.modules.auth.dependencies import (
     get_current_principal,
     get_optional_current_principal,
 )
-from app.modules.auth.models import Role, User, UserRole, UserStatus
+from app.modules.auth.models import AuthSession, Role, User, UserRole, UserStatus
 from app.modules.auth.session_service import AuthPrincipal
 from app.modules.community.admin_service import CommunityAdminService
 from app.modules.community.errors import CommunityRateLimitedError
@@ -2295,6 +2295,61 @@ def test_comment_likes_and_ordered_thread_projection(tmp_path: Path) -> None:
         test_app.close()
 
 
+def test_legacy_member_can_claim_a_username_without_replacing_an_account(
+    tmp_path: Path,
+) -> None:
+    from app.modules.public.dependencies import enforce_public_engagement_rate_limit
+
+    test_app = CommunityTestApp(tmp_path)
+    test_app.app.dependency_overrides[enforce_public_engagement_rate_limit] = lambda: (
+        None
+    )
+    try:
+        test_app.set_principal(OTHER_ID)
+        endpoint = "/api/v1/community/members/me"
+        availability = "/api/v1/community/username-availability"
+        assert test_app.client.get(
+            availability, params={"username": "ADMIN_01"}
+        ).json()["data"] == {"available": False}
+        assert test_app.client.get(
+            availability, params={"username": "Minh_Anh"}
+        ).json()["data"] == {"available": True}
+        claimed = test_app.client.patch(
+            endpoint,
+            json={
+                "username": "Minh_Anh",
+                "displayName": "Minh Anh",
+                "usernameClaimOnly": True,
+            },
+        )
+        assert claimed.status_code == 200, claimed.text
+        assert claimed.json()["data"]["id"] == str(OTHER_ID)
+        assert claimed.json()["data"]["username"] == "minh_anh"
+        assert claimed.json()["data"]["displayName"] == "Minh Anh"
+        legacy = test_app.client.get(f"/api/v1/community/members/member-{OTHER_ID.hex}")
+        assert legacy.json()["data"]["id"] == str(OTHER_ID)
+        assert test_app.client.get(
+            availability, params={"username": "MINH_ANH"}
+        ).json()["data"] == {"available": False}
+        denied = test_app.client.patch(endpoint, json={"username": "other_name"})
+        assert denied.status_code == 403
+        assert denied.json()["error"]["code"] == "USERNAME_REAUTH_REQUIRED"
+        replay = test_app.client.patch(
+            endpoint,
+            json={
+                "username": "minh_anh",
+                "displayName": "Stale signup name",
+                "usernameClaimOnly": True,
+            },
+        )
+        assert replay.json()["data"]["displayName"] == "Minh Anh"
+        test_app.set_principal(OWNER_ID)
+        conflict = test_app.client.patch(endpoint, json={"username": "MINH_ANH"})
+        assert conflict.status_code == 409
+    finally:
+        test_app.close()
+
+
 def test_member_profile_edit_and_public_follower_lists_are_safe(
     tmp_path: Path,
 ) -> None:
@@ -2306,8 +2361,16 @@ def test_member_profile_edit_and_public_follower_lists_are_safe(
                 session.add(
                     CommunityProfile(
                         user_id=OTHER_ID,
-                        username="other-member",
+                        username="other_member",
                         display_name="Other public name",
+                    )
+                )
+                session.add(
+                    AuthSession(
+                        id=test_app.principal.session_id,
+                        user_id=OWNER_ID,
+                        refresh_token_hash="fixture",
+                        expires_at=datetime.now(UTC) + timedelta(hours=1),
                     )
                 )
                 await session.commit()
@@ -2316,7 +2379,7 @@ def test_member_profile_edit_and_public_follower_lists_are_safe(
         updated = test_app.client.patch(
             "/api/v1/community/members/me",
             json={
-                "username": "New_User-1",
+                "username": "New_User_1",
                 "displayName": "Edited community name",
                 "avatarUrl": "https://cdn.example.test/avatar.png",
                 "bio": "A public community biography.",
@@ -2324,7 +2387,15 @@ def test_member_profile_edit_and_public_follower_lists_are_safe(
         )
         assert updated.status_code == 200, updated.text
         profile = updated.json()["data"]
-        assert profile["username"] == "new_user-1"
+        assert profile["username"] == "new_user_1"
+        alias = test_app.client.get("/api/v1/community/members/community-owner")
+        assert alias.status_code == 200, alias.text
+        assert alias.json()["data"]["username"] == "new_user_1"
+        cooldown = test_app.client.patch(
+            "/api/v1/community/members/me", json={"username": "third_name"}
+        )
+        assert cooldown.status_code == 409
+        assert cooldown.json()["error"]["code"] == "USERNAME_COOLDOWN"
         assert profile["displayName"] == "Edited community name"
         assert profile["avatarUrl"] == "https://cdn.example.test/avatar.png"
         assert profile["bio"] == "A public community biography."
@@ -2333,7 +2404,7 @@ def test_member_profile_edit_and_public_follower_lists_are_safe(
 
         duplicate = test_app.client.patch(
             "/api/v1/community/members/me",
-            json={"username": "OTHER-MEMBER"},
+            json={"username": "OTHER_MEMBER"},
         )
         assert duplicate.status_code == 409
         invalid_avatar = test_app.client.patch(
@@ -2363,10 +2434,10 @@ def test_member_profile_edit_and_public_follower_lists_are_safe(
 
         test_app.viewer_principal = _principal(OWNER_ID)
         followers = test_app.client.get(
-            "/api/v1/community/members/new_user-1/followers?page=1&pageSize=20"
+            "/api/v1/community/members/new_user_1/followers?page=1&pageSize=20"
         )
         following = test_app.client.get(
-            "/api/v1/community/members/new_user-1/following?page=1&pageSize=20"
+            "/api/v1/community/members/new_user_1/following?page=1&pageSize=20"
         )
         assert followers.status_code == 200, followers.text
         assert following.status_code == 200, following.text
@@ -2375,7 +2446,7 @@ def test_member_profile_edit_and_public_follower_lists_are_safe(
         for page in (followers.json(), following.json()):
             assert page["data"][0] == {
                 "id": str(OTHER_ID),
-                "username": "other-member",
+                "username": "other_member",
                 "displayName": "Other public name",
                 "avatarUrl": None,
                 "roleLabel": None,
@@ -2386,7 +2457,7 @@ def test_member_profile_edit_and_public_follower_lists_are_safe(
             assert "private-other@example.test" not in str(page)
         assert (
             test_app.client.get(
-                "/api/v1/community/members/new_user-1/followers?pageSize=51"
+                "/api/v1/community/members/new_user_1/followers?pageSize=51"
             ).status_code
             == 422
         )

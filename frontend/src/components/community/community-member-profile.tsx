@@ -11,13 +11,16 @@ import { CommunityPostCard } from "@/components/community/community-post-card";
 import {
   CommunityMembershipBadge,
   CommunityProfilePreview,
+  CommunityPublicHandle,
   CommunityRoleBadge,
+  hasPublicUsername,
   isMembershipStaffIdentity,
   useCommunityFollow,
 } from "@/components/community/community-user-identity";
 import { MembershipAvatar } from "@/components/ui/membership-avatar";
 import { communityMemberApi, mediaApi } from "@/lib/api/client";
 import { useAuthUser } from "@/lib/auth/user-context";
+import { usernamePattern } from "@/lib/auth/username";
 import { mediaPolicies, uploadMedia } from "@/lib/media/upload";
 import type { CommunityMemberCard } from "@/lib/api/community-types";
 
@@ -33,10 +36,12 @@ export function CommunityMemberProfile({
   username,
   page = 1,
   view = "posts",
+  vanityRoute = false,
 }: {
   username: string;
   page?: number;
   view?: "posts" | "followers" | "following";
+  vanityRoute?: boolean;
 }) {
   const user = useAuthUser();
   const viewerKey = user?.id ?? "anonymous";
@@ -100,6 +105,14 @@ export function CommunityMemberProfile({
     enabled: view === "posts",
     staleTime: 30_000,
   });
+  const canonicalUsername = profile.data?.username;
+  useEffect(() => {
+    if (!vanityRoute || !canonicalUsername || canonicalUsername === username)
+      return;
+    router.replace(
+      `/u/${encodeURIComponent(canonicalUsername)}${window.location.search}`,
+    );
+  }, [canonicalUsername, router, username, vanityRoute]);
   const members = useQuery({
     queryKey: membersKey,
     queryFn: ({ signal }) =>
@@ -113,7 +126,7 @@ export function CommunityMemberProfile({
   const updateProfile = useMutation({
     mutationFn: () =>
       communityMemberApi.updateProfile({
-        username: draft.username.trim(),
+        ...(draft.username ? { username: draft.username } : {}),
         displayName: draft.displayName.trim() || null,
         ...(avatarMediaId !== undefined ? { avatarMediaId } : {}),
         bio: draft.bio.trim() || null,
@@ -142,7 +155,7 @@ export function CommunityMemberProfile({
         predicate: (query) =>
           query.queryKey[1] !== "member" || query.queryKey[2] !== username,
       });
-      if (result.username !== username)
+      if (!vanityRoute && result.username !== username)
         router.replace(
           `/community/members/${encodeURIComponent(result.username)}`,
         );
@@ -214,7 +227,7 @@ export function CommunityMemberProfile({
 
   function beginProfileEdit() {
     setDraft({
-      username: member.username,
+      username: hasPublicUsername(member.username) ? member.username : "",
       displayName: member.displayName || "",
       bio: member.bio || "",
       professionalTitle: member.professionalTitle || "",
@@ -306,7 +319,9 @@ export function CommunityMemberProfile({
     updateProfile.mutate();
   }
 
-  const publicPath = `/community/members/${encodeURIComponent(member.username)}`;
+  const publicPath = hasPublicUsername(member.username)
+    ? `/u/${encodeURIComponent(member.username)}`
+    : `/community/members/${encodeURIComponent(member.username)}`;
   async function shareProfile() {
     const url = new URL(publicPath, window.location.origin).href;
     if (navigator.share) {
@@ -378,9 +393,10 @@ export function CommunityMemberProfile({
                     isMembershipStaff={isMembershipStaff}
                   />
                 </div>
-                <p className="mt-1 text-sm break-all text-[var(--theme-muted)]">
-                  @{member.username}
-                </p>
+                <CommunityPublicHandle
+                  username={member.username}
+                  className="mt-1 block text-sm break-all text-[var(--theme-muted)]"
+                />
                 {member.bio ? (
                   <p className="mt-4 max-w-2xl whitespace-pre-wrap break-words text-sm leading-6 text-[var(--theme-text)] sm:text-base">
                     {member.bio}
@@ -496,13 +512,16 @@ export function CommunityMemberProfile({
                 <input
                   autoComplete="username"
                   className={profileInputClass}
-                  maxLength={30}
+                  maxLength={24}
                   minLength={3}
                   onChange={(event) =>
                     setDraft({ ...draft, username: event.target.value })
                   }
-                  pattern="[A-Za-z0-9_-]{3,30}"
-                  required
+                  pattern={
+                    draft.username === member.username
+                      ? undefined
+                      : usernamePattern.source
+                  }
                   value={draft.username}
                 />
               </label>
@@ -845,8 +864,8 @@ export function CommunityMemberProfile({
                 id="community-member-list-title"
               >
                 {view === "followers"
-                  ? `Người theo dõi của ${member.displayName || member.username}`
-                  : `${member.displayName || member.username} đang theo dõi`}
+                  ? `Người theo dõi của ${member.displayName || "thành viên"}`
+                  : `${member.displayName || "Thành viên"} đang theo dõi`}
               </h2>
               <p className="text-sm text-[var(--theme-muted)]">
                 {members.data?.meta.total ?? 0} thành viên
@@ -966,7 +985,7 @@ function MemberRow({ member }: { member: CommunityMemberCard }) {
         label={`Xem nhanh hồ sơ ${member.displayName}`}
       >
         <MembershipAvatar
-          displayName={member.displayName || member.username}
+          displayName={member.displayName || "Thành viên"}
           size={44}
           showFrame={!isMembershipStaffIdentity(member)}
           src={member.avatarUrl}
@@ -986,9 +1005,10 @@ function MemberRow({ member }: { member: CommunityMemberCard }) {
             roleLabel={member.roleLabel}
           />
         </div>
-        <p className="truncate text-sm text-[var(--theme-muted)]">
-          @{member.username}
-        </p>
+        <CommunityPublicHandle
+          username={member.username}
+          className="block truncate text-sm text-[var(--theme-muted)]"
+        />
       </div>
       {member.viewerIsFollowing ? (
         <span className="shrink-0 text-xs font-semibold text-[var(--theme-muted)]">

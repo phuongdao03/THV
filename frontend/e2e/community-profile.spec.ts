@@ -80,6 +80,9 @@ test("community Admin card and public profile work from mobile to desktop", asyn
       await trigger.press("Enter");
       const card = page.getByRole("dialog", { name: author.displayName });
       await expect(card).toBeVisible();
+      await expect(card.getByText(`@${username}`, { exact: true })).toHaveCount(
+        0,
+      );
       await expect(page.locator("html")).not.toHaveAttribute(
         "data-navigation-pending",
         "true",
@@ -121,4 +124,34 @@ test("community Admin card and public profile work from mobile to desktop", asyn
   await expect(
     page.getByRole("heading", { name: author.displayName, level: 1 }),
   ).toBeVisible();
+  await expect(page.getByText(`@${username}`, { exact: true })).toHaveCount(0);
+});
+
+test("old vanity usernames redirect to the same member's current handle", async ({
+  page,
+}) => {
+  const current = "lan_anh";
+  await page.route("**/api/v1/community/members/**", (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path.endsWith("/posts")) return route.fulfill({ json: envelope([]) });
+    return route.fulfill({
+      json: envelope({
+        ...author,
+        username: current,
+        displayName: "Lan Anh",
+        bio: null,
+        joinedAt: "2026-01-01T00:00:00Z",
+        publishedPostCount: 0,
+        followerCount: 0,
+        followingCount: 0,
+        viewerIsFollowing: false,
+      }),
+    });
+  });
+  await page.goto("/u/ten_cu");
+  await expect(page).toHaveURL(/\/u\/lan_anh$/);
+  await expect(
+    page.getByRole("heading", { name: "Lan Anh", level: 1 }),
+  ).toBeVisible();
+  await expect(page.getByText("@lan_anh", { exact: true })).toBeVisible();
 });

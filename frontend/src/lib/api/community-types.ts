@@ -140,6 +140,7 @@ export interface CommunityMemberCard {
 
 export interface CommunityProfileUpdateInput {
   username?: string;
+  usernameClaimOnly?: boolean;
   displayName?: string | null;
   avatarUrl?: string | null;
   avatarMediaId?: string | null;

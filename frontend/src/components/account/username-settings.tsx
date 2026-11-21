@@ -2,8 +2,9 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { communityMemberApi } from "@/lib/api/client";
+import { ApiError, communityMemberApi } from "@/lib/api/client";
 import { useAuthUser } from "@/lib/auth/user-context";
+import { usernamePattern } from "@/lib/auth/username";
 import { Button } from "@/components/ui/button";
 
 export function UsernameSettings() {
@@ -54,7 +55,7 @@ function UsernameEditor({ initial }: { initial: string }) {
   const save = useMutation({
     mutationFn: () =>
       communityMemberApi.updateProfile({
-        username: value.trim().toLowerCase(),
+        username: value.toLowerCase(),
       }),
     onSuccess: async () => {
       await client.invalidateQueries({ queryKey: ["community"] });
@@ -82,8 +83,8 @@ function UsernameEditor({ initial }: { initial: string }) {
           }}
           required
           minLength={3}
-          maxLength={30}
-          pattern="[A-Za-z0-9_\-]{3,30}"
+          maxLength={24}
+          pattern={usernamePattern.source}
           autoComplete="username"
           autoCapitalize="none"
           autoCorrect="off"
@@ -94,9 +95,9 @@ function UsernameEditor({ initial }: { initial: string }) {
         </Button>
       </div>
       <p className="text-xs text-[var(--theme-muted)]">
-        3–30 ký tự: chữ không dấu, số, dấu gạch ngang hoặc gạch dưới. Tài khoản
-        chỉ dùng Google cần đặt mật khẩu qua “Quên mật khẩu” trước khi đăng nhập
-        bằng username.
+        3–24 ký tự: chữ không dấu, số và dấu gạch dưới đơn. Tài khoản chỉ dùng
+        Google cần đặt mật khẩu qua “Quên mật khẩu” trước khi đăng nhập bằng
+        username.
       </p>
       {save.isSuccess && (
         <p role="status" className="text-sm">
@@ -105,8 +106,13 @@ function UsernameEditor({ initial }: { initial: string }) {
       )}
       {save.isError && (
         <p role="alert" className="text-sm text-[var(--theme-text)]">
-          Chưa lưu được username. Tên có thể đã được sử dụng hoặc không hợp lệ;
-          hãy chọn tên khác rồi thử lại.
+          {save.error instanceof ApiError &&
+          save.error.code === "USERNAME_REAUTH_REQUIRED"
+            ? "Hãy đăng nhập lại trước khi đổi Username."
+            : save.error instanceof ApiError &&
+                save.error.code === "USERNAME_COOLDOWN"
+              ? "Chưa đến thời điểm được đổi Username tiếp theo."
+              : "Chưa lưu được Username. Tên có thể đã được sử dụng hoặc không hợp lệ."}
         </p>
       )}
     </form>

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { usernameSchema } from "./username";
 
 const email = z
   .string()
@@ -29,6 +30,12 @@ export const loginSchema = z.object({
 
 export const registerSchema = z
   .object({
+    displayName: z
+      .string()
+      .trim()
+      .min(1, "Vui lòng nhập tên hiển thị.")
+      .max(120),
+    username: usernameSchema,
     email,
     password,
     confirmPassword: z.string(),

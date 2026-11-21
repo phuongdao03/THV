@@ -63,6 +63,26 @@ from app.modules.engagement.visitor import get_or_issue_engagement_visitor
 from app.modules.public.dependencies import enforce_public_engagement_rate_limit
 
 router = APIRouter(prefix="/api/v1/community", tags=["community-engagement"])
+
+
+@router.get(
+    "/username-availability",
+    response_model=SuccessEnvelope[dict[str, bool]],
+    dependencies=[Depends(enforce_public_engagement_rate_limit)],
+)
+async def username_availability(
+    request: Request,
+    response: Response,
+    service: CommunityEngagementServiceDependency,
+    username: Annotated[str, Query(max_length=64)],
+) -> SuccessEnvelope[dict[str, bool]]:
+    response.headers["Cache-Control"] = "no-store"
+    return SuccessEnvelope(
+        data={"available": await service.username_available(username)},
+        meta=ResponseMeta(request_id=request.state.request_id),
+    )
+
+
 _DELETED_COMMENT_CONTENT = "Bình luận đã bị xóa."
 _HIDDEN_COMMENT_CONTENT = "Bình luận đã bị ẩn."
 

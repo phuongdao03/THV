@@ -132,3 +132,43 @@
   uses fixture data and describes the local preview.
 - Reply, reaction, report, and attachments need chat API support. The current
   transport remains polling and room permissions remain server-controlled.
+
+## Username and public identity
+
+- Email/password signup still creates and verifies the Firebase identity using
+  the existing flow. The browser stores the selected name and display name under
+  the Firebase UID. After verified login, the application claims them through
+  the authenticated profile API. If the name becomes unavailable, the existing
+  account signs in and opens username settings. A different browser can finish
+  setup in account settings.
+- `GET /api/v1/community/username-availability` uses the public engagement rate
+  limit and returns only `available`. `PATCH /api/v1/community/members/me`
+  accepts optional `usernameClaimOnly` for idempotent first-claim requests.
+  Later changes require a fresh, unrotated session and respect
+  `COMMUNITY_USERNAME_COOLDOWN_DAYS` (default 30).
+- Migration `0178_community_usernames` backfills established names, skips
+  generated placeholders, and reserves both active and historical names in a
+  unique, normalized namespace keyed to the existing user ID. The old profile
+  username is maintained as a compatibility mirror. `/u/{username}` resolves old
+  aliases and redirects to the current username. Existing Community URLs still
+  resolve. Retired aliases resolve publicly and cannot be used to log in.
+- Apply the expansion migration before deploying the backend and then release
+  the frontend. During any mixed-version rollout or application rollback, pause
+  username writes against the older backend. Keep the expanded table so
+  historical links remain reserved. The downgrade refuses to discard existing
+  aliases. Compare case-normalized counts during staging preflight.
+- Existing email verification, password recovery, Google OAuth, session and role
+  policy continue through their existing paths. A fresh username change writes
+  an audit event. Unknown handles still return generic credential errors and
+  perform dummy password verification; Firebase provider latency has not been
+  benchmarked for timing-based enumeration.
+- The aggregate public comment-history endpoint was blocked by automatic review
+  pending an explicit visibility policy. Mentions resolve historical names to
+  the same user ID. Autocomplete and public member search beyond the existing
+  restricted directory are outside this change.
+- Local checks passed for the production frontend build, 1,183 frontend tests,
+  scoped auth and Community backend tests, and six Chrome runs. Browser cases
+  cover Firebase signup with mocked verification, the Admin fallback profile,
+  legacy vanity aliases, and registration layout from 320 to 768 px. The
+  backfill and rollback checks ran against SQLite fixtures. Staging rehearsal
+  and concurrent PostgreSQL registration still need validation.

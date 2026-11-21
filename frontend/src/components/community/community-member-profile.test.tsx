@@ -138,7 +138,7 @@ describe("CommunityMemberProfile", () => {
     ).toBeDefined();
     await user.click(screen.getByRole("button", { name: "Chia sẻ hồ sơ" }));
     expect(await navigator.clipboard.readText()).toBe(
-      new URL("/community/members/lan-anh", window.location.origin).href,
+      new URL("/u/lan-anh", window.location.origin).href,
     );
   });
 

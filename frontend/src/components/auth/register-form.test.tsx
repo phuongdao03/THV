@@ -1,9 +1,9 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { RegisterForm } from "@/components/auth/register-form";
-import { authApi } from "@/lib/api/client";
+import { authApi, communityMemberApi } from "@/lib/api/client";
 
 const replace = vi.fn();
 const refresh = vi.fn();
@@ -42,6 +42,12 @@ vi.mock("firebase/auth", () => ({
 }));
 
 describe("RegisterForm", () => {
+  beforeEach(() => {
+    vi.spyOn(communityMemberApi, "usernameAvailability").mockResolvedValue({
+      available: true,
+    });
+    localStorage.clear();
+  });
   it("preserves the intended local destination when returning to login", async () => {
     render(<RegisterForm next="/community/new?category=heritage" />);
 
@@ -89,6 +95,8 @@ describe("RegisterForm", () => {
     const fetchMock = vi.spyOn(globalThis, "fetch");
     render(<RegisterForm />);
 
+    await userEvent.type(screen.getByLabelText("Tên hiển thị"), "Minh Anh");
+    await userEvent.type(screen.getByLabelText("Username"), "MinhAnh_03");
     await userEvent.type(
       screen.getByRole("textbox", { name: "Email" }),
       "owner@cnsgroup.vn",
@@ -121,6 +129,8 @@ describe("RegisterForm", () => {
       .mockResolvedValue({ message: "sent" });
     render(<RegisterForm />);
 
+    await userEvent.type(screen.getByLabelText("Tên hiển thị"), "Minh Anh");
+    await userEvent.type(screen.getByLabelText("Username"), "MinhAnh_03");
     await userEvent.type(
       screen.getByRole("textbox", { name: "Email" }),
       "owner@cnsgroup.vn",
@@ -149,6 +159,11 @@ describe("RegisterForm", () => {
       "correct horse battery staple",
     );
     expect(sendEmail).toHaveBeenCalledWith("firebase-test-token");
+    expect(
+      JSON.parse(
+        localStorage.getItem("thv:signup-profile:firebase-user-1") ?? "null",
+      ),
+    ).toEqual({ username: "minhanh_03", displayName: "Minh Anh" });
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -164,6 +179,8 @@ describe("RegisterForm", () => {
     );
     render(<RegisterForm />);
 
+    await userEvent.type(screen.getByLabelText("Tên hiển thị"), "Minh Anh");
+    await userEvent.type(screen.getByLabelText("Username"), "MinhAnh_03");
     await userEvent.type(
       screen.getByRole("textbox", { name: "Email" }),
       "owner@cnsgroup.vn",
