@@ -7,21 +7,19 @@ import {
   Save,
   Send,
 } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 
 import { ReviewEvidenceAssessments } from "@/components/reviews/review-evidence-assessments";
+import { criterionEvidenceIssue } from "@/components/reviews/review-evidence-policy";
 import {
-  criterionEvidenceIssue,
-  criterionRequiresEvidence,
-  duplicateApprovalRationales,
-  hasRelevantContradiction,
-  verificationComplete,
-} from "@/components/reviews/review-evidence-policy";
+  completionGuidance,
+  completionTarget,
+} from "@/components/reviews/review-readiness";
 import { ReviewEvidenceSelect } from "@/components/reviews/review-evidence-select";
 import { useReviewAutosave } from "@/components/reviews/use-review-autosave";
-import { TaskNavigation } from "@/components/ui/task-navigation";
 import { Button } from "@/components/ui/button";
 import { ConfirmationDialog } from "@/components/ui/confirmation-dialog";
+import { ApiError } from "@/lib/api/client";
 import type {
   CriterionVerdict,
   CriterionVerdictOutcome,
@@ -30,14 +28,12 @@ import type {
   ReviewData,
   ReviewDraft,
   ReviewEvidenceSnapshot,
+  ReviewCompletionIssue,
+  ReviewReadiness,
   ReviewGateAnswer,
   ReviewRecommendation,
   ReviewRubric,
 } from "@/lib/api/types";
-
-type LocalVerdict = Omit<CriterionVerdict, "outcome"> & {
-  outcome: CriterionVerdictOutcome | "";
-};
 
 const outcomeOptions: Array<{
   value: CriterionVerdictOutcome;
@@ -90,7 +86,7 @@ const outcomeOptions: Array<{
 
 function recommendationFor(
   rubric: ReviewRubric,
-  verdicts: Record<string, LocalVerdict>,
+  verdicts: Record<string, CriterionVerdict>,
   gates: Record<string, ReviewGateAnswer>,
 ): ReviewRecommendation | null {
   if (rubric.criteria.some(({ key }) => !verdicts[key]?.outcome)) return null;
@@ -124,31 +120,51 @@ function resultLabel(value: ReviewRecommendation | null) {
   return "Chưa đủ thông tin để kết luận";
 }
 
+function gateOutcomeLabel(outcome?: ReviewGateAnswer["outcome"]) {
+  if (outcome === "PASS") return "Đáp ứng";
+  if (outcome === "FAIL") return "Không đáp ứng";
+  if (outcome === "NOT_APPLICABLE") return "Không áp dụng";
+  return "Chưa đánh giá";
+}
+
+function documentOutcomeLabel(status?: EvidenceAssessment["status"]) {
+  if (status === "VALID") return "Phù hợp";
+  if (status === "NEEDS_CLARIFICATION") return "Cần làm rõ";
+  if (status === "NOT_RELEVANT") return "Không liên quan";
+  return "Chưa kiểm tra";
+}
+
 export function VerdictReviewForm({
   claims = [],
   evidences,
   initialReview,
+  initialReadiness,
   isSaving,
   isSubmitting,
   onSave,
   onSubmit,
   readOnly,
-  requireEvidenceAssessments,
   rubric,
   saveError,
 }: {
   claims?: DossierClaim[];
   evidences: ReviewEvidenceSnapshot[];
   initialReview: ReviewData | null;
+  initialReadiness?: ReviewReadiness | null;
   isSaving: boolean;
   isSubmitting: boolean;
-  onSave: (draft: ReviewDraft) => Promise<void>;
+  onSave: (draft: ReviewDraft) => Promise<ReviewData | void>;
   onSubmit: () => Promise<void>;
   readOnly: boolean;
-  requireEvidenceAssessments: boolean;
   rubric: ReviewRubric;
   saveError?: Error | null;
 }) {
+  const [savedReview, setSavedReview] = useState(initialReview);
+  const savedReadiness = useRef<ReviewReadiness | null | undefined>(undefined);
+  const [serverIssues, setServerIssues] = useState<ReviewCompletionIssue[]>();
+  const [checklistOpen, setChecklistOpen] = useState(false);
+  const [selectedMediaId, setSelectedMediaId] = useState<string>();
+  const [activeIssue, setActiveIssue] = useState<ReviewCompletionIssue>();
   const [task, setTask] = useState("documents");
   const [selectedGate, setSelectedGate] = useState(rubric.gates[0]?.key ?? "");
   const [selectedCriterion, setSelectedCriterion] = useState(
@@ -169,12 +185,13 @@ export function VerdictReviewForm({
     }
   }
 
-  const [verdicts, setVerdicts] = useState<Record<string, LocalVerdict>>(() =>
-    Object.fromEntries(
-      Object.entries(initialReview?.criterionVerdicts ?? {}).map(
-        ([key, value]) => [key, value],
+  const [verdicts, setVerdicts] = useState<Record<string, CriterionVerdict>>(
+    () =>
+      Object.fromEntries(
+        Object.entries(initialReview?.criterionVerdicts ?? {}).map(
+          ([key, value]) => [key, value],
+        ),
       ),
-    ),
   );
   const [gates, setGates] = useState<Record<string, ReviewGateAnswer>>(
     () => initialReview?.gateAnswers ?? {},
@@ -195,118 +212,7 @@ export function VerdictReviewForm({
     [gates, rubric, verdicts],
   );
 
-  const repeatedRationales = useMemo(
-    () =>
-      rubric.evidencePolicyVersion === "2026.1"
-        ? duplicateApprovalRationales(verdicts)
-        : new Set<string>(),
-    [rubric.evidencePolicyVersion, verdicts],
-  );
-  const validationIssues = useMemo(() => {
-    const issues: string[] = [];
-    for (const criterion of rubric.criteria) {
-      const answer = verdicts[criterion.key];
-      if (!answer?.outcome) {
-        issues.push(`${criterion.label}: chưa chọn kết luận.`);
-        continue;
-      }
-      if (repeatedRationales.has(criterion.key)) {
-        issues.push(
-          `${criterion.label}: cần nhận định riêng cho tiêu chí, không lặp lại đoạn nhận định chung.`,
-        );
-      }
-      if (answer.rationale.trim().length < 20) {
-        issues.push(
-          `${criterion.label}: nhận định cần ít nhất 20 ký tự (hiện có ${answer.rationale.trim().length}).`,
-        );
-      }
-      if (
-        criterionRequiresEvidence(answer.outcome) &&
-        answer.evidenceMediaIds.length === 0
-      ) {
-        issues.push(`${criterion.label}: chưa chọn tài liệu dẫn chiếu.`);
-      }
-      const evidenceIssue = criterionEvidenceIssue(
-        rubric,
-        criterion,
-        answer as CriterionVerdict,
-        assessments,
-      );
-      if (evidenceIssue) issues.push(`${criterion.label}: ${evidenceIssue}`);
-    }
-    for (const gate of rubric.gates) {
-      if (!gates[gate.key] || gates[gate.key]?.outcome === "UNASSESSED") {
-        issues.push(`${gate.label}: chưa đánh giá điều kiện tiếp nhận.`);
-      }
-      const rationaleLength = gates[gate.key]?.rationale.trim().length ?? 0;
-      if (rationaleLength < 20) {
-        issues.push(
-          `${gate.label}: căn cứ cần ít nhất 20 ký tự (hiện có ${rationaleLength}).`,
-        );
-      }
-    }
-    if (requireEvidenceAssessments) {
-      for (const evidence of evidences) {
-        const assessment = assessments[evidence.mediaAssetId];
-        if (!assessment || assessment.status === "UNREVIEWED") {
-          issues.push(`${evidence.title}: chưa ghi nhận kết quả kiểm tra tệp.`);
-        }
-        if (
-          assessment?.status === "NEEDS_CLARIFICATION" &&
-          assessment.note.trim().length < 10
-        ) {
-          issues.push(`${evidence.title}: cần ghi nội dung yêu cầu làm rõ.`);
-        }
-      }
-    }
-    for (const evidence of evidences) {
-      const assessment = assessments[evidence.mediaAssetId];
-      if (assessment && !verificationComplete(assessment)) {
-        issues.push(
-          `${evidence.title}: cần ghi phương pháp, nguồn, phạm vi và giới hạn kiểm chứng.`,
-        );
-      }
-    }
-    if (
-      rubric.evidencePolicyVersion === "2026.1" &&
-      recommendation === "APPROVE" &&
-      hasRelevantContradiction(assessments)
-    ) {
-      issues.push(
-        "Còn mâu thuẫn minh chứng liên quan cần giải quyết trước khi đề nghị phê duyệt.",
-      );
-    }
-    if (recommendation === null && issues.length === 0) {
-      issues.push("Cần có ít nhất một tiêu chí áp dụng cho hồ sơ.");
-    }
-    if (
-      recommendation !== null &&
-      recommendation !== "APPROVE" &&
-      applicantFeedback.trim().length < 20
-    ) {
-      issues.push(
-        `Nội dung gửi người nộp cần ít nhất 20 ký tự (hiện có ${applicantFeedback.trim().length}).`,
-      );
-    }
-    return issues;
-  }, [
-    applicantFeedback,
-    assessments,
-    evidences,
-    gates,
-    recommendation,
-    repeatedRationales,
-    requireEvidenceAssessments,
-    rubric,
-    verdicts,
-  ]);
-
   const buildDraft = useCallback((): ReviewDraft => {
-    const criterionVerdicts = Object.fromEntries(
-      Object.entries(verdicts)
-        .filter(([, answer]) => answer.outcome)
-        .map(([key, answer]) => [key, answer as CriterionVerdict]),
-    );
     return {
       truthScore: null,
       transparencyScore: null,
@@ -322,7 +228,7 @@ export function VerdictReviewForm({
       privateNote: privateNote.trim() || null,
       gateAnswers: gates,
       specialistAnswers: {},
-      criterionVerdicts,
+      criterionVerdicts: verdicts,
       evidenceAssessments: assessments,
     };
   }, [
@@ -338,105 +244,198 @@ export function VerdictReviewForm({
   const autosaveDraft = useMemo(() => buildDraft(), [buildDraft]);
   const autosave = useReviewAutosave({
     draft: autosaveDraft,
-    onSave,
+    onSave: async (draft) => {
+      const saved = await onSave(draft);
+      if (saved) {
+        savedReadiness.current = saved.readiness;
+        setSavedReview(saved);
+        setServerIssues(undefined);
+      }
+    },
     readOnly,
   });
 
-  const complete = validationIssues.length === 0;
-  const reviewedFiles = evidences.filter(
-    (evidence) =>
-      assessments[evidence.mediaAssetId]?.status &&
-      assessments[evidence.mediaAssetId]?.status !== "UNREVIEWED",
-  ).length;
-  const completedCriteria = rubric.criteria.filter((criterion) => {
-    const answer = verdicts[criterion.key];
-    return (
-      answer?.outcome &&
-      !repeatedRationales.has(criterion.key) &&
-      answer.rationale.trim().length >= 20 &&
-      (!criterionRequiresEvidence(answer.outcome) ||
-        answer.evidenceMediaIds.length > 0) &&
-      !criterionEvidenceIssue(
-        rubric,
-        criterion,
-        answer as CriterionVerdict,
-        assessments,
-      )
+  const readiness = savedReview?.readiness ?? initialReadiness;
+  const validationIssues = serverIssues ?? readiness?.issues ?? [];
+  const savedAssessments = savedReview?.evidenceAssessments ?? {};
+  const savedVerdicts = savedReview?.criterionVerdicts ?? {};
+  const savedGates = savedReview?.gateAnswers ?? {};
+  const complete =
+    !serverIssues?.length &&
+    Boolean(readiness?.readyToSubmit) &&
+    autosave.status === "saved";
+  const blocked = (section: string, key: string) =>
+    validationIssues.some(
+      (issue) => issue.section === section && issue.entityId === key,
     );
-  }).length;
+  const reviewedFiles = evidences.filter(
+    ({ mediaAssetId }) =>
+      Boolean(
+        savedAssessments[mediaAssetId] &&
+          savedAssessments[mediaAssetId].status !== "UNREVIEWED",
+      ) && !blocked("documents", mediaAssetId),
+  ).length;
+  const completedCriteria = rubric.criteria.filter(
+    ({ key }) => Boolean(savedVerdicts[key]) && !blocked("criteria", key),
+  ).length;
+  const completedGates = rubric.gates.filter(
+    ({ key }) =>
+      Boolean(savedGates[key] && savedGates[key].outcome !== "UNASSESSED") &&
+      !blocked("conditions", key),
+  ).length;
 
-  const firstInvalidFieldId = useMemo(() => {
-    for (const criterion of rubric.criteria) {
-      const answer = verdicts[criterion.key];
-      if (repeatedRationales.has(criterion.key))
-        return `verdict-rationale-${criterion.key}`;
-      if (!answer?.outcome) return `verdict-outcome-${criterion.key}`;
-      if (answer.rationale.trim().length < 20) {
-        return `verdict-rationale-${criterion.key}`;
-      }
+  function stepProgress(section: string, completed: number, total: number) {
+    if (!total) return "Không áp dụng";
+    const hasError = validationIssues.some(
+      (issue) => issue.section === section && issue.code.endsWith("_INVALID"),
+    );
+    const status = hasError
+      ? "Cần xử lý lỗi"
+      : completed === total
+        ? "Đã hoàn tất"
+        : task === section
+          ? "Đang thực hiện"
+          : completed === 0
+            ? "Chưa bắt đầu"
+            : "Còn thiếu";
+    return `${completed}/${total} · ${status}`;
+  }
+
+  const steps = [
+    {
+      id: "documents",
+      label: "Kiểm tra tài liệu",
+      progress: stepProgress("documents", reviewedFiles, evidences.length),
+    },
+    ...(rubric.gates.length
+      ? [
+          {
+            id: "conditions",
+            label: "Điều kiện tiếp nhận",
+            progress: stepProgress(
+              "conditions",
+              completedGates,
+              rubric.gates.length,
+            ),
+          },
+        ]
+      : []),
+    {
+      id: "criteria",
+      label: "Đánh giá từng tiêu chí",
+      progress: stepProgress(
+        "criteria",
+        completedCriteria,
+        rubric.criteria.length,
+      ),
+    },
+    {
+      id: "report",
+      label: "Báo cáo",
+      progress: readOnly ? "Đã gửi" : "Chưa gửi",
+    },
+  ];
+
+  const issueLabel = (issue: ReviewCompletionIssue) =>
+    issue.label ??
+    (issue.section === "documents"
+      ? evidences.find(({ mediaAssetId }) => mediaAssetId === issue.entityId)
+          ?.title
+      : undefined) ??
+    steps.find(({ id }) => id === issue.section)?.label;
+
+  function goToIssue(issue: ReviewCompletionIssue) {
+    const step = steps.some(({ id }) => id === issue.section)
+      ? issue.section
+      : "report";
+    setTask(step);
+    setActiveIssue(issue);
+    setError("");
+    if (issue.entityId) {
       if (
-        criterionRequiresEvidence(answer.outcome) &&
-        answer.evidenceMediaIds.length === 0
-      ) {
-        return `verdict-outcome-${criterion.key}`;
+        step === "criteria" &&
+        rubric.criteria.some(({ key }) => key === issue.entityId)
+      )
+        selectCriterion(issue.entityId);
+      if (
+        step === "conditions" &&
+        rubric.gates.some(({ key }) => key === issue.entityId)
+      )
+        setSelectedGate(issue.entityId);
+      if (
+        step === "documents" &&
+        evidences.some(({ mediaAssetId }) => mediaAssetId === issue.entityId)
+      )
+        setSelectedMediaId(issue.entityId);
+    }
+    requestAnimationFrame(() => {
+      const candidate = document.getElementById(completionTarget(issue));
+      const target = candidate?.closest("[hidden]") ? null : candidate;
+      const fallback = document.getElementById(
+        step === "report" ? "review-final-result" : `review-step-${step}`,
+      );
+      const element = target ?? fallback;
+      if (!target) {
+        setError("Không tìm thấy trường chính xác. Hãy kiểm tra phần đang mở.");
+        console.warn(
+          "Review completion target unavailable",
+          issue.code,
+          issue.section,
+          issue.field,
+        );
       }
-    }
-    for (const gate of rubric.gates) {
-      if ((gates[gate.key]?.rationale.trim().length ?? 0) < 20) {
-        return `verdict-gate-rationale-${gate.key}`;
-      }
-    }
-    if (
-      recommendation !== null &&
-      recommendation !== "APPROVE" &&
-      applicantFeedback.trim().length < 20
-    ) {
-      return "verdict-feedback";
-    }
-    return null;
-  }, [
-    applicantFeedback,
-    gates,
-    recommendation,
-    rubric.criteria,
-    repeatedRationales,
-    rubric.gates,
-    verdicts,
-  ]);
+      element?.scrollIntoView?.({ block: "center" });
+      const control = target?.querySelector<HTMLElement>(
+        "input:not(:disabled), select:not(:disabled), textarea:not(:disabled), button:not(:disabled)",
+      );
+      (control ?? element)?.focus({ preventScroll: true });
+    });
+  }
+
+  const selectedIssue =
+    activeIssue &&
+    validationIssues.some(
+      (issue) => completionTarget(issue) === completionTarget(activeIssue),
+    )
+      ? activeIssue
+      : undefined;
+  const issueTarget = selectedIssue && completionTarget(selectedIssue);
+
+  function issueProps(id: string) {
+    return id === issueTarget
+      ? { "aria-invalid": true, "aria-describedby": `${id}-hint` }
+      : {};
+  }
+
+  function fieldHint(id: string) {
+    return selectedIssue && id === issueTarget ? (
+      <p
+        id={`${id}-hint`}
+        role="status"
+        className="mt-2 border-l-2 border-[var(--theme-accent)] pl-2 text-sm font-semibold"
+      >
+        {completionGuidance(selectedIssue)}
+      </p>
+    ) : null;
+  }
 
   async function prepareSubmit() {
-    if (!complete) {
-      setTask(
-        firstInvalidFieldId?.startsWith("verdict-gate")
-          ? "conditions"
-          : firstInvalidFieldId?.startsWith("verdict-feedback")
-            ? "report"
-            : "criteria",
-      );
-      setError(validationIssues[0] ?? "Phiếu còn nội dung cần hoàn tất.");
-      if (firstInvalidFieldId) {
-        const criterion = rubric.criteria.find(
-          ({ key }) =>
-            firstInvalidFieldId === `verdict-rationale-${key}` ||
-            firstInvalidFieldId === `verdict-outcome-${key}`,
-        );
-        if (criterion) setSelectedCriterion(criterion.key);
-        const gate = rubric.gates.find(
-          ({ key }) => firstInvalidFieldId === `verdict-gate-rationale-${key}`,
-        );
-        if (gate) setSelectedGate(gate.key);
-        requestAnimationFrame(() =>
-          document.getElementById(firstInvalidFieldId)?.focus(),
-        );
-      }
-      return;
-    }
+    setError("");
     try {
       await autosave.save(buildDraft());
-      setError("");
-      setConfirmOpen(true);
+      const confirmed = savedReadiness.current ?? readiness;
+      if (confirmed?.readyToSubmit) {
+        setConfirmOpen(true);
+      } else {
+        setChecklistOpen(true);
+        requestAnimationFrame(() =>
+          document.getElementById("review-completion-checklist")?.focus(),
+        );
+        if (!confirmed)
+          setError("Chưa tải được kết quả kiểm tra. Vui lòng thử lưu lại.");
+      }
     } catch {
-      setError("Chưa thể lưu phiếu. Vui lòng thử lại.");
+      setError("Chưa thể lưu phiếu. Nội dung đang nhập vẫn còn trên màn hình.");
     }
   }
 
@@ -463,9 +462,7 @@ export function VerdictReviewForm({
                 : "w-fit rounded-md bg-amber-100 px-3 py-2 text-sm font-bold text-amber-950 dark:bg-amber-950/50 dark:text-amber-100"
             }
           >
-            {complete
-              ? "Sẵn sàng gửi"
-              : `${validationIssues.length} mục còn lại`}
+            {readOnly ? "Đã gửi" : complete ? "Sẵn sàng gửi" : "Đang thẩm định"}
           </span>
         </header>
         <div
@@ -484,629 +481,804 @@ export function VerdictReviewForm({
             </strong>{" "}
             tiêu chí hoàn tất
           </span>
-          {!complete ? (
-            <p
-              className="min-w-0 basis-full border-l-2 border-[var(--theme-accent)] pl-3 text-sm font-semibold leading-5"
-              role="status"
-            >
-              Tiếp theo: {validationIssues[0]}
-            </p>
-          ) : null}
         </div>
-        <TaskNavigation
-          label="Công việc thẩm định"
-          value={task}
-          onChange={setTask}
-          items={[
-            { id: "documents", label: "Kiểm tra tài liệu" },
-            ...(rubric.gates.length
-              ? [{ id: "conditions", label: "Điều kiện tiếp nhận" }]
-              : []),
-            { id: "criteria", label: "Đánh giá từng tiêu chí" },
-            { id: "report", label: "Báo cáo" },
-          ]}
-        />
-        <form
-          className="mt-4 space-y-5"
-          onSubmit={(event) => event.preventDefault()}
-        >
-          <div hidden={task !== "documents"}>
-            <ReviewEvidenceAssessments
-              assessments={assessments}
-              evidences={evidences}
-              onChange={setAssessments}
-              readOnly={readOnly}
-            />
-          </div>
-          {rubric.gates.length ? (
-            <section
-              hidden={task !== "conditions"}
-              className="space-y-3"
-              aria-labelledby="review-conditions"
+        <div className="mt-4 grid min-w-0 gap-4 lg:grid-cols-[11rem_minmax(0,1fr)]">
+          <div className="min-w-0 space-y-3">
+            <nav
+              className="grid grid-cols-2 gap-1 lg:grid-cols-1"
+              aria-label="Công việc thẩm định"
             >
-              <h3 className="text-lg font-bold" id="review-conditions">
-                Điều kiện tiếp nhận
-              </h3>
-              <label className="block text-sm font-semibold">
-                Chọn điều kiện tiếp nhận
-                <select
-                  className="mt-2 min-h-11 w-full rounded-lg border border-[var(--theme-border)] bg-[var(--theme-surface)] px-3"
-                  value={selectedGate}
-                  onChange={(event) => setSelectedGate(event.target.value)}
+              {steps.map(({ id, label, progress }) => (
+                <button
+                  type="button"
+                  key={id}
+                  aria-label={label}
+                  aria-describedby={`review-step-progress-${id}`}
+                  aria-current={task === id ? "step" : undefined}
+                  className="block min-h-11 w-full rounded-lg px-3 py-2 text-left text-sm aria-[current=step]:bg-[var(--theme-elevated)]"
+                  onClick={() => {
+                    setTask(id);
+                    setActiveIssue(undefined);
+                  }}
                 >
-                  {rubric.gates.map((gate) => (
-                    <option key={gate.key} value={gate.key}>
-                      {gate.label} ·{" "}
-                      {gates[gate.key]?.outcome &&
-                      gates[gate.key]?.outcome !== "UNASSESSED"
-                        ? "Đã đánh giá"
-                        : "Chưa đánh giá"}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <div className="space-y-3">
-                {rubric.gates.map((gate) => {
-                  const answer = gates[gate.key] ?? {
-                    outcome: "UNASSESSED" as const,
-                    rationale: "",
-                    evidenceMediaIds: [],
-                  };
-                  return (
-                    <fieldset
-                      className="min-w-0 rounded-xl bg-[var(--theme-elevated)] p-4 sm:p-5"
-                      hidden={selectedGate !== gate.key}
-                      disabled={readOnly}
-                      key={gate.key}
+                  <span className="block font-semibold">{label}</span>
+                  <span
+                    id={`review-step-progress-${id}`}
+                    className="text-xs text-[var(--theme-muted)]"
+                  >
+                    {progress}
+                  </span>
+                </button>
+              ))}
+            </nav>
+            {!readOnly && validationIssues.length ? (
+              <Button
+                type="button"
+                variant="outline"
+                aria-expanded={checklistOpen}
+                onClick={() => setChecklistOpen(!checklistOpen)}
+              >
+                Mục cần hoàn tất ({validationIssues.length})
+              </Button>
+            ) : null}
+          </div>
+          <div className="min-w-0">
+            {checklistOpen && validationIssues.length ? (
+              <section
+                id="review-completion-checklist"
+                tabIndex={-1}
+                className="mb-4 rounded-lg border border-[var(--theme-border)] p-4"
+              >
+                <h3 className="font-bold">Nội dung cần hoàn tất</h3>
+                <ul className="mt-2 divide-y divide-[var(--theme-border)]">
+                  {validationIssues.map((issue) => (
+                    <li
+                      key={`${issue.code}:${issue.entityId ?? ""}:${issue.field}`}
+                      className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm"
                     >
-                      <legend className="px-1 font-bold">{gate.label}</legend>
-                      <p className="mt-1 text-sm leading-6 text-[var(--theme-muted)]">
-                        {gate.description}
-                      </p>
-                      <div className="mt-3 grid gap-3 md:grid-cols-[minmax(12rem,0.35fr)_minmax(0,1fr)]">
-                        <select
-                          aria-label={`Kết quả ${gate.label}`}
-                          className="min-h-11 self-start rounded-lg border bg-[var(--theme-surface)] px-3"
-                          onChange={(event) =>
-                            setGates((current) => ({
-                              ...current,
-                              [gate.key]: {
-                                ...answer,
-                                outcome: event.target
-                                  .value as ReviewGateAnswer["outcome"],
-                              },
-                            }))
-                          }
-                          value={answer.outcome}
+                      <div>
+                        <p className="font-semibold">{issueLabel(issue)}</p>
+                        <p>{completionGuidance(issue)}</p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => goToIssue(issue)}
+                        aria-label={`Đi đến ${issueLabel(issue) ?? ""} ${completionGuidance(issue)}`}
+                      >
+                        Đi đến
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ) : null}
+            <form
+              className="min-w-0 space-y-5 [&_[aria-invalid=true]]:outline-2 [&_[aria-invalid=true]]:outline-offset-2 [&_[aria-invalid=true]]:outline-[var(--theme-accent)]"
+              onSubmit={(event) => event.preventDefault()}
+            >
+              <div
+                hidden={task !== "documents"}
+                id="review-step-documents"
+                tabIndex={-1}
+              >
+                <ReviewEvidenceAssessments
+                  assessments={assessments}
+                  evidences={evidences}
+                  onChange={setAssessments}
+                  readOnly={readOnly}
+                  activeIssue={selectedIssue}
+                  savedAssessments={savedAssessments}
+                  selectedMediaId={selectedMediaId}
+                  onSelectMedia={setSelectedMediaId}
+                />
+              </div>
+              {rubric.gates.length ? (
+                <section
+                  hidden={task !== "conditions"}
+                  id="review-step-conditions"
+                  tabIndex={-1}
+                  className="space-y-3"
+                  aria-labelledby="review-conditions"
+                >
+                  <h3 className="text-lg font-bold" id="review-conditions">
+                    Điều kiện tiếp nhận
+                  </h3>
+                  <label className="block text-sm font-semibold">
+                    Chọn điều kiện tiếp nhận
+                    <select
+                      className="mt-2 min-h-11 w-full rounded-lg border border-[var(--theme-border)] bg-[var(--theme-surface)] px-3"
+                      value={selectedGate}
+                      onChange={(event) => setSelectedGate(event.target.value)}
+                    >
+                      {rubric.gates.map((gate) => (
+                        <option key={gate.key} value={gate.key}>
+                          {gate.label} ·{" "}
+                          {gates[gate.key]?.outcome &&
+                          gates[gate.key]?.outcome !== "UNASSESSED"
+                            ? "Đã đánh giá"
+                            : "Chưa đánh giá"}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <div className="space-y-3">
+                    {rubric.gates.map((gate) => {
+                      const answer = gates[gate.key] ?? {
+                        outcome: "UNASSESSED" as const,
+                        rationale: "",
+                        evidenceMediaIds: [],
+                      };
+                      return (
+                        <fieldset
+                          className="min-w-0 rounded-xl bg-[var(--theme-elevated)] p-4 sm:p-5"
+                          hidden={selectedGate !== gate.key}
+                          disabled={readOnly}
+                          key={gate.key}
                         >
-                          <option value="UNASSESSED">Chưa đánh giá</option>
-                          <option value="PASS">Đáp ứng</option>
-                          <option value="FAIL">Không đáp ứng</option>
-                          <option value="NOT_APPLICABLE">Không áp dụng</option>
-                        </select>
-                        <div>
-                          <textarea
-                            aria-label={`Căn cứ ${gate.label}`}
-                            className="min-h-28 w-full resize-y rounded-lg border bg-[var(--theme-surface)] p-3 leading-6"
-                            id={`verdict-gate-rationale-${gate.key}`}
-                            maxLength={2_000}
-                            onChange={(event) =>
+                          <legend className="px-1 font-bold">
+                            {gate.label}
+                          </legend>
+                          <p className="mt-1 text-sm leading-6 text-[var(--theme-muted)]">
+                            {gate.description}
+                          </p>
+                          <div className="mt-3 grid gap-3">
+                            <select
+                              id={`verdict-gate-outcome-${gate.key}`}
+                              {...issueProps(
+                                `verdict-gate-outcome-${gate.key}`,
+                              )}
+                              aria-label={`Kết quả ${gate.label}`}
+                              className="min-h-11 w-full min-w-0 rounded-lg border bg-[var(--theme-surface)] px-3"
+                              onChange={(event) =>
+                                setGates((current) => ({
+                                  ...current,
+                                  [gate.key]: {
+                                    ...answer,
+                                    outcome: event.target
+                                      .value as ReviewGateAnswer["outcome"],
+                                  },
+                                }))
+                              }
+                              value={answer.outcome}
+                            >
+                              <option value="UNASSESSED">Chưa đánh giá</option>
+                              <option value="PASS">Đáp ứng</option>
+                              <option value="FAIL">Không đáp ứng</option>
+                              <option value="NOT_APPLICABLE">
+                                Không áp dụng
+                              </option>
+                            </select>
+                            {fieldHint(`verdict-gate-outcome-${gate.key}`)}
+                            <div>
+                              <textarea
+                                aria-label={`Căn cứ ${gate.label}`}
+                                className="min-h-28 w-full resize-y rounded-lg border bg-[var(--theme-surface)] p-3 leading-6"
+                                id={`verdict-gate-rationale-${gate.key}`}
+                                {...issueProps(
+                                  `verdict-gate-rationale-${gate.key}`,
+                                )}
+                                maxLength={2_000}
+                                onChange={(event) =>
+                                  setGates((current) => ({
+                                    ...current,
+                                    [gate.key]: {
+                                      ...answer,
+                                      rationale: event.target.value,
+                                    },
+                                  }))
+                                }
+                                placeholder="Nêu kết quả đối chiếu (tối thiểu 20 ký tự)"
+                                value={answer.rationale}
+                              />
+                              {fieldHint(`verdict-gate-rationale-${gate.key}`)}
+                              <p className="mt-1 text-right text-xs text-[var(--theme-muted)]">
+                                {answer.rationale.trim().length >= 20
+                                  ? "Đủ độ dài căn cứ"
+                                  : `Cần thêm ${20 - answer.rationale.trim().length} ký tự`}
+                              </p>
+                            </div>
+                          </div>
+                          <ReviewEvidenceSelect
+                            disabled={readOnly}
+                            evidences={evidences}
+                            label={gate.label}
+                            onChange={(ids) =>
                               setGates((current) => ({
                                 ...current,
                                 [gate.key]: {
+                                  ...answer,
+                                  evidenceMediaIds: ids,
+                                },
+                              }))
+                            }
+                            value={answer.evidenceMediaIds}
+                          />
+                        </fieldset>
+                      );
+                    })}
+                  </div>
+                </section>
+              ) : null}
+
+              <section
+                hidden={task !== "criteria"}
+                id="review-step-criteria"
+                tabIndex={-1}
+                className="[&[hidden]]:hidden grid min-w-0 gap-4"
+                aria-labelledby="review-verdicts"
+              >
+                <div className="min-w-0">
+                  <h3 className="text-lg font-bold" id="review-verdicts">
+                    Kết luận từng tiêu chí
+                  </h3>
+                  <p className="mt-1 text-sm text-[var(--theme-muted)]">
+                    Chọn một tiêu chí để đối chiếu minh chứng và ghi nhận định.
+                    Nội dung đã nhập được giữ khi chuyển tiêu chí.
+                  </p>
+                </div>
+                <label className="text-sm font-semibold lg:hidden">
+                  Chọn tiêu chí đang đánh giá
+                  <select
+                    className="mt-2 min-h-11 w-full rounded-lg border border-[var(--theme-border)] bg-[var(--theme-surface)] px-3"
+                    value={activeCriterionKey}
+                    onChange={(event) => selectCriterion(event.target.value)}
+                  >
+                    {rubric.criteria.map((criterion, index) => (
+                      <option key={criterion.key} value={criterion.key}>
+                        {index + 1}. {criterion.label} ·{" "}
+                        {verdicts[criterion.key]?.outcome
+                          ? "Đã chọn kết luận"
+                          : "Chưa đánh giá"}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <nav
+                  aria-label="Tiến độ từng tiêu chí"
+                  className="hidden min-w-0 flex-wrap gap-2 lg:flex"
+                >
+                  {rubric.criteria.map((criterion, index) => {
+                    const isComplete =
+                      Boolean(savedVerdicts[criterion.key]) &&
+                      !blocked("criteria", criterion.key);
+                    return (
+                      <button
+                        aria-pressed={criterion.key === activeCriterionKey}
+                        aria-controls={`review-criterion-${criterion.key}`}
+                        className={[
+                          "inline-flex min-h-11 items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-accent)]",
+                          criterion.key === activeCriterionKey
+                            ? "border-[var(--theme-accent)]"
+                            : "border-transparent",
+                          isComplete
+                            ? "bg-emerald-100 text-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-100"
+                            : "bg-[var(--theme-elevated)] text-[var(--theme-text)] hover:bg-[var(--theme-border)]",
+                        ].join(" ")}
+                        onClick={() => selectCriterion(criterion.key)}
+                        type="button"
+                        key={criterion.key}
+                      >
+                        <span className="font-mono text-xs">{index + 1}</span>
+                        <span>{criterion.label}</span>
+                        <span className="text-xs opacity-75">
+                          {isComplete ? "Đã xong" : "Cần làm"}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </nav>
+                <div className="min-w-0 space-y-3">
+                  {rubric.criteria.map((criterion, index) => {
+                    const answer = verdicts[criterion.key] ?? {
+                      outcome: null,
+                      rationale: "",
+                      evidenceMediaIds: [],
+                    };
+                    const evidenceIssue = criterionEvidenceIssue(
+                      rubric,
+                      criterion,
+                      answer,
+                      assessments,
+                    );
+                    return (
+                      <fieldset
+                        hidden={criterion.key !== activeCriterionKey}
+                        tabIndex={-1}
+                        className="min-w-0 scroll-mt-28 rounded-xl border border-[var(--theme-border)] bg-[var(--theme-surface)] p-4 sm:p-5"
+                        disabled={readOnly}
+                        id={`review-criterion-${criterion.key}`}
+                        key={criterion.key}
+                      >
+                        <legend className="max-w-full px-0 font-bold">
+                          <span className="mr-2 inline-grid size-7 place-items-center rounded-full bg-[var(--theme-elevated)] text-xs text-[var(--theme-accent)]">
+                            {String(index + 1).padStart(2, "0")}
+                          </span>
+                          {criterion.label}
+                        </legend>
+                        <p className="mt-1 text-sm leading-6 text-[var(--theme-muted)]">
+                          {criterion.description}
+                        </p>
+                        {claims
+                          .filter(
+                            (claim) => claim.criterionKey === criterion.key,
+                          )
+                          .map((claim) => (
+                            <div
+                              className="mt-3 border-l-2 border-[var(--theme-accent)] bg-[var(--theme-elevated)] p-3 text-sm"
+                              key={claim.id}
+                            >
+                              <p className="font-semibold">
+                                Nhận định do người nộp khai báo
+                              </p>
+                              <p className="mt-1 whitespace-pre-wrap break-words leading-6">
+                                {claim.statement}
+                              </p>
+                              <p className="mt-2 text-xs text-[var(--theme-muted)]">
+                                {claim.evidenceMediaIds.length} tài liệu hỗ trợ.
+                                Nội dung tự khai cần được đối chiếu độc lập.
+                              </p>
+                              {claim.evidenceMediaIds.length ? (
+                                <ul className="mt-2 space-y-1">
+                                  {claim.evidenceMediaIds.map((id) => (
+                                    <li className="break-words" key={id}>
+                                      {evidences.find(
+                                        (file) => file.mediaAssetId === id,
+                                      )?.title ??
+                                        "Tài liệu không có trong phiên bản đã khóa"}
+                                    </li>
+                                  ))}
+                                </ul>
+                              ) : null}
+                            </div>
+                          ))}
+                        <fieldset className="mt-4" disabled={readOnly}>
+                          <legend className="text-sm font-bold">
+                            Chọn kết luận
+                          </legend>
+                          <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                            {outcomeOptions
+                              .filter(
+                                (option) =>
+                                  option.value !== "NOT_APPLICABLE" ||
+                                  rubric.evidencePolicyVersion !== "2026.1" ||
+                                  criterion.allowNotApplicable,
+                              )
+                              .map((option, optionIndex) => {
+                                const selected =
+                                  answer.outcome === option.value;
+                                return (
+                                  <label
+                                    className={[
+                                      "flex min-h-14 items-start gap-2.5 rounded-lg border px-3 py-2.5 transition-colors has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-[var(--theme-accent)]",
+                                      selected
+                                        ? option.selectedClass
+                                        : "border-[var(--theme-border)] bg-[var(--theme-elevated)] hover:border-[var(--theme-accent)]",
+                                      readOnly
+                                        ? "cursor-default"
+                                        : "cursor-pointer",
+                                    ].join(" ")}
+                                    key={option.value}
+                                  >
+                                    <input
+                                      aria-label={`${criterion.label}: ${option.label}`}
+                                      {...(optionIndex === 0
+                                        ? issueProps(
+                                            `verdict-outcome-${criterion.key}`,
+                                          )
+                                        : {})}
+                                      checked={selected}
+                                      className="sr-only"
+                                      disabled={readOnly}
+                                      id={
+                                        optionIndex === 0
+                                          ? `verdict-outcome-${criterion.key}`
+                                          : undefined
+                                      }
+                                      name={`verdict-outcome-${criterion.key}`}
+                                      onChange={() =>
+                                        setVerdicts((current) => ({
+                                          ...current,
+                                          [criterion.key]: {
+                                            ...answer,
+                                            outcome: option.value,
+                                          },
+                                        }))
+                                      }
+                                      type="radio"
+                                      value={option.value}
+                                    />
+                                    <span
+                                      aria-hidden="true"
+                                      className={[
+                                        "mt-1.5 size-2 shrink-0 rounded-full",
+                                        selected
+                                          ? option.markerClass
+                                          : "bg-[var(--theme-muted)]",
+                                      ].join(" ")}
+                                    />
+                                    <span>
+                                      <span className="block text-sm font-bold">
+                                        {option.label}
+                                      </span>
+                                      <span className="mt-0.5 block text-xs leading-4 opacity-75">
+                                        {option.note}
+                                      </span>
+                                    </span>
+                                  </label>
+                                );
+                              })}
+                          </div>
+                        </fieldset>
+                        <div className="mt-4">
+                          <label
+                            className="text-sm font-bold"
+                            htmlFor={`verdict-rationale-${criterion.key}`}
+                          >
+                            Nhận định và căn cứ
+                          </label>
+                          <textarea
+                            aria-label={`Nhận định ${criterion.label}`}
+                            className="mt-2 min-h-24 w-full rounded-lg border border-[var(--theme-border)] bg-[var(--theme-elevated)] p-3 text-sm leading-6"
+                            id={`verdict-rationale-${criterion.key}`}
+                            {...issueProps(
+                              `verdict-rationale-${criterion.key}`,
+                            )}
+                            maxLength={2_000}
+                            onChange={(event) =>
+                              setVerdicts((current) => ({
+                                ...current,
+                                [criterion.key]: {
                                   ...answer,
                                   rationale: event.target.value,
                                 },
                               }))
                             }
-                            placeholder="Nêu kết quả đối chiếu (tối thiểu 20 ký tự)"
+                            placeholder="Ghi rõ nội dung đã đối chiếu trong hồ sơ (tối thiểu 20 ký tự)"
                             value={answer.rationale}
                           />
+                          {fieldHint(`verdict-rationale-${criterion.key}`)}
                           <p className="mt-1 text-right text-xs text-[var(--theme-muted)]">
                             {answer.rationale.trim().length >= 20
-                              ? "Đủ độ dài căn cứ"
+                              ? "Đã đủ độ dài căn cứ"
                               : `Cần thêm ${20 - answer.rationale.trim().length} ký tự`}
                           </p>
                         </div>
-                      </div>
-                      <ReviewEvidenceSelect
-                        disabled={readOnly}
-                        evidences={evidences}
-                        label={gate.label}
-                        onChange={(ids) =>
-                          setGates((current) => ({
-                            ...current,
-                            [gate.key]: { ...answer, evidenceMediaIds: ids },
-                          }))
-                        }
-                        value={answer.evidenceMediaIds}
-                      />
-                    </fieldset>
-                  );
-                })}
-              </div>
-            </section>
-          ) : null}
-
-          <section
-            hidden={task !== "criteria"}
-            className="[&[hidden]]:hidden grid min-w-0 gap-4 lg:grid-cols-[minmax(12rem,0.3fr)_minmax(0,1fr)]"
-            aria-labelledby="review-verdicts"
-          >
-            <div className="lg:col-span-2">
-              <h3 className="text-lg font-bold" id="review-verdicts">
-                Kết luận từng tiêu chí
-              </h3>
-              <p className="mt-1 text-sm text-[var(--theme-muted)]">
-                Chọn một tiêu chí để đối chiếu minh chứng và ghi nhận định. Nội
-                dung đã nhập được giữ khi chuyển tiêu chí.
-              </p>
-            </div>
-            <label className="text-sm font-semibold lg:hidden">
-              Chọn tiêu chí đang đánh giá
-              <select
-                className="mt-2 min-h-11 w-full rounded-lg border border-[var(--theme-border)] bg-[var(--theme-surface)] px-3"
-                value={activeCriterionKey}
-                onChange={(event) => selectCriterion(event.target.value)}
-              >
-                {rubric.criteria.map((criterion, index) => (
-                  <option key={criterion.key} value={criterion.key}>
-                    {index + 1}. {criterion.label} ·{" "}
-                    {verdicts[criterion.key]?.outcome
-                      ? "Đã chọn kết luận"
-                      : "Chưa đánh giá"}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <nav
-              aria-label="Tiến độ từng tiêu chí"
-              className="hidden min-w-0 flex-wrap content-start gap-2 lg:flex lg:sticky lg:top-24 lg:flex-col lg:self-start"
-            >
-              {rubric.criteria.map((criterion, index) => {
-                const answer = verdicts[criterion.key];
-                const isComplete = Boolean(
-                  answer?.outcome &&
-                    !repeatedRationales.has(criterion.key) &&
-                    answer.rationale.trim().length >= 20 &&
-                    (!criterionRequiresEvidence(answer.outcome) ||
-                      answer.evidenceMediaIds.length > 0) &&
-                    !criterionEvidenceIssue(
-                      rubric,
-                      criterion,
-                      answer as CriterionVerdict,
-                      assessments,
-                    ),
-                );
-                return (
-                  <button
-                    aria-pressed={criterion.key === activeCriterionKey}
-                    aria-controls={`review-criterion-${criterion.key}`}
-                    className={[
-                      "inline-flex min-h-11 items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-accent)]",
-                      criterion.key === activeCriterionKey
-                        ? "border-[var(--theme-accent)]"
-                        : "border-transparent",
-                      isComplete
-                        ? "bg-emerald-100 text-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-100"
-                        : "bg-[var(--theme-elevated)] text-[var(--theme-text)] hover:bg-[var(--theme-border)]",
-                    ].join(" ")}
-                    onClick={() => selectCriterion(criterion.key)}
-                    type="button"
-                    key={criterion.key}
-                  >
-                    <span className="font-mono text-xs">{index + 1}</span>
-                    <span>{criterion.label}</span>
-                    <span className="text-xs opacity-75">
-                      {isComplete ? "Đã xong" : "Cần làm"}
-                    </span>
-                  </button>
-                );
-              })}
-            </nav>
-            <div className="min-w-0 space-y-3">
-              {rubric.criteria.map((criterion, index) => {
-                const answer = verdicts[criterion.key] ?? {
-                  outcome: "",
-                  rationale: "",
-                  evidenceMediaIds: [],
-                };
-                return (
-                  <fieldset
-                    hidden={criterion.key !== activeCriterionKey}
-                    tabIndex={-1}
-                    className="min-w-0 scroll-mt-28 rounded-xl border border-[var(--theme-border)] bg-[var(--theme-surface)] p-4 sm:p-5"
-                    disabled={readOnly}
-                    id={`review-criterion-${criterion.key}`}
-                    key={criterion.key}
-                  >
-                    <legend className="max-w-full px-0 font-bold">
-                      <span className="mr-2 inline-grid size-7 place-items-center rounded-full bg-[var(--theme-elevated)] text-xs text-[var(--theme-accent)]">
-                        {String(index + 1).padStart(2, "0")}
-                      </span>
-                      {criterion.label}
-                    </legend>
-                    <p className="mt-1 text-sm leading-6 text-[var(--theme-muted)]">
-                      {criterion.description}
-                    </p>
-                    {claims
-                      .filter((claim) => claim.criterionKey === criterion.key)
-                      .map((claim) => (
+                        {fieldHint(`verdict-outcome-${criterion.key}`)}
                         <div
-                          className="mt-3 border-l-2 border-[var(--theme-accent)] bg-[var(--theme-elevated)] p-3 text-sm"
-                          key={claim.id}
+                          id={`verdict-evidence-${criterion.key}`}
+                          {...issueProps(`verdict-evidence-${criterion.key}`)}
+                          tabIndex={-1}
                         >
-                          <p className="font-semibold">
-                            Nhận định do người nộp khai báo
-                          </p>
-                          <p className="mt-1 whitespace-pre-wrap break-words leading-6">
-                            {claim.statement}
-                          </p>
-                          <p className="mt-2 text-xs text-[var(--theme-muted)]">
-                            {claim.evidenceMediaIds.length} tài liệu hỗ trợ. Nội
-                            dung tự khai cần được đối chiếu độc lập.
-                          </p>
-                          {claim.evidenceMediaIds.length ? (
-                            <ul className="mt-2 space-y-1">
-                              {claim.evidenceMediaIds.map((id) => (
-                                <li className="break-words" key={id}>
-                                  {evidences.find(
-                                    (file) => file.mediaAssetId === id,
-                                  )?.title ??
-                                    "Tài liệu không có trong phiên bản đã khóa"}
-                                </li>
-                              ))}
-                            </ul>
+                          <ReviewEvidenceSelect
+                            disabled={
+                              readOnly || answer.outcome === "NOT_APPLICABLE"
+                            }
+                            evidences={evidences}
+                            label={criterion.label}
+                            onChange={(ids) =>
+                              setVerdicts((current) => ({
+                                ...current,
+                                [criterion.key]: {
+                                  ...answer,
+                                  evidenceMediaIds: ids,
+                                },
+                              }))
+                            }
+                            value={answer.evidenceMediaIds}
+                          />
+                          {fieldHint(`verdict-evidence-${criterion.key}`)}
+                          {evidenceIssue ? (
+                            <p className="mt-2 text-sm text-[var(--theme-muted)]">
+                              {evidenceIssue}
+                            </p>
                           ) : null}
                         </div>
-                      ))}
-                    <fieldset className="mt-4" disabled={readOnly}>
-                      <legend className="text-sm font-bold">
-                        Chọn kết luận
-                      </legend>
-                      <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                        {outcomeOptions
-                          .filter(
-                            (option) =>
-                              option.value !== "NOT_APPLICABLE" ||
-                              rubric.evidencePolicyVersion !== "2026.1" ||
-                              criterion.allowNotApplicable,
+                      </fieldset>
+                    );
+                  })}
+                  {rubric.criteria.length > 1 ? (
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--theme-border)] pt-3">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={activeCriterionIndex === 0}
+                        onClick={() =>
+                          selectCriterion(
+                            rubric.criteria[activeCriterionIndex - 1]!.key,
+                            true,
                           )
-                          .map((option, optionIndex) => {
-                            const selected = answer.outcome === option.value;
-                            return (
-                              <label
-                                className={[
-                                  "flex min-h-14 items-start gap-2.5 rounded-lg border px-3 py-2.5 transition-colors has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-[var(--theme-accent)]",
-                                  selected
-                                    ? option.selectedClass
-                                    : "border-[var(--theme-border)] bg-[var(--theme-elevated)] hover:border-[var(--theme-accent)]",
-                                  readOnly
-                                    ? "cursor-default"
-                                    : "cursor-pointer",
-                                ].join(" ")}
-                                key={option.value}
-                              >
-                                <input
-                                  aria-label={`${criterion.label}: ${option.label}`}
-                                  checked={selected}
-                                  className="sr-only"
-                                  disabled={readOnly}
-                                  id={
-                                    optionIndex === 0
-                                      ? `verdict-outcome-${criterion.key}`
-                                      : undefined
-                                  }
-                                  name={`verdict-outcome-${criterion.key}`}
-                                  onChange={() =>
-                                    setVerdicts((current) => ({
-                                      ...current,
-                                      [criterion.key]: {
-                                        ...answer,
-                                        outcome: option.value,
-                                      },
-                                    }))
-                                  }
-                                  type="radio"
-                                  value={option.value}
-                                />
-                                <span
-                                  aria-hidden="true"
-                                  className={[
-                                    "mt-1.5 size-2 shrink-0 rounded-full",
-                                    selected
-                                      ? option.markerClass
-                                      : "bg-[var(--theme-muted)]",
-                                  ].join(" ")}
-                                />
-                                <span>
-                                  <span className="block text-sm font-bold">
-                                    {option.label}
-                                  </span>
-                                  <span className="mt-0.5 block text-xs leading-4 opacity-75">
-                                    {option.note}
-                                  </span>
-                                </span>
-                              </label>
-                            );
-                          })}
-                      </div>
-                    </fieldset>
-                    <div className="mt-4">
-                      <label
-                        className="text-sm font-bold"
-                        htmlFor={`verdict-rationale-${criterion.key}`}
+                        }
                       >
-                        Nhận định và căn cứ
-                      </label>
-                      <textarea
-                        aria-label={`Nhận định ${criterion.label}`}
-                        className="mt-2 min-h-24 w-full rounded-lg border border-[var(--theme-border)] bg-[var(--theme-elevated)] p-3 text-sm leading-6"
-                        id={`verdict-rationale-${criterion.key}`}
-                        maxLength={2_000}
-                        onChange={(event) =>
-                          setVerdicts((current) => ({
-                            ...current,
-                            [criterion.key]: {
-                              ...answer,
-                              rationale: event.target.value,
-                            },
-                          }))
+                        Tiêu chí trước
+                      </Button>
+                      <span
+                        className="text-sm text-[var(--theme-muted)]"
+                        role="status"
+                      >
+                        Tiêu chí {activeCriterionIndex + 1}/
+                        {rubric.criteria.length}
+                      </span>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={
+                          activeCriterionIndex === rubric.criteria.length - 1
                         }
-                        placeholder="Ghi rõ nội dung đã đối chiếu trong hồ sơ (tối thiểu 20 ký tự)"
-                        value={answer.rationale}
-                      />
-                      <p className="mt-1 text-right text-xs text-[var(--theme-muted)]">
-                        {answer.rationale.trim().length >= 20
-                          ? "Đã đủ độ dài căn cứ"
-                          : `Cần thêm ${20 - answer.rationale.trim().length} ký tự`}
-                      </p>
+                        onClick={() =>
+                          selectCriterion(
+                            rubric.criteria[activeCriterionIndex + 1]!.key,
+                            true,
+                          )
+                        }
+                      >
+                        Tiêu chí tiếp theo
+                      </Button>
                     </div>
-                    <ReviewEvidenceSelect
-                      disabled={readOnly || answer.outcome === "NOT_APPLICABLE"}
-                      evidences={evidences}
-                      label={criterion.label}
-                      onChange={(ids) =>
-                        setVerdicts((current) => ({
-                          ...current,
-                          [criterion.key]: { ...answer, evidenceMediaIds: ids },
-                        }))
-                      }
-                      value={answer.evidenceMediaIds}
-                    />
-                  </fieldset>
-                );
-              })}
-              {rubric.criteria.length > 1 ? (
-                <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--theme-border)] pt-3">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    disabled={activeCriterionIndex === 0}
-                    onClick={() =>
-                      selectCriterion(
-                        rubric.criteria[activeCriterionIndex - 1]!.key,
-                        true,
-                      )
-                    }
-                  >
-                    Tiêu chí trước
-                  </Button>
-                  <span
-                    className="text-sm text-[var(--theme-muted)]"
-                    role="status"
-                  >
-                    Tiêu chí {activeCriterionIndex + 1}/{rubric.criteria.length}
-                  </span>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    disabled={
-                      activeCriterionIndex === rubric.criteria.length - 1
-                    }
-                    onClick={() =>
-                      selectCriterion(
-                        rubric.criteria[activeCriterionIndex + 1]!.key,
-                        true,
-                      )
-                    }
-                  >
-                    Tiêu chí tiếp theo
-                  </Button>
+                  ) : null}
                 </div>
-              ) : null}
-            </div>
-          </section>
+              </section>
 
-          <section
-            hidden={task !== "report"}
-            className="[&[hidden]]:hidden grid scroll-mt-24 gap-4 rounded-xl bg-[var(--theme-elevated)] p-4 sm:grid-cols-2 sm:p-5"
-            id="review-final-result"
-          >
-            <div className="sm:col-span-2">
-              <h3 className="text-lg font-bold">Tổng hợp thẩm định</h3>
-              <p className="mt-2 text-sm">
-                Đã hoàn tất {completedCriteria}/{rubric.criteria.length} tiêu
-                chí · Đã kiểm tra {reviewedFiles}/{evidences.length} tài liệu
-              </p>
-              <dl className="mt-3 grid grid-cols-2 gap-3 border-y border-[var(--theme-border)] py-3 sm:grid-cols-4">
-                {outcomeOptions
-                  .filter((option) => option.value !== "NOT_APPLICABLE")
-                  .map((option) => (
-                    <div key={option.value}>
-                      <dt className="text-xs text-[var(--theme-muted)]">
-                        {option.label}
-                      </dt>
-                      <dd className="mt-1 font-bold tabular-nums">
-                        {
-                          Object.values(verdicts).filter(
-                            (verdict) => verdict.outcome === option.value,
-                          ).length
-                        }
-                      </dd>
-                    </div>
-                  ))}
-              </dl>
-              <ul className="mt-3 space-y-2 text-sm">
-                {rubric.criteria.map((criterion) => (
-                  <li
-                    key={criterion.key}
-                    className="flex flex-wrap justify-between gap-2 border-b border-[var(--theme-border)] pb-2"
+              <section
+                hidden={task !== "report"}
+                className="[&[hidden]]:hidden grid scroll-mt-24 gap-4 rounded-xl bg-[var(--theme-elevated)] p-4 sm:grid-cols-2 sm:p-5"
+                id="review-final-result"
+                tabIndex={-1}
+              >
+                <div className="sm:col-span-2">
+                  <h3 className="text-lg font-bold">Tổng hợp thẩm định</h3>
+                  {rubric.gates.length ? (
+                    <details className="mt-3 border-b border-[var(--theme-border)] py-2 text-sm">
+                      <summary className="cursor-pointer font-semibold">
+                        Điều kiện tiếp nhận · {completedGates}/
+                        {rubric.gates.length}
+                      </summary>
+                      <ul className="space-y-2 py-2">
+                        {rubric.gates.map(({ key, label }) => (
+                          <li key={key}>
+                            <strong>{label}</strong> ·{" "}
+                            {gateOutcomeLabel(savedGates[key]?.outcome)}
+                            {savedGates[key]?.rationale ? (
+                              <p className="break-words text-[var(--theme-muted)]">
+                                {savedGates[key].rationale}
+                              </p>
+                            ) : null}
+                          </li>
+                        ))}
+                      </ul>
+                    </details>
+                  ) : null}
+                  {evidences.length ? (
+                    <details className="border-b border-[var(--theme-border)] py-2 text-sm">
+                      <summary className="cursor-pointer font-semibold">
+                        Minh chứng · {reviewedFiles}/{evidences.length}
+                      </summary>
+                      <ul className="space-y-2 py-2">
+                        {evidences.map(({ title, mediaAssetId }) => {
+                          const assessment = savedAssessments[mediaAssetId];
+                          return (
+                            <li key={mediaAssetId}>
+                              <strong>{title}</strong> ·{" "}
+                              {documentOutcomeLabel(assessment?.status)}
+                              {assessment?.note ? (
+                                <p className="break-words text-[var(--theme-muted)]">
+                                  {assessment.note}
+                                </p>
+                              ) : null}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </details>
+                  ) : null}
+                  <p className="mt-2 text-sm">
+                    Đã hoàn tất {completedCriteria}/{rubric.criteria.length}{" "}
+                    tiêu chí · Đã kiểm tra {reviewedFiles}/{evidences.length}{" "}
+                    tài liệu
+                  </p>
+                  <dl className="mt-3 grid grid-cols-2 gap-3 border-y border-[var(--theme-border)] py-3 sm:grid-cols-4">
+                    {outcomeOptions
+                      .filter((option) => option.value !== "NOT_APPLICABLE")
+                      .map((option) => (
+                        <div key={option.value}>
+                          <dt className="text-xs text-[var(--theme-muted)]">
+                            {option.label}
+                          </dt>
+                          <dd className="mt-1 font-bold tabular-nums">
+                            {
+                              Object.values(savedVerdicts).filter(
+                                (verdict) => verdict.outcome === option.value,
+                              ).length
+                            }
+                          </dd>
+                        </div>
+                      ))}
+                  </dl>
+                  <ul className="mt-3 space-y-2 text-sm">
+                    {rubric.criteria.map((criterion) => {
+                      const saved = savedVerdicts[criterion.key];
+                      const referenced = evidences.filter(({ mediaAssetId }) =>
+                        saved?.evidenceMediaIds.includes(mediaAssetId),
+                      );
+                      return (
+                        <li
+                          key={criterion.key}
+                          className="flex flex-wrap justify-between gap-2 border-b border-[var(--theme-border)] pb-2"
+                        >
+                          <button
+                            type="button"
+                            className="min-h-11 text-left font-semibold text-[var(--theme-accent)]"
+                            onClick={() => {
+                              setTask("criteria");
+                              selectCriterion(criterion.key);
+                            }}
+                          >
+                            {criterion.label}
+                          </button>
+                          <span>
+                            {outcomeOptions.find(
+                              (option) => option.value === saved?.outcome,
+                            )?.label ?? "Chưa đánh giá"}
+                          </span>
+                          {saved?.rationale ? (
+                            <p className="basis-full break-words text-[var(--theme-muted)]">
+                              {saved.rationale}
+                            </p>
+                          ) : null}
+                          {referenced.length ? (
+                            <p className="basis-full break-words text-xs text-[var(--theme-muted)]">
+                              Dẫn chiếu ·{" "}
+                              {referenced.map(({ title }) => title).join(", ")}
+                            </p>
+                          ) : null}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+                <div
+                  className="border-l-2 border-[var(--theme-accent)] pl-4"
+                  role="status"
+                >
+                  <p className="text-xs font-bold uppercase tracking-wider text-[var(--theme-muted)]">
+                    Kết quả từ các tiêu chí
+                  </p>
+                  <p className="mt-2 text-lg font-bold">
+                    {resultLabel(savedReview?.recommendation ?? null)}
+                  </p>
+                </div>
+                <div>
+                  <label
+                    className="text-sm font-bold"
+                    htmlFor="verdict-feedback"
                   >
-                    <button
-                      type="button"
-                      className="min-h-11 text-left font-semibold text-[var(--theme-accent)]"
-                      onClick={() => {
-                        setTask("criteria");
-                        selectCriterion(criterion.key);
-                      }}
-                    >
-                      {criterion.label}
-                    </button>
-                    <span>
-                      {outcomeOptions.find(
-                        (option) =>
-                          option.value === verdicts[criterion.key]?.outcome,
-                      )?.label ?? "Chưa đánh giá"}
+                    Nội dung gửi người nộp
+                  </label>
+                  <textarea
+                    className="mt-2 min-h-24 w-full rounded-xl border bg-[var(--theme-surface)] p-3"
+                    disabled={readOnly}
+                    id="verdict-feedback"
+                    {...issueProps("verdict-feedback")}
+                    onChange={(event) =>
+                      setApplicantFeedback(event.target.value)
+                    }
+                    placeholder="Nêu rõ nội dung cần bổ sung hoặc lý do không đáp ứng"
+                    value={applicantFeedback}
+                  />
+                  {fieldHint("verdict-feedback")}
+                </div>
+                <details
+                  className="rounded-lg bg-[var(--theme-surface)] p-3 sm:col-span-2"
+                  open={Boolean(privateNote)}
+                >
+                  <summary className="cursor-pointer text-sm font-bold">
+                    Ghi chú nội bộ
+                    <span className="ml-2 text-xs font-normal text-[var(--theme-muted)]">
+                      Chỉ kiểm duyệt viên xem
                     </span>
-                  </li>
-                ))}
-              </ul>
-              {validationIssues.length ? (
-                <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-[var(--theme-muted)]">
-                  {validationIssues.map((issue) => (
-                    <li key={issue}>{issue}</li>
-                  ))}
-                </ul>
-              ) : null}
-            </div>
-            <div
-              className="border-l-2 border-[var(--theme-accent)] pl-4"
-              role="status"
-            >
-              <p className="text-xs font-bold uppercase tracking-wider text-[var(--theme-muted)]">
-                Kết quả từ các tiêu chí
-              </p>
-              <p className="mt-2 text-lg font-bold">
-                {resultLabel(recommendation)}
-              </p>
-            </div>
-            <div>
-              <label className="text-sm font-bold" htmlFor="verdict-feedback">
-                Nội dung gửi người nộp
-              </label>
-              <textarea
-                className="mt-2 min-h-24 w-full rounded-xl border bg-[var(--theme-surface)] p-3"
-                disabled={readOnly}
-                id="verdict-feedback"
-                onChange={(event) => setApplicantFeedback(event.target.value)}
-                placeholder="Nêu rõ nội dung cần bổ sung hoặc lý do không đáp ứng"
-                value={applicantFeedback}
-              />
-            </div>
-            <details
-              className="rounded-lg bg-[var(--theme-surface)] p-3 sm:col-span-2"
-              open={Boolean(privateNote)}
-            >
-              <summary className="cursor-pointer text-sm font-bold">
-                Ghi chú nội bộ
-                <span className="ml-2 text-xs font-normal text-[var(--theme-muted)]">
-                  Chỉ kiểm duyệt viên xem
-                </span>
-              </summary>
-              <label
-                className="mt-3 block text-sm font-semibold"
-                htmlFor="verdict-private-note"
-              >
-                Ghi chú cho nhóm xử lý
-              </label>
-              <textarea
-                className="mt-2 min-h-20 w-full rounded-lg border border-[var(--theme-border)] bg-[var(--theme-elevated)] p-3 text-sm"
-                disabled={readOnly}
-                id="verdict-private-note"
-                onChange={(event) => setPrivateNote(event.target.value)}
-                value={privateNote}
-              />
-            </details>
-          </section>
+                  </summary>
+                  <label
+                    className="mt-3 block text-sm font-semibold"
+                    htmlFor="verdict-private-note"
+                  >
+                    Ghi chú cho nhóm xử lý
+                  </label>
+                  <textarea
+                    className="mt-2 min-h-20 w-full rounded-lg border border-[var(--theme-border)] bg-[var(--theme-elevated)] p-3 text-sm"
+                    disabled={readOnly}
+                    id="verdict-private-note"
+                    onChange={(event) => setPrivateNote(event.target.value)}
+                    value={privateNote}
+                  />
+                </details>
+              </section>
 
-          {error ? (
-            <p className="text-sm font-semibold text-red-700" role="alert">
-              {error}
-            </p>
-          ) : null}
-          <div className="review-submit-bar sticky bottom-0 z-20 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-t-xl bg-[var(--theme-surface)]/95 px-4 py-2 shadow-[0_-8px_24px_rgb(15_23_42_/_10%)] backdrop-blur sm:px-5">
-            <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1">
-              <p
-                aria-live="polite"
-                className="flex items-center gap-2 text-xs font-semibold text-[var(--theme-muted)]"
-                data-testid="review-save-status"
-                role={
-                  saveError || autosave.status === "error" ? "alert" : "status"
-                }
-              >
-                {readOnly ? (
-                  <>
-                    <CheckCircle2 className="size-4" />
-                    Kết quả đã gửi.
-                  </>
-                ) : saveError || autosave.status === "error" ? (
-                  <>
-                    <AlertCircle className="size-4 text-red-700" />
-                    Chưa lưu được bản nháp.
-                  </>
-                ) : isSaving ||
-                  autosave.status === "saving" ||
-                  autosave.status === "pending" ? (
-                  <>
-                    <LoaderCircle className="size-4 animate-spin" />
-                    {autosave.status === "pending"
-                      ? "Có thay đổi chưa lưu…"
-                      : "Đang lưu thay đổi…"}
-                  </>
-                ) : (
-                  <>
-                    <Save className="size-4" />
-                    Đã lưu bản nháp.
-                  </>
-                )}
-              </p>
-              <p className="text-sm font-bold text-[var(--theme-text)]">
-                {complete
-                  ? resultLabel(recommendation)
-                  : `${validationIssues.length} mục còn lại trước khi gửi`}
-              </p>
-            </div>
-            {!readOnly ? (
-              <Button
-                type="button"
-                variant="outline"
-                disabled={isSaving || isSubmitting}
-                onClick={() =>
-                  void autosave
-                    .save(buildDraft())
-                    .catch(() =>
-                      setError("Chưa thể lưu phiếu. Vui lòng thử lại."),
-                    )
-                }
-              >
-                {saveError || autosave.status === "error"
-                  ? "Thử lưu lại"
-                  : "Lưu bản nháp"}
-              </Button>
-            ) : null}
-            {!readOnly ? (
-              <Button
-                disabled={isSaving || isSubmitting}
-                onClick={() => void prepareSubmit()}
-                type="button"
-              >
-                <Send className="size-4" />
-                Gửi kết quả thẩm định
-              </Button>
-            ) : null}
+              {error ? (
+                <p className="text-sm font-semibold text-red-700" role="alert">
+                  {error}
+                </p>
+              ) : null}
+              <div className="review-submit-bar lg:sticky lg:bottom-0 z-20 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-t-xl bg-[var(--theme-surface)]/95 px-4 py-2 shadow-[0_-8px_24px_rgb(15_23_42_/_10%)] backdrop-blur sm:px-5">
+                <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1">
+                  <p
+                    aria-live="polite"
+                    className="flex items-center gap-2 text-xs font-semibold text-[var(--theme-muted)]"
+                    data-testid="review-save-status"
+                    role={
+                      saveError || autosave.status === "error"
+                        ? "alert"
+                        : "status"
+                    }
+                  >
+                    {readOnly ? (
+                      <>
+                        <CheckCircle2 className="size-4" />
+                        Kết quả đã gửi.
+                      </>
+                    ) : saveError || autosave.status === "error" ? (
+                      <>
+                        <AlertCircle className="size-4 text-red-700" />
+                        {saveError instanceof ApiError &&
+                        saveError.code === "REVIEW_CONFLICT"
+                          ? "Phiên bản hồ sơ hoặc bản nháp đã thay đổi. Hãy sao chép nội dung đang nhập trước khi tải lại."
+                          : "Chưa lưu được bản nháp."}
+                      </>
+                    ) : isSaving ||
+                      autosave.status === "saving" ||
+                      autosave.status === "pending" ? (
+                      <>
+                        <LoaderCircle className="size-4 animate-spin" />
+                        {autosave.status === "pending"
+                          ? "Có thay đổi chưa lưu…"
+                          : "Đang lưu thay đổi…"}
+                      </>
+                    ) : (
+                      <>
+                        <Save className="size-4" />
+                        {savedReview
+                          ? "Đã lưu bản nháp."
+                          : "Chưa có bản nháp đã lưu."}
+                      </>
+                    )}
+                  </p>
+                  <p className="text-sm font-bold text-[var(--theme-text)]">
+                    {complete
+                      ? resultLabel(recommendation)
+                      : "Kiểm tra bản nháp trước khi gửi"}
+                  </p>
+                </div>
+                {!readOnly ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={isSaving || isSubmitting}
+                    onClick={() =>
+                      void autosave
+                        .save(buildDraft())
+                        .catch(() =>
+                          setError("Chưa thể lưu phiếu. Vui lòng thử lại."),
+                        )
+                    }
+                  >
+                    {saveError || autosave.status === "error"
+                      ? "Thử lưu lại"
+                      : "Lưu bản nháp"}
+                  </Button>
+                ) : null}
+                {!readOnly ? (
+                  <Button
+                    disabled={isSaving || isSubmitting}
+                    onClick={() => void prepareSubmit()}
+                    type="button"
+                  >
+                    <Send className="size-4" />
+                    {complete ? "Gửi kết quả thẩm định" : "Kiểm tra để gửi"}
+                  </Button>
+                ) : null}
+              </div>
+            </form>
           </div>
-        </form>
+        </div>
       </section>
       <ConfirmationDialog
         confirmLabel="Xác nhận gửi"
@@ -1116,9 +1288,24 @@ export function VerdictReviewForm({
         onConfirm={() =>
           void onSubmit()
             .then(() => setConfirmOpen(false))
-            .catch(() => undefined)
+            .catch((failure: unknown) => {
+              setConfirmOpen(false);
+              if (failure instanceof ApiError && failure.details?.readiness) {
+                const result = failure.details.readiness as ReviewReadiness;
+                savedReadiness.current = result;
+                setServerIssues(result.issues);
+                setChecklistOpen(true);
+                requestAnimationFrame(() =>
+                  document
+                    .getElementById("review-completion-checklist")
+                    ?.focus(),
+                );
+              } else {
+                setError("Chưa thể gửi kết quả. Kiểm tra bản nháp và thử lại.");
+              }
+            })
         }
-        open={confirmOpen}
+        open={confirmOpen && (complete || isSubmitting)}
         title="Xác nhận gửi kết quả"
       />
     </>

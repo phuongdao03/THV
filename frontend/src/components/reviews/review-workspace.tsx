@@ -22,7 +22,7 @@ import { TaskNavigation } from "@/components/ui/task-navigation";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { WorkflowNextStep } from "@/components/ui/workflow-next-step";
-import { reviewApi } from "@/lib/api/client";
+import { ApiError, reviewApi } from "@/lib/api/client";
 import type { ReviewAssignmentDetail, ReviewDraft } from "@/lib/api/types";
 import { reviewKeys } from "@/lib/reviews/query-keys";
 
@@ -66,6 +66,7 @@ export function reviewDeadlineState(dueAt: string | null, now = new Date()) {
 
 export function ReviewWorkspace({ assignmentId }: { assignmentId: string }) {
   const draftTokens = useRef(new Map<string, string>());
+  const [evidenceOpen, setEvidenceOpen] = useState(true);
   const [workspaceView, setWorkspaceView] = useState("assessment");
   const queryClient = useQueryClient();
   const [showConflictReason, setShowConflictReason] = useState(false);
@@ -106,7 +107,12 @@ export function ReviewWorkspace({ assignmentId }: { assignmentId: string }) {
     },
   });
   const submit = useMutation({
-    mutationFn: () => reviewApi.submit(assignmentId),
+    mutationFn: () => {
+      const token = draftTokens.current.get(draftKey);
+      return token && token !== "new"
+        ? reviewApi.submit(assignmentId, token)
+        : reviewApi.submit(assignmentId);
+    },
     onSuccess: (review) => {
       queryClient.setQueryData<ReviewAssignmentDetail>(
         reviewKeys.detail(assignmentId),
@@ -147,6 +153,12 @@ export function ReviewWorkspace({ assignmentId }: { assignmentId: string }) {
   }
 
   const detail = query.data;
+  const hasCompletionResponse =
+    submit.error &&
+    submit.error instanceof ApiError &&
+    Boolean(submit.error.details?.readiness);
+  const actionError =
+    (hasCompletionResponse ? null : submit.error) ?? save.error;
   const deadline = reviewDeadlineState(detail.assignment.dueAt);
   const evidenceCount = detail.snapshotJson?.evidences.length ?? 0;
   const terminal = ["CONFLICTED", "CANCELLED"].includes(
@@ -303,7 +315,7 @@ export function ReviewWorkspace({ assignmentId }: { assignmentId: string }) {
           {...detail.workflowProgress}
         />
       ) : null}
-      {save.error || submit.error ? (
+      {actionError ? (
         <p
           className="review-workspace__error rounded-xl border p-4 text-sm font-semibold"
           role="alert"
@@ -314,7 +326,7 @@ export function ReviewWorkspace({ assignmentId }: { assignmentId: string }) {
           <span className="mt-1 block font-medium">
             {save.error?.message.includes("another session")
               ? "Bản nháp đã được sửa ở phiên khác. Nội dung bạn nhập vẫn được giữ; mở hồ sơ trong tab mới để đối chiếu trước khi tải lại."
-              : (submit.error ?? save.error)?.message ||
+              : actionError.message ||
                 "Nội dung vẫn còn trên màn hình; vui lòng thử lại."}
           </span>
         </p>
@@ -332,11 +344,25 @@ export function ReviewWorkspace({ assignmentId }: { assignmentId: string }) {
       ) : null}
       {["IN_PROGRESS", "SUBMITTED"].includes(detail.assignment.status) &&
       detail.snapshotJson ? (
-        <div className="space-y-8" id="review-form">
-          <aside
-            hidden={workspaceView !== "documents"}
+        <div
+          className={
+            workspaceView === "assessment" && evidenceOpen
+              ? "grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(17rem,23rem)]"
+              : "min-w-0"
+          }
+          id="review-form"
+        >
+          <section
+            hidden={
+              workspaceView !== "documents" &&
+              !(workspaceView === "assessment" && evidenceOpen)
+            }
             aria-label="Hồ sơ và tài liệu kiểm chứng"
-            className="min-w-0 scroll-mt-24 space-y-4"
+            className={
+              workspaceView === "assessment"
+                ? "hidden min-w-0 space-y-4 xl:order-last xl:block xl:self-start xl:sticky xl:top-24 xl:max-h-[75vh] xl:overflow-y-auto"
+                : "min-w-0 scroll-mt-24 space-y-4"
+            }
             id="review-evidence"
           >
             {detail.snapshotJson.dossier.summary ? (
@@ -367,21 +393,40 @@ export function ReviewWorkspace({ assignmentId }: { assignmentId: string }) {
                 {detail.canonicalHash}
               </code>
             </details>
-          </aside>
+          </section>
           <div
             hidden={workspaceView !== "assessment"}
             className="min-w-0 scroll-mt-24"
             id="review-scorecard"
           >
+            <Button
+              type="button"
+              variant="outline"
+              className="mb-3 xl:hidden"
+              onClick={() => setWorkspaceView("documents")}
+            >
+              Xem minh chứng
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="mb-3 hidden xl:inline-flex"
+              aria-expanded={evidenceOpen}
+              aria-controls="review-evidence"
+              onClick={() => setEvidenceOpen(!evidenceOpen)}
+            >
+              {evidenceOpen ? "Thu gọn minh chứng" : "Mở minh chứng"}
+            </Button>
             <FiveTScorecard
               key={`${assignmentId}-${detail.assignment.dossierVersionId}`}
               claims={detail.snapshotJson.dossier.claims ?? []}
               evidences={detail.snapshotJson.evidences ?? []}
               initialReview={detail.review}
+              initialReadiness={detail.readiness}
               isSaving={save.isPending}
               isSubmitting={submit.isPending}
               onSave={async (draft) => {
-                await save.mutateAsync(draft);
+                return save.mutateAsync(draft);
               }}
               onSubmit={async () => {
                 await submit.mutateAsync();

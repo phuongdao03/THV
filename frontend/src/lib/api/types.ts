@@ -1161,7 +1161,7 @@ export type CriterionVerdictOutcome =
   | "NOT_APPLICABLE";
 
 export interface CriterionVerdict {
-  outcome: CriterionVerdictOutcome;
+  outcome: CriterionVerdictOutcome | null;
   rationale: string;
   evidenceMediaIds: string[];
 }
@@ -1232,7 +1232,26 @@ export interface EvidenceVerification {
   verifiedAt?: string | null;
 }
 
+export interface ReviewCompletionIssue {
+  code: string;
+  section: "documents" | "conditions" | "criteria" | "report";
+  field: string;
+  message: string;
+  entityId?: string | null;
+  label?: string | null;
+  severity?: string;
+  blocking?: boolean;
+  resolved?: boolean;
+}
+
+export interface ReviewReadiness {
+  readyToSubmit: boolean;
+  issues: ReviewCompletionIssue[];
+  blockingCount?: number;
+}
+
 export interface ReviewData extends ReviewDraft {
+  readiness?: ReviewReadiness | null;
   draftToken?: string;
   id: string;
   assignmentId: string;
@@ -1257,6 +1276,7 @@ export interface DossierWorkflowProgress {
 }
 
 export interface ReviewAssignmentDetail extends ReviewAssignmentSummary {
+  readiness?: ReviewReadiness | null;
   workflowProgress?: DossierWorkflowProgress | null;
   canonicalHash: string | null;
   snapshotJson: ReviewSnapshot | null;

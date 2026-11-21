@@ -148,7 +148,9 @@ test("critical MVP journey reaches a publicly verifiable certificate", async ({
     await expect(
       page.locator("#review-final-result").getByText("Đề nghị phê duyệt"),
     ).toBeVisible();
-    await page.getByRole("button", { name: "Gửi kết quả thẩm định" }).click();
+    await page
+      .getByRole("button", { name: /Kiểm tra để gửi|Gửi kết quả thẩm định/ })
+      .click();
     await page.getByRole("button", { name: "Xác nhận gửi" }).click();
     await expect(page.getByText("Kết quả đã gửi.")).toBeVisible();
   });

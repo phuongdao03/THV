@@ -57,7 +57,9 @@ export function ReviewReportDetails({
         rows.push({
           key: criterion.key,
           label: criterion.label,
-          result: verdictLabels[verdict.outcome],
+          result: verdict.outcome
+            ? verdictLabels[verdict.outcome]
+            : "Chưa đánh giá",
           rationale: verdict.rationale,
           evidenceMediaIds: verdict.evidenceMediaIds,
         });

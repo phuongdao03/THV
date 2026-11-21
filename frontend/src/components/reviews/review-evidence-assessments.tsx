@@ -3,12 +3,17 @@
 import { useState } from "react";
 import { FileCheck2 } from "lucide-react";
 
+import {
+  completionGuidance,
+  completionTarget,
+} from "@/components/reviews/review-readiness";
 import { formatEvidenceMimeType } from "@/components/reviews/review-evidence-format";
 import type {
   EvidenceAssessment,
   EvidenceAssessmentStatus,
   EvidenceVerification,
   ReviewEvidenceSnapshot,
+  ReviewCompletionIssue,
 } from "@/lib/api/types";
 
 const statusOptions: Array<{
@@ -45,21 +50,52 @@ export function ReviewEvidenceAssessments({
   evidences,
   onChange,
   readOnly = false,
+  savedAssessments,
+  selectedMediaId,
+  activeIssue,
+  onSelectMedia,
 }: {
   assessments: Record<string, EvidenceAssessment>;
   evidences: ReviewEvidenceSnapshot[];
   onChange: (value: Record<string, EvidenceAssessment>) => void;
   readOnly?: boolean;
+  savedAssessments?: Record<string, EvidenceAssessment>;
+  selectedMediaId?: string;
+  activeIssue?: ReviewCompletionIssue;
+  onSelectMedia?: (id: string) => void;
 }) {
   const [selected, setSelected] = useState(evidences[0]?.id ?? "");
-  const activeId = evidences.some((item) => item.id === selected)
-    ? selected
-    : evidences[0]?.id;
+  const requestedId = evidences.find(
+    (item) => item.mediaAssetId === selectedMediaId,
+  )?.id;
+  const activeId =
+    requestedId ??
+    (evidences.some((item) => item.id === selected)
+      ? selected
+      : evidences[0]?.id);
   const reviewedCount = evidences.filter(
     (evidence) =>
       assessments[evidence.mediaAssetId]?.status &&
       assessments[evidence.mediaAssetId]?.status !== "UNREVIEWED",
   ).length;
+
+  const activeField =
+    activeIssue?.section === "documents" ? completionTarget(activeIssue) : null;
+  function errorProps(id: string) {
+    return id === activeField
+      ? { "aria-invalid": true, "aria-describedby": `${id}-hint` }
+      : {};
+  }
+  function fieldHint(id: string) {
+    return activeIssue && id === activeField ? (
+      <span
+        id={`${id}-hint`}
+        className="mt-2 block border-l-2 border-[var(--theme-accent)] pl-2 text-sm font-semibold"
+      >
+        {completionGuidance(activeIssue)}
+      </span>
+    ) : null;
+  }
 
   const update = (mediaId: string, value: EvidenceAssessment) => {
     onChange({ ...assessments, [mediaId]: value });
@@ -98,7 +134,13 @@ export function ReviewEvidenceAssessments({
           <select
             className="mt-2 min-h-11 w-full rounded-lg border border-[var(--theme-border)] bg-[var(--theme-surface)] px-3"
             value={activeId}
-            onChange={(event) => setSelected(event.target.value)}
+            onChange={(event) => {
+              setSelected(event.target.value);
+              const mediaId = evidences.find(
+                (item) => item.id === event.target.value,
+              )?.mediaAssetId;
+              if (mediaId) onSelectMedia?.(mediaId);
+            }}
           >
             {evidences.map((item) => (
               <option key={item.id} value={item.id}>
@@ -114,6 +156,9 @@ export function ReviewEvidenceAssessments({
       ) : null}
       <div className="mt-4 grid gap-3">
         {evidences.map((evidence) => {
+          const verifiedAt = (savedAssessments ?? assessments)[
+            evidence.mediaAssetId
+          ]?.verification?.verifiedAt;
           const assessment = assessments[evidence.mediaAssetId] ?? {
             status: "UNREVIEWED" as const,
             note: "",
@@ -144,6 +189,10 @@ export function ReviewEvidenceAssessments({
                     Kết quả kiểm tra {evidence.title}
                   </span>
                   <select
+                    id={`review-document-status-${evidence.mediaAssetId}`}
+                    {...errorProps(
+                      `review-document-status-${evidence.mediaAssetId}`,
+                    )}
                     aria-label={`Kết quả kiểm tra ${evidence.title}`}
                     className="min-h-11 w-full rounded-lg border border-[var(--theme-border)] bg-[var(--theme-surface)] px-3"
                     disabled={readOnly}
@@ -161,6 +210,7 @@ export function ReviewEvidenceAssessments({
                       </option>
                     ))}
                   </select>
+                  {fieldHint(`review-document-status-${evidence.mediaAssetId}`)}
                 </label>
               </div>
               {assessment.status === "NEEDS_CLARIFICATION" ? (
@@ -169,6 +219,10 @@ export function ReviewEvidenceAssessments({
                   <textarea
                     className="mt-2 min-h-24 w-full rounded-lg border border-[var(--theme-border)] bg-[var(--theme-surface)] p-3 font-normal"
                     disabled={readOnly}
+                    id={`review-document-note-${evidence.mediaAssetId}`}
+                    {...errorProps(
+                      `review-document-note-${evidence.mediaAssetId}`,
+                    )}
                     maxLength={1_000}
                     onChange={(event) =>
                       update(evidence.mediaAssetId, {
@@ -178,6 +232,7 @@ export function ReviewEvidenceAssessments({
                     }
                     value={assessment.note}
                   />
+                  {fieldHint(`review-document-note-${evidence.mediaAssetId}`)}
                 </label>
               ) : null}
               <fieldset
@@ -188,6 +243,10 @@ export function ReviewEvidenceAssessments({
                   Kiểm chứng nội dung
                 </legend>
                 <select
+                  id={`review-document-verification-${evidence.mediaAssetId}`}
+                  {...errorProps(
+                    `review-document-verification-${evidence.mediaAssetId}`,
+                  )}
                   aria-label={`Kiểm chứng nội dung ${evidence.title}`}
                   className="min-h-11 w-full min-w-0 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-surface)] px-3 text-sm"
                   onChange={(event) =>
@@ -208,6 +267,9 @@ export function ReviewEvidenceAssessments({
                     </option>
                   ))}
                 </select>
+                {fieldHint(
+                  `review-document-verification-${evidence.mediaAssetId}`,
+                )}
                 {verification.outcome !== "UNVERIFIED" ? (
                   <div className="grid gap-3 md:grid-cols-2">
                     {verificationFields.map(([key, label]) => (
@@ -217,6 +279,10 @@ export function ReviewEvidenceAssessments({
                       >
                         {label}
                         <textarea
+                          id={`review-document-${key}-${evidence.mediaAssetId}`}
+                          {...errorProps(
+                            `review-document-${key}-${evidence.mediaAssetId}`,
+                          )}
                           aria-label={`${label} — ${evidence.title}`}
                           className="mt-1 min-h-24 w-full rounded-lg border border-[var(--theme-border)] bg-[var(--theme-surface)] p-3 font-normal"
                           disabled={readOnly}
@@ -232,14 +298,17 @@ export function ReviewEvidenceAssessments({
                           }
                           value={verification[key]}
                         />
+                        {fieldHint(
+                          `review-document-${key}-${evidence.mediaAssetId}`,
+                        )}
                       </label>
                     ))}
                   </div>
                 ) : null}
-                {verification.verifiedAt ? (
+                {verifiedAt ? (
                   <p className="break-words text-xs text-[var(--theme-muted)]">
                     Ghi nhận đối chiếu:{" "}
-                    {new Date(verification.verifiedAt).toLocaleString("vi-VN")}.
+                    {new Date(verifiedAt).toLocaleString("vi-VN")}.
                   </p>
                 ) : null}
               </fieldset>

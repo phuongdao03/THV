@@ -14,16 +14,19 @@ from app.modules.auth.dependencies import (
 )
 from app.modules.auth.session_service import AuthPrincipal
 from app.modules.reviews.dependencies import get_review_service
+from app.modules.reviews.errors import ReviewIncompleteError
 from app.modules.reviews.models import (
     ReviewAssignmentStatus,
     ReviewRecommendation,
 )
 from app.modules.reviews.types import (
+    CompletionIssue,
     ReviewAssignmentDetailView,
     ReviewAssignmentPage,
     ReviewAssignmentSummaryView,
     ReviewAssignmentView,
     ReviewDraft,
+    ReviewReadiness,
     ReviewView,
 )
 
@@ -333,3 +336,48 @@ def test_draft_save_passes_the_optional_concurrency_token() -> None:
     )
     assert response.status_code == 200
     assert service.expected_token == "new"
+
+
+def test_reviewer_submit_exposes_readiness_and_passes_the_draft_token() -> None:
+    class IncompleteService(StubScoringService):
+        async def submit_review(
+            self,
+            principal: AuthPrincipal,
+            assignment_id: UUID,
+            *,
+            expected_draft_token: str | None = None,
+        ) -> ReviewView:
+            assert expected_draft_token == "confirmed-token"
+            raise ReviewIncompleteError(
+                ReviewReadiness(
+                    False,
+                    (
+                        CompletionIssue(
+                            "ADMISSION_OUTCOME_MISSING",
+                            "conditions",
+                            "outcome",
+                            "Every rubric gate requires an assessment.",
+                            "rights",
+                            "Quyền nộp hồ sơ",
+                        ),
+                    ),
+                )
+            )
+
+    service = IncompleteService()
+    response = asyncio.run(
+        _request(
+            service,
+            "POST",
+            f"/api/v1/reviewer/assignments/{service.assignment.id}/submit",
+            headers={"X-Review-Draft-Token": "confirmed-token"},
+        )
+    )
+
+    assert response.status_code == 422
+    error = response.json()["error"]
+    assert error["code"] == "REVIEW_VALIDATION_ERROR"
+    readiness = error["details"]["readiness"]
+    assert readiness["readyToSubmit"] is False
+    assert readiness["issues"][0]["entityId"] == "rights"
+    assert readiness["issues"][0]["field"] == "outcome"

@@ -40,6 +40,7 @@ import type {
   DossierClaim,
   EvidenceAssessment,
   ReviewData,
+  ReviewReadiness,
   ReviewDraft,
   ReviewEvidenceSnapshot,
   ReviewFinding,
@@ -248,9 +249,10 @@ export function FiveTScorecard(props: {
   claims?: DossierClaim[];
   evidences: ReviewEvidenceSnapshot[];
   initialReview: ReviewData | null;
+  initialReadiness?: ReviewReadiness | null;
   isSaving: boolean;
   isSubmitting: boolean;
-  onSave: (draft: ReviewDraft) => Promise<void>;
+  onSave: (draft: ReviewDraft) => Promise<ReviewData | void>;
   onSubmit: () => Promise<void>;
   readOnly: boolean;
   requireEvidenceAssessments?: boolean;
@@ -258,13 +260,7 @@ export function FiveTScorecard(props: {
   saveError?: Error | null;
 }) {
   if (props.rubric?.assessmentMethod === "VERDICT") {
-    return (
-      <VerdictReviewForm
-        {...props}
-        requireEvidenceAssessments={props.requireEvidenceAssessments ?? true}
-        rubric={props.rubric}
-      />
-    );
+    return <VerdictReviewForm {...props} rubric={props.rubric} />;
   }
   return <ScoredReviewForm {...props} />;
 }
@@ -285,7 +281,7 @@ function ScoredReviewForm({
   initialReview: ReviewData | null;
   isSaving: boolean;
   isSubmitting: boolean;
-  onSave: (draft: ReviewDraft) => Promise<void>;
+  onSave: (draft: ReviewDraft) => Promise<ReviewData | void>;
   onSubmit: () => Promise<void>;
   readOnly: boolean;
   requireEvidenceAssessments?: boolean;
@@ -353,7 +349,9 @@ function ScoredReviewForm({
   ]);
   const autosave = useReviewAutosave({
     draft: autosaveDraft,
-    onSave,
+    onSave: async (draft) => {
+      await onSave(draft);
+    },
     readOnly,
   });
 

@@ -479,6 +479,7 @@ let versions = [];
 let timeline = [];
 let reviewAssignmentStatus = "IN_PROGRESS";
 let review = null;
+let reviewEvidencePolicyEnabled = false;
 let similarityCaseStatus = "ASSIGNED";
 let similarityResolution = null;
 let councilSessionStatus = "DRAFT";
@@ -2658,6 +2659,9 @@ const server = createServer(async (request, response) => {
           version: "2026.2",
           title: "Tiêu chí thẩm định hồ sơ thương hiệu",
           assessmentMethod: "VERDICT",
+          ...(reviewEvidencePolicyEnabled
+            ? { evidencePolicyVersion: "2026.1" }
+            : {}),
           gates: [],
           criteria: [
             {
@@ -2699,6 +2703,84 @@ const server = createServer(async (request, response) => {
         },
       },
     ],
+  };
+  if (reviewEvidencePolicyEnabled) {
+    for (const criterion of reviewSnapshot.dossier.dossierType.reviewRubric
+      .criteria) {
+      criterion.allowNotApplicable = false;
+      criterion.verificationRequired = true;
+    }
+  }
+  const reviewReadiness = (draft) => {
+    const issues = [];
+    const document = reviewSnapshot.evidences[0];
+    const assessment = draft?.evidenceAssessments?.[document.mediaAssetId];
+    const addDocumentIssue = (code, field) =>
+      issues.push({
+        code,
+        section: "documents",
+        field,
+        entityId: document.mediaAssetId,
+        label: document.title,
+      });
+    if (!assessment || assessment.status === "UNREVIEWED") {
+      addDocumentIssue("DOCUMENT_ASSESSMENT_INCOMPLETE", "status");
+    }
+    if (
+      assessment?.status === "NEEDS_CLARIFICATION" &&
+      assessment.note.trim().length < 10
+    ) {
+      addDocumentIssue("DOCUMENT_CLARIFICATION_MISSING", "note");
+    }
+    if (
+      assessment?.verification &&
+      assessment.verification.outcome !== "UNVERIFIED"
+    ) {
+      for (const field of ["method", "source", "scope", "limitations"]) {
+        if (!assessment.verification[field]?.trim())
+          addDocumentIssue("VERIFICATION_FIELD_MISSING", field);
+      }
+    }
+    for (const { key, label } of reviewSnapshot.dossier.dossierType.reviewRubric
+      .criteria) {
+      const answer = draft?.criterionVerdicts?.[key];
+      const addCriterionIssue = (code, field) =>
+        issues.push({ code, section: "criteria", field, entityId: key, label });
+      if (!answer?.outcome) {
+        addCriterionIssue("CRITERION_OUTCOME_MISSING", "outcome");
+        continue;
+      }
+      if (answer.rationale.trim().length < 20)
+        addCriterionIssue("CRITERION_RATIONALE_MISSING", "rationale");
+      if (
+        !["NOT_APPLICABLE", "INSUFFICIENT_BASIS"].includes(answer.outcome) &&
+        !answer.evidenceMediaIds?.length
+      ) {
+        addCriterionIssue("CRITERION_EVIDENCE_MISSING", "evidence");
+      }
+      if (
+        reviewEvidencePolicyEnabled &&
+        answer.outcome === "MEETS" &&
+        answer.evidenceMediaIds?.length &&
+        assessment?.verification?.outcome !== "VERIFIED"
+      ) {
+        addCriterionIssue("CRITERION_VERIFICATION_REQUIRED", "evidence");
+      }
+    }
+    if (
+      ["REJECT", "SUPPLEMENT"].includes(draft?.recommendation) &&
+      (draft?.applicantFeedback?.trim().length ?? 0) < 20
+    ) {
+      issues.push({
+        code: "APPLICANT_FEEDBACK_MISSING",
+        section: "report",
+        field: "feedback",
+      });
+    }
+    return {
+      readyToSubmit: issues.length === 0 && Boolean(draft?.recommendation),
+      issues,
+    };
   };
   const councilSession = {
     id: councilSessionId,
@@ -2896,6 +2978,8 @@ const server = createServer(async (request, response) => {
     return;
   }
   if (request.method === "POST" && path === "/api/e2e/reset-review") {
+    const options = await readJson(request);
+    reviewEvidencePolicyEnabled = options.verificationPolicy === true;
     reviewAssignmentStatus = "IN_PROGRESS";
     review = null;
     similarityCaseStatus = "ASSIGNED";
@@ -3002,6 +3086,10 @@ const server = createServer(async (request, response) => {
         versionNo: 1,
         canonicalHash: visible ? "b".repeat(64) : null,
         snapshotJson: visible ? reviewSnapshot : null,
+        readiness:
+          reviewAssignmentStatus === "IN_PROGRESS"
+            ? reviewReadiness(review)
+            : null,
         review,
       }),
     );
@@ -3077,6 +3165,7 @@ const server = createServer(async (request, response) => {
       id: "3155dbf5-bb3e-449d-8bf0-9572cc642cac",
       assignmentId: reviewAssignmentId,
       ...input,
+      readiness: reviewReadiness(input),
       totalScore: scores.every((score) => Number.isInteger(score))
         ? scores.reduce((total, score) => total + score, 0)
         : null,

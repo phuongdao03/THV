@@ -20,6 +20,7 @@ from app.modules.reviews.dependencies import (
     ReviewServiceDependency,
     SimilarityReviewServiceDependency,
 )
+from app.modules.reviews.errors import ReviewIncompleteError, ReviewValidationError
 from app.modules.reviews.models import ReviewAssignmentStatus, SimilarityCaseStatus
 from app.modules.reviews.schemas import (
     AdminReviewDossierDetailData,
@@ -38,6 +39,7 @@ from app.modules.reviews.schemas import (
     ReviewAssistanceRequestData,
     ReviewData,
     ReviewDraftRequest,
+    ReviewReadinessData,
     SimilarityCaseData,
     TransitionRequest,
 )
@@ -91,6 +93,11 @@ def _assignment_detail_data(
         dossier_title=view.dossier_title,
         version_no=view.version_no,
         canonical_hash=view.canonical_hash,
+        readiness=(
+            ReviewReadinessData.model_validate(view.readiness)
+            if view.readiness is not None
+            else None
+        ),
         snapshot_json=(
             dict(view.snapshot_json) if view.snapshot_json is not None else None
         ),
@@ -487,7 +494,22 @@ async def submit_review(
     principal: CsrfProtectedPrincipalDependency,
     service: ReviewServiceDependency,
 ) -> SuccessEnvelope[ReviewData]:
-    result = await service.submit_review(principal, assignment_id)
+    try:
+        result = await service.submit_review(
+            principal,
+            assignment_id,
+            **(
+                {"expected_draft_token": request.headers["x-review-draft-token"]}
+                if "x-review-draft-token" in request.headers
+                else {}
+            ),
+        )
+    except ReviewIncompleteError as exc:
+        readiness = ReviewReadinessData.model_validate(exc.readiness)
+        raise ReviewValidationError(
+            exc.message,
+            details={"readiness": readiness.model_dump(mode="json", by_alias=True)},
+        ) from exc
     return SuccessEnvelope(
         data=_review_data(result),
         meta=ResponseMeta(request_id=request.state.request_id),

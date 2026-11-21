@@ -58,7 +58,7 @@ test("reviewer criteria and action bar fit every target viewport in both themes"
     .click();
   for (const theme of ["Giao diện sáng", "Giao diện tối"] as const) {
     await selectWorkspaceTheme(page, theme);
-    for (const width of [320, 360, 375, 390, 414, 430, 768, 1024, 1440]) {
+    for (const width of [320, 360, 375, 390, 400, 414, 430, 768, 1024, 1440]) {
       await page.setViewportSize({ width, height: 1000 });
       await expectDocumentToFit(page, `${theme} at ${width}px`);
       if ([320, 375, 390, 768, 1024, 1440].includes(width))
@@ -73,14 +73,14 @@ test("reviewer criteria and action bar fit every target viewport in both themes"
       ).toHaveCount(1);
       if (width < 1024) {
         await page
-          .getByRole("button", { name: "Gửi kết quả thẩm định" })
+          .getByRole("button", {
+            name: /Kiểm tra để gửi|Gửi kết quả thẩm định/,
+          })
           .scrollIntoViewIfNeeded();
-        const actions = await page.locator(".review-submit-bar").boundingBox();
-        const navigation = await page
-          .locator(".site-mobile-navigation")
-          .boundingBox();
-        expect(actions!.y + actions!.height).toBeLessThanOrEqual(
-          navigation!.y + 1,
+        await expect(page.locator(".review-submit-bar")).toBeInViewport();
+        await expect(page.locator(".review-submit-bar")).toHaveCSS(
+          "position",
+          "static",
         );
       }
     }
@@ -208,7 +208,9 @@ test("reviewer reviews each document and submits a criteria verdict", async ({
   ).toBeVisible();
   await expect(page.getByText("0/100")).toHaveCount(0);
 
-  await page.getByRole("button", { name: "Gửi kết quả thẩm định" }).click();
+  await page
+    .getByRole("button", { name: /Kiểm tra để gửi|Gửi kết quả thẩm định/ })
+    .click();
   await expect(
     page.getByRole("heading", { name: "Xác nhận gửi kết quả" }),
   ).toBeVisible();

@@ -140,13 +140,16 @@ class SpecialistCriterionAnswerData(ReviewSchema):
 
 
 class CriterionVerdictData(ReviewSchema):
-    outcome: Literal[
-        "MEETS",
-        "NEEDS_CLARIFICATION",
-        "DOES_NOT_MEET",
-        "NOT_APPLICABLE",
-        "INSUFFICIENT_BASIS",
-    ]
+    outcome: (
+        Literal[
+            "MEETS",
+            "NEEDS_CLARIFICATION",
+            "DOES_NOT_MEET",
+            "NOT_APPLICABLE",
+            "INSUFFICIENT_BASIS",
+        ]
+        | None
+    )
     rationale: Annotated[str, Field(max_length=2_000)] = ""
     evidence_media_ids: Annotated[list[UUID], Field(max_length=10)] = Field(
         default_factory=list
@@ -236,7 +239,26 @@ class ReviewDraftRequest(ReviewSchema):
         return value
 
 
+class CompletionIssueData(ReviewSchema):
+    code: str
+    section: str
+    field: str
+    message: str
+    entity_id: str | None = None
+    label: str | None = None
+    severity: str = "error"
+    blocking: bool = True
+    resolved: bool = False
+
+
+class ReviewReadinessData(ReviewSchema):
+    ready_to_submit: bool
+    issues: tuple[CompletionIssueData, ...]
+    blocking_count: int
+
+
 class ReviewData(ReviewSchema):
+    readiness: ReviewReadinessData | None = None
     draft_token: str = ""
     id: UUID
     assignment_id: UUID
@@ -289,6 +311,7 @@ class ReviewAssignmentSummaryData(ReviewSchema):
 
 
 class ReviewAssignmentDetailData(ReviewAssignmentSummaryData):
+    readiness: ReviewReadinessData | None = None
     canonical_hash: str | None
     snapshot_json: dict[str, Any] | None
     review: ReviewData | None

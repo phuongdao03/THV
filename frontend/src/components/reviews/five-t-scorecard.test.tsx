@@ -51,7 +51,21 @@ describe("FiveTScorecard", () => {
         initialReview={null}
         isSaving={false}
         isSubmitting={false}
-        onSave={vi.fn().mockResolvedValue(undefined)}
+        onSave={vi.fn().mockImplementation(async (draft) => ({
+          ...draft,
+          readiness: {
+            readyToSubmit: false,
+            issues: [
+              {
+                code: "CRITERION_RATIONALE_MISSING",
+                section: "criteria",
+                field: "rationale",
+                entityId: "identity",
+                label: "Thông tin chủ thể",
+              },
+            ],
+          },
+        }))}
         onSubmit={vi.fn().mockResolvedValue(undefined)}
         readOnly={false}
         rubric={{
@@ -80,12 +94,10 @@ describe("FiveTScorecard", () => {
       screen.getByLabelText("Nhận định Thông tin chủ thể"),
       "Đã kiểm tra",
     );
-    await user.click(
-      screen.getByRole("button", { name: "Gửi kết quả thẩm định" }),
-    );
+    await user.click(screen.getByRole("button", { name: "Kiểm tra để gửi" }));
 
-    expect(screen.getByRole("alert").textContent).toContain(
-      "Thông tin chủ thể: nhận định cần ít nhất 20 ký tự",
+    await user.click(
+      await screen.findByRole("button", { name: /Đi đến Thông tin chủ thể/ }),
     );
     await vi.waitFor(() =>
       expect(document.activeElement).toBe(screen.getAllByRole("textbox")[0]),
@@ -122,7 +134,13 @@ describe("FiveTScorecard", () => {
 
   it("derives a supplement result from criterion conclusions", async () => {
     const user = userEvent.setup();
-    const save = vi.fn().mockResolvedValue(undefined);
+    const save = vi.fn().mockImplementation(async (draft) => ({
+      ...draft,
+      readiness: {
+        readyToSubmit: Boolean(draft.applicantFeedback),
+        issues: [],
+      },
+    }));
     const submit = vi.fn().mockResolvedValue(undefined);
     render(
       <FiveTScorecard
@@ -187,12 +205,14 @@ describe("FiveTScorecard", () => {
       "Vui lòng bổ sung ngày phát hành của tài liệu.",
     );
 
+    await user.click(
+      screen.getByRole("button", {
+        name: /Kiểm tra để gửi|Gửi kết quả thẩm định/,
+      }),
+    );
     expect(
       screen.getByText("Kết quả từ các tiêu chí").parentElement?.textContent,
     ).toContain("Yêu cầu bổ sung");
-    await user.click(
-      screen.getByRole("button", { name: "Gửi kết quả thẩm định" }),
-    );
     expect(
       await screen.findByRole("heading", { name: "Xác nhận gửi kết quả" }),
     ).toBeDefined();

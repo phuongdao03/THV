@@ -1,4 +1,7 @@
+from collections.abc import Mapping
+
 from app.core.errors import DomainError
+from app.modules.reviews.types import ReviewReadiness
 
 
 class ReviewNotFoundError(DomainError):
@@ -32,9 +35,18 @@ class ReviewConflictError(DomainError):
 
 
 class ReviewValidationError(DomainError):
-    def __init__(self, message: str) -> None:
+    def __init__(
+        self, message: str, *, details: Mapping[str, object] | None = None
+    ) -> None:
         super().__init__(
             code="REVIEW_VALIDATION_ERROR",
             message=message,
             status_code=422,
+            details=details,
         )
+
+
+class ReviewIncompleteError(ReviewValidationError):
+    def __init__(self, readiness: ReviewReadiness) -> None:
+        self.readiness = readiness
+        super().__init__(readiness.issues[0].message)

@@ -106,6 +106,29 @@ class ReviewDraft:
 
 
 @dataclass(frozen=True, slots=True)
+class CompletionIssue:
+    code: str
+    section: str
+    field: str
+    message: str
+    entity_id: str | None = None
+    label: str | None = None
+    severity: str = "error"
+    blocking: bool = True
+    resolved: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class ReviewReadiness:
+    ready_to_submit: bool
+    issues: tuple[CompletionIssue, ...]
+
+    @property
+    def blocking_count(self) -> int:
+        return len(self.issues)
+
+
+@dataclass(frozen=True, slots=True)
 class ReviewView:
     id: UUID
     assignment_id: UUID
@@ -130,6 +153,7 @@ class ReviewView:
     submitted_at: datetime | None
     criterion_verdicts: Mapping[str, Mapping[str, object]] = field(default_factory=dict)
     draft_token: str = ""
+    readiness: ReviewReadiness | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -171,6 +195,7 @@ class ReviewAssignmentDetailView:
     canonical_hash: str | None
     snapshot_json: Mapping[str, object] | None
     review: ReviewView | None
+    readiness: ReviewReadiness | None = None
     assistance_requests: tuple[ReviewAssistanceRequestView, ...] = ()
     workflow_progress: Mapping[str, object] | None = None
 

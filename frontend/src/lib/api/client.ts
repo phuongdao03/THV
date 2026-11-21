@@ -262,6 +262,7 @@ export class ApiError extends Error {
     readonly code: string,
     readonly status: number,
     readonly requestId?: string,
+    readonly details?: Record<string, unknown>,
   ) {
     super(message);
     this.name = "ApiError";
@@ -319,6 +320,7 @@ async function parseResponse<Data>(
       error?.code ?? "REQUEST_FAILED",
       response.status,
       error?.request_id ?? response.headers.get("X-Request-Id") ?? undefined,
+      error?.details,
     );
   }
   return payload;
@@ -2812,9 +2814,10 @@ export const reviewApi = {
       body: JSON.stringify(draft),
     });
   },
-  submit(assignmentId: string) {
+  submit(assignmentId: string, draftToken?: string) {
     return request<ReviewData>(`/reviewer/assignments/${assignmentId}/submit`, {
       method: "POST",
+      headers: draftToken ? { "X-Review-Draft-Token": draftToken } : undefined,
     });
   },
 };

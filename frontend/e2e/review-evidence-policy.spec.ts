@@ -8,7 +8,9 @@ test("reviewer distinguishes relevance, incomplete verification and contradictio
   page,
   request,
 }, info) => {
-  await request.post(`${mockApiUrl}/api/e2e/reset-review`);
+  await request.post(`${mockApiUrl}/api/e2e/reset-review`, {
+    data: { verificationPolicy: true },
+  });
   await context.addCookies(
     [
       ["cns_access", "e2e-access"],
@@ -25,20 +27,6 @@ test("reviewer distinguishes relevance, incomplete verification and contradictio
   );
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
-  await page.route(
-    "**/api/v1/reviewer/assignments/4155dbf5-bb3e-449d-8bf0-9572cc642cac",
-    async (route) => {
-      const response = await route.fetch();
-      const json = await response.json();
-      const rubric = json.data.snapshotJson.dossier.dossierType.reviewRubric;
-      rubric.evidencePolicyVersion = "2026.1";
-      rubric.criteria.forEach((criterion: Record<string, unknown>) => {
-        criterion.allowNotApplicable = false;
-        criterion.verificationRequired = true;
-      });
-      await route.fulfill({ response, json });
-    },
-  );
   await page.goto("/reviews/4155dbf5-bb3e-449d-8bf0-9572cc642cac");
   const title = "Bằng chứng về quyền sử dụng nhãn hiệu";
   const verification = page.getByLabel(`Kiểm chứng nội dung ${title}`);
@@ -61,16 +49,19 @@ test("reviewer distinguishes relevance, incomplete verification and contradictio
     .getByRole("button", { name: "Kiểm tra tài liệu", exact: true })
     .click();
   await verification.selectOption("PARTIAL");
-  await page.getByRole("button", { name: "Gửi kết quả thẩm định" }).click();
+  await page.getByRole("button", { name: "Kiểm tra để gửi" }).click();
   await expect(
-    page.locator("#review-scorecard").getByRole("alert"),
+    page.getByRole("heading", { name: "Nội dung cần hoàn tất" }),
   ).toBeVisible();
   await expect(page.getByRole("button", { name: "Xác nhận gửi" })).toHaveCount(
     0,
   );
   await page
-    .getByRole("button", { name: "Kiểm tra tài liệu", exact: true })
+    .getByRole("button", { name: /Đi đến .*Ghi nguồn đối chiếu/ })
     .click();
+  await expect(
+    page.getByRole("textbox", { name: `Nguồn đối chiếu — ${title}` }),
+  ).toBeFocused();
   for (const [label, value] of [
     ["Phương pháp đối chiếu", "So sánh với hồ sơ lưu trữ gốc"],
     ["Nguồn đối chiếu", "Kho lưu trữ, mục 2024, trang 3"],

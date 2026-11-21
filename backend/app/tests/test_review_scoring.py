@@ -252,6 +252,28 @@ def test_verdict_review_submits_without_numeric_scores() -> None:
         )
         assert saved.total_score is None
         assert saved.criterion_verdicts["identity"]["outcome"] == "MEETS"
+        assert saved.readiness is not None and saved.readiness.ready_to_submit
+        with pytest.raises(ReviewConflictError, match="another session"):
+            await service.submit_review(
+                reviewer, assignment.id, expected_draft_token="stale"
+            )
+
+        async with session_factory() as session:
+            dossier = await session.get(Dossier, assignment.dossier_id)
+            assert dossier is not None
+            dossier.current_version_no = 2
+            await session.commit()
+
+        with pytest.raises(ReviewConflictError, match="earlier dossier version"):
+            await service.submit_review(
+                reviewer, assignment.id, expected_draft_token=saved.draft_token
+            )
+
+        async with session_factory() as session:
+            dossier = await session.get(Dossier, assignment.dossier_id)
+            assert dossier is not None
+            dossier.current_version_no = 1
+            await session.commit()
 
         submitted = await service.submit_review(reviewer, assignment.id)
         assert submitted.submitted_at == NOW
@@ -751,3 +773,119 @@ def test_stale_draft_token_cannot_overwrite_another_session() -> None:
             await engine.dispose()
 
     asyncio.run(exercise())
+
+
+def test_verdict_readiness_locates_all_unfinished_entities() -> None:
+    media_id = str(uuid4())
+    rubric = {
+        "assessmentMethod": "VERDICT",
+        "criteria": [{"key": "scope", "label": "Scope"}],
+        "gates": [{"key": "rights", "label": "Rights"}],
+    }
+    snapshot = {
+        "schemaVersion": 2,
+        "evidences": [{"mediaAssetId": media_id, "title": "Report.pdf"}],
+        "dossier": {"dossierType": {"reviewRubric": rubric}},
+    }
+
+    readiness = ReviewService._verdict_readiness(None, snapshot)
+
+    assert readiness is not None
+    assert not readiness.ready_to_submit
+    assert {
+        (issue.section, issue.entity_id, issue.field) for issue in readiness.issues
+    } == {
+        ("documents", media_id, "status"),
+        ("conditions", "rights", "outcome"),
+        ("criteria", "scope", "outcome"),
+    }
+
+
+def test_verdict_readiness_reports_only_admission_after_three_completed_criteria() -> (
+    None
+):
+    media_id = str(uuid4())
+    rubric = {
+        "assessmentMethod": "VERDICT",
+        "criteria": [{"key": key} for key in ("scope", "identity", "date")],
+        "gates": [{"key": "rights", "label": "Quyền nộp hồ sơ"}],
+    }
+    snapshot = {
+        "schemaVersion": 2,
+        "evidences": [{"mediaAssetId": media_id}],
+        "dossier": {"dossierType": {"reviewRubric": rubric}},
+    }
+    review = Review(
+        evidence_assessments={media_id: {"status": "VALID"}},
+        criterion_verdicts={
+            key: {
+                "outcome": "MEETS",
+                "rationale": "Compare the source record with the submitted materials.",
+                "evidence_media_ids": [media_id],
+            }
+            for key in ("scope", "identity", "date")
+        },
+    )
+
+    readiness = ReviewService._verdict_readiness(review, snapshot)
+
+    assert readiness is not None
+    assert not readiness.ready_to_submit
+    assert [
+        (issue.code, issue.entity_id, issue.label) for issue in readiness.issues
+    ] == [("ADMISSION_OUTCOME_MISSING", "rights", "Quyền nộp hồ sơ")]
+
+    review.gate_answers = {
+        "rights": {
+            "outcome": "PASS",
+            "rationale": "The source record confirms the applicant may submit.",
+        }
+    }
+    review.recommendation = ReviewRecommendation.APPROVE
+    ready = ReviewService._verdict_readiness(review, snapshot)
+    assert ready is not None and ready.ready_to_submit
+    assert ready.issues == ()
+
+
+def test_verdict_readiness_reports_each_missing_verification_field() -> None:
+    media_id = str(uuid4())
+    review = Review(
+        evidence_assessments={
+            media_id: {
+                "status": "VALID",
+                "verification": {
+                    "outcome": "VERIFIED",
+                    "method": "Compared original",
+                    "scope": "Identity",
+                    "limitations": "Issuer scope",
+                },
+            }
+        }
+    )
+    issues = ReviewService._evidence_completion_issues(
+        review,
+        {
+            "schemaVersion": 2,
+            "evidences": [{"mediaAssetId": media_id, "title": "Report.pdf"}],
+        },
+    )
+
+    assert [(issue.field, issue.entity_id, issue.label) for issue in issues] == [
+        ("source", media_id, "Report.pdf")
+    ]
+
+
+def test_unfinished_verdict_rationale_can_be_saved_without_an_outcome() -> None:
+    draft = ReviewDraft(
+        criterion_verdicts={
+            "scope": {"outcome": None, "rationale": "Waiting for the source record."}
+        }
+    )
+
+    validated = ReviewService._validated_draft(draft)
+
+    assert validated.criterion_verdicts["scope"]["outcome"] is None
+    assert (
+        validated.criterion_verdicts["scope"]["rationale"]
+        == "Waiting for the source record."
+    )

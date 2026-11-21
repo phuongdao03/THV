@@ -19,6 +19,7 @@ from app.modules.dossiers.repository import DossierRepository
 from app.modules.reviews.errors import (
     ReviewConflictError,
     ReviewForbiddenError,
+    ReviewIncompleteError,
     ReviewNotFoundError,
     ReviewValidationError,
 )
@@ -39,6 +40,7 @@ from app.modules.reviews.types import (
     AdminReviewDossierDetailView,
     AdminReviewDossierPage,
     AdminReviewDossierSummaryView,
+    CompletionIssue,
     ReviewAssignmentDetailView,
     ReviewAssignmentPage,
     ReviewAssignmentSummaryView,
@@ -46,6 +48,7 @@ from app.modules.reviews.types import (
     ReviewAssistanceRequestView,
     ReviewDraft,
     ReviewFinding,
+    ReviewReadiness,
     ReviewView,
 )
 
@@ -537,6 +540,11 @@ class ReviewService:
                 canonical_hash=(version.canonical_hash if can_view_sensitive else None),
                 snapshot_json=(version.snapshot_json if can_view_sensitive else None),
                 review=self._review_view(review) if review is not None else None,
+                readiness=(
+                    self._verdict_readiness(review, version.snapshot_json)
+                    if assignment.status is ReviewAssignmentStatus.IN_PROGRESS
+                    else None
+                ),
                 assistance_requests=tuple(
                     self._assistance_request_view(request)
                     for request in assistance_requests
@@ -628,9 +636,7 @@ class ReviewService:
                 raise ReviewConflictError(
                     "Only an in-progress assignment accepts draft changes."
                 )
-            version = await self._reviews.get_version(assignment.dossier_version_id)
-            if version is None:
-                raise ReviewNotFoundError()
+            version = await self._editable_version(assignment)
             self._validate_evidence_references(validated, version.snapshot_json)
             self._validate_specialist_answers(validated, version.snapshot_json)
             review = await self._reviews.get_review(
@@ -666,7 +672,10 @@ class ReviewService:
                 review, rubric, require_complete=False
             )
             await self._session.flush()
-            result = self._review_view(review)
+            result = replace(
+                self._review_view(review),
+                readiness=self._verdict_readiness(review, version.snapshot_json),
+            )
             self._audit_review(
                 "review.draft_saved",
                 principal.user_id,
@@ -678,6 +687,8 @@ class ReviewService:
         self,
         principal: AuthPrincipal,
         assignment_id: UUID,
+        *,
+        expected_draft_token: str | None = None,
     ) -> ReviewView:
         self._require_reviewer(principal)
         async with self._session.begin():
@@ -694,25 +705,35 @@ class ReviewService:
                 assignment.id,
                 for_update=True,
             )
+            version = await self._editable_version(assignment)
+            rubric = self._rubric_from_snapshot(version.snapshot_json)
+            if expected_draft_token is not None and expected_draft_token != (
+                self._review_view(review).draft_token if review is not None else "new"
+            ):
+                raise ReviewConflictError(
+                    "Review draft changed in another session. Reload before submitting."
+                )
+            readiness = self._verdict_readiness(review, version.snapshot_json)
+            if readiness is not None and readiness.issues:
+                raise ReviewIncompleteError(readiness)
             if review is None:
                 raise ReviewValidationError(
-                    "A complete 5T draft is required before submission."
+                    "A complete draft is required before submission."
                 )
-            version = await self._reviews.get_version(assignment.dossier_version_id)
-            if version is None:
-                raise ReviewNotFoundError()
-            self._validate_complete_evidence_assessments(review, version.snapshot_json)
-            if any(
-                answer.get("outcome") == "UNASSESSED"
-                for answer in (review.gate_answers or {}).values()
-            ):
-                raise ReviewValidationError("Every rubric gate requires an assessment.")
-            rubric = self._rubric_from_snapshot(version.snapshot_json)
-            if rubric is not None and self._is_verdict_rubric(rubric):
-                self._validate_verdict_decision(review, rubric)
+            if readiness is not None:
                 review.specialist_score = None
                 review.total_score = None
             else:
+                self._validate_complete_evidence_assessments(
+                    review, version.snapshot_json
+                )
+                if any(
+                    answer.get("outcome") == "UNASSESSED"
+                    for answer in (review.gate_answers or {}).values()
+                ):
+                    raise ReviewValidationError(
+                        "Every rubric gate requires an assessment."
+                    )
                 scores = self._complete_scores(review)
                 review.specialist_score = self._specialist_score(
                     review, rubric, require_complete=True
@@ -730,6 +751,17 @@ class ReviewService:
                 assignment_id,
             )
         return result
+
+    async def _editable_version(self, assignment: ReviewAssignment) -> DossierVersion:
+        dossier = await self._dossiers.get_by_id(assignment.dossier_id, for_update=True)
+        version = await self._reviews.get_version(assignment.dossier_version_id)
+        if dossier is None or version is None:
+            raise ReviewNotFoundError()
+        if version.version_no != dossier.current_version_no:
+            raise ReviewConflictError(
+                "This assessment is for an earlier dossier version."
+            )
+        return version
 
     def _add_assignment_event(self, assignment: ReviewAssignment) -> None:
         encrypted = self._payload_cipher.encrypt(
@@ -1089,7 +1121,7 @@ class ReviewService:
             outcome = answer.get("outcome")
             rationale = answer.get("rationale")
             media_ids = answer.get("evidence_media_ids", [])
-            if outcome not in outcomes:
+            if outcome is not None and outcome not in outcomes:
                 raise ReviewValidationError("Criterion conclusion is invalid.")
             if not isinstance(rationale, str) or len(rationale.strip()) > 2_000:
                 raise ReviewValidationError(
@@ -1246,36 +1278,69 @@ class ReviewService:
                 "Evidence references must belong to the locked dossier version."
             )
 
-    @staticmethod
+    @classmethod
     def _validate_complete_evidence_assessments(
-        review: Review,
-        snapshot: Mapping[str, object],
+        cls, review: Review, snapshot: Mapping[str, object]
     ) -> None:
+        issues = cls._evidence_completion_issues(review, snapshot)
+        if issues:
+            raise ReviewValidationError(issues[0].message)
+
+    @staticmethod
+    def _evidence_completion_issues(
+        review: Review, snapshot: Mapping[str, object]
+    ) -> list[CompletionIssue]:
+        issues: list[CompletionIssue] = []
         assessments = review.evidence_assessments or {}
-        for assessment in assessments.values():
-            verification = assessment.get("verification")
-            if not isinstance(verification, Mapping):
-                continue
-            if verification.get("outcome") != "UNVERIFIED" and any(
-                not isinstance(verification.get(key), str)
-                or not str(verification[key]).strip()
-                for key in ("method", "source", "scope", "limitations")
-            ):
-                raise ReviewValidationError(
-                    "Content verification requires method, source, scope "
-                    "and limitations."
-                )
-        if snapshot.get("schemaVersion") != 2:
-            return
         raw_evidences = snapshot.get("evidences")
+        documents = (
+            {
+                str(item["mediaAssetId"]): str(
+                    item.get("title") or item["mediaAssetId"]
+                )
+                for item in raw_evidences
+                if isinstance(item, Mapping)
+                and isinstance(item.get("mediaAssetId"), str)
+            }
+            if isinstance(raw_evidences, list)
+            else {}
+        )
+
+        for media_id, assessment in assessments.items():
+            verification = assessment.get("verification")
+            if (
+                not isinstance(verification, Mapping)
+                or verification.get("outcome") == "UNVERIFIED"
+            ):
+                continue
+            for field in ("method", "source", "scope", "limitations"):
+                value = verification.get(field)
+                if not isinstance(value, str) or not value.strip():
+                    issues.append(
+                        CompletionIssue(
+                            "VERIFICATION_FIELD_MISSING",
+                            "documents",
+                            field,
+                            (
+                                "Content verification requires method, source, scope "
+                                "and limitations."
+                            ),
+                            media_id,
+                            documents.get(media_id),
+                        )
+                    )
+        if snapshot.get("schemaVersion") != 2:
+            return issues
         if not isinstance(raw_evidences, list):
-            raise ReviewValidationError("Stored dossier evidence is invalid.")
-        expected = {
-            str(evidence["mediaAssetId"])
-            for evidence in raw_evidences
-            if isinstance(evidence, Mapping)
-            and isinstance(evidence.get("mediaAssetId"), str)
-        }
+            issues.append(
+                CompletionIssue(
+                    "STORED_EVIDENCE_INVALID",
+                    "documents",
+                    "section",
+                    "Stored dossier evidence is invalid.",
+                )
+            )
+            return issues
         assessed = {
             media_id
             for media_id, assessment in assessments.items()
@@ -1283,19 +1348,37 @@ class ReviewService:
             and assessment.get("status")
             in {"VALID", "NEEDS_CLARIFICATION", "NOT_RELEVANT"}
         }
-        if assessed != expected:
-            raise ReviewValidationError(
-                "Every file in this dossier version must be assessed before submission."
+        for media_id in sorted(documents.keys() ^ assessed):
+            issues.append(
+                CompletionIssue(
+                    "DOCUMENT_ASSESSMENT_INCOMPLETE",
+                    "documents",
+                    "status",
+                    (
+                        "Every file in this dossier version must be "
+                        "assessed before submission."
+                    ),
+                    media_id,
+                    documents.get(media_id),
+                )
             )
-        if any(
-            assessment.get("status") == "NEEDS_CLARIFICATION"
-            and len(str(assessment.get("note", "")).strip()) < 10
-            for assessment in assessments.values()
-            if isinstance(assessment, Mapping)
-        ):
-            raise ReviewValidationError(
-                "Clarification assessments require a short explanation."
-            )
+        for media_id, assessment in assessments.items():
+            if (
+                isinstance(assessment, Mapping)
+                and assessment.get("status") == "NEEDS_CLARIFICATION"
+                and len(str(assessment.get("note", "")).strip()) < 10
+            ):
+                issues.append(
+                    CompletionIssue(
+                        "DOCUMENT_CLARIFICATION_MISSING",
+                        "documents",
+                        "note",
+                        "Clarification assessments require a short explanation.",
+                        media_id,
+                        documents.get(media_id),
+                    )
+                )
+        return issues
 
     @staticmethod
     def _rubric_from_snapshot(
@@ -1478,116 +1561,226 @@ class ReviewService:
         cls._validate_complete_evidence_assessments(review, snapshot)
         cls._validate_verdict_decision(review, rubric)
 
-    @staticmethod
+    @classmethod
+    def _verdict_readiness(
+        cls, review: Review | None, snapshot: Mapping[str, object]
+    ) -> ReviewReadiness | None:
+        rubric = cls._rubric_from_snapshot(snapshot)
+        if rubric is None or not cls._is_verdict_rubric(rubric):
+            return None
+        draft = review if review is not None else Review()
+        issues = (
+            *cls._evidence_completion_issues(draft, snapshot),
+            *cls._verdict_completion_issues(draft, rubric),
+        )
+        return ReviewReadiness(not issues, issues)
+
+    @classmethod
     def _validate_verdict_decision(
-        review: Review, rubric: Mapping[str, object]
+        cls, review: Review, rubric: Mapping[str, object]
     ) -> None:
+        issues = cls._verdict_completion_issues(review, rubric)
+        if issues:
+            raise ReviewValidationError(issues[0].message)
+
+    @staticmethod
+    def _verdict_completion_issues(
+        review: Review, rubric: Mapping[str, object]
+    ) -> list[CompletionIssue]:
+        issues: list[CompletionIssue] = []
         raw_criteria = rubric.get("criteria")
-        gates = rubric.get("gates", [])
-        if not isinstance(raw_criteria, list) or not isinstance(gates, list):
-            raise ReviewValidationError("Stored verdict rubric is invalid.")
-        criterion_keys = {
-            str(item["key"]) for item in raw_criteria if isinstance(item, Mapping)
-        }
-        criterion_verdicts = review.criterion_verdicts or {}
-        if set(criterion_verdicts) != criterion_keys:
-            raise ReviewValidationError("Every rubric criterion requires a conclusion.")
-        policy_enabled = rubric.get("evidencePolicyVersion") == "2026.1"
-        criteria_by_key = {
+        raw_gates = rubric.get("gates", [])
+        if not isinstance(raw_criteria, list) or not isinstance(raw_gates, list):
+            return [
+                CompletionIssue(
+                    "RUBRIC_INVALID",
+                    "report",
+                    "section",
+                    "Stored verdict rubric is invalid.",
+                )
+            ]
+        criteria = {
             str(item["key"]): item for item in raw_criteria if isinstance(item, Mapping)
         }
+        gates = {
+            str(item["key"]): item for item in raw_gates if isinstance(item, Mapping)
+        }
+        verdicts = review.criterion_verdicts or {}
+        gate_answers = review.gate_answers or {}
+        policy = rubric.get("evidencePolicyVersion") == "2026.1"
         approval_rationales: set[str] = set()
-        for key, answer in criterion_verdicts.items():
-            if not isinstance(answer, Mapping):
-                raise ReviewValidationError("Stored criterion conclusion is invalid.")
+        if verdicts.keys() - criteria.keys():
+            issues.append(
+                CompletionIssue(
+                    "CRITERION_UNKNOWN",
+                    "criteria",
+                    "section",
+                    "Every rubric criterion requires a conclusion.",
+                )
+            )
+        for key, criterion in criteria.items():
+            label = str(criterion.get("label", key))
+
+            def add(
+                code: str,
+                field: str,
+                message: str,
+                entity_id: str = key,
+                entity_label: str = label,
+            ) -> None:
+                issues.append(
+                    CompletionIssue(
+                        code, "criteria", field, message, entity_id, entity_label
+                    )
+                )
+
+            answer = verdicts.get(key)
+            if not isinstance(answer, Mapping) or not answer.get("outcome"):
+                add(
+                    "CRITERION_OUTCOME_MISSING",
+                    "outcome",
+                    "Every rubric criterion requires a conclusion.",
+                )
+                continue
+            outcome = answer["outcome"]
             rationale = answer.get("rationale")
             evidence_ids = answer.get("evidence_media_ids", [])
-            if not isinstance(evidence_ids, (list, tuple)):
-                raise ReviewValidationError("Stored criterion evidence is invalid.")
-            outcome = answer.get("outcome")
             if not isinstance(rationale, str) or len(rationale.strip()) < 20:
-                raise ReviewValidationError(
-                    "Every rubric criterion requires a clear rationale."
+                add(
+                    "CRITERION_RATIONALE_MISSING",
+                    "rationale",
+                    "Every rubric criterion requires a clear rationale.",
                 )
+            if not isinstance(evidence_ids, (list, tuple)):
+                add(
+                    "CRITERION_EVIDENCE_INVALID",
+                    "evidence",
+                    "Stored criterion evidence is invalid.",
+                )
+                continue
             if (
                 outcome not in {"NOT_APPLICABLE", "INSUFFICIENT_BASIS"}
                 and not evidence_ids
             ):
-                raise ReviewValidationError(
-                    "Every applicable rubric criterion requires evidence."
+                add(
+                    "CRITERION_EVIDENCE_MISSING",
+                    "evidence",
+                    "Every applicable rubric criterion requires evidence.",
                 )
-            if policy_enabled:
-                if outcome == "MEETS":
-                    normalized = " ".join(rationale.split()).casefold()
-                    if normalized in approval_rationales:
-                        raise ReviewValidationError(
+            if not policy:
+                continue
+            if outcome == "NOT_APPLICABLE" and not criterion.get(
+                "allowNotApplicable", False
+            ):
+                add(
+                    "CRITERION_NOT_APPLICABLE_INVALID",
+                    "outcome",
+                    "This criterion does not permit not applicable.",
+                )
+            if outcome != "MEETS":
+                continue
+            if isinstance(rationale, str):
+                normalized = " ".join(rationale.split()).casefold()
+                if normalized in approval_rationales:
+                    add(
+                        "CRITERION_RATIONALE_DUPLICATE",
+                        "rationale",
+                        (
                             "Approval requires criterion-specific rationales, "
                             "not repeated boilerplate."
-                        )
-                    approval_rationales.add(normalized)
-                criterion = criteria_by_key[key]
-                if outcome == "NOT_APPLICABLE" and not criterion.get(
-                    "allowNotApplicable", False
-                ):
-                    raise ReviewValidationError(
-                        "This criterion does not permit not applicable."
+                        ),
                     )
-                if outcome == "MEETS":
-                    for media_id in evidence_ids:
-                        assessment = (review.evidence_assessments or {}).get(
-                            str(media_id), {}
-                        )
-                        if assessment.get("status") != "VALID":
-                            raise ReviewValidationError(
-                                "MEETS requires relevant evidence without "
-                                "open clarification."
-                            )
-                        verification = assessment.get("verification")
-                        verified_outcome = (
-                            verification.get("outcome")
-                            if isinstance(verification, Mapping)
-                            else "UNVERIFIED"
-                        )
-                        if verified_outcome in {
-                            "INSUFFICIENT",
-                            "CONTRADICTED",
-                            "UNVERIFIABLE",
-                        } or (
-                            criterion.get("verificationRequired") is True
-                            and verified_outcome != "VERIFIED"
-                        ):
-                            raise ReviewValidationError(
-                                "MEETS cannot bypass required or unresolved "
-                                "content verification."
-                            )
-        outcomes = {
-            str(value.get("outcome"))
-            for value in criterion_verdicts.values()
-            if isinstance(value, Mapping)
-        }
+                approval_rationales.add(normalized)
+            for media_id in evidence_ids:
+                assessment = (review.evidence_assessments or {}).get(str(media_id), {})
+                if assessment.get("status") != "VALID":
+                    add(
+                        "CRITERION_EVIDENCE_UNRESOLVED",
+                        "evidence",
+                        "MEETS requires relevant evidence without open clarification.",
+                    )
+                    break
+                verification = assessment.get("verification")
+                outcome_verified = (
+                    verification.get("outcome")
+                    if isinstance(verification, Mapping)
+                    else "UNVERIFIED"
+                )
+                if outcome_verified in {
+                    "INSUFFICIENT",
+                    "CONTRADICTED",
+                    "UNVERIFIABLE",
+                } or (
+                    criterion.get("verificationRequired") is True
+                    and outcome_verified != "VERIFIED"
+                ):
+                    add(
+                        "CRITERION_VERIFICATION_REQUIRED",
+                        "evidence",
+                        (
+                            "MEETS cannot bypass required or unresolved "
+                            "content verification."
+                        ),
+                    )
+                    break
+
+        if gate_answers.keys() - gates.keys():
+            issues.append(
+                CompletionIssue(
+                    "ADMISSION_UNKNOWN",
+                    "conditions",
+                    "section",
+                    "All mandatory rubric gates are required.",
+                )
+            )
+        for key, gate in gates.items():
+            label = str(gate.get("label", key))
+            answer = gate_answers.get(key)
+            if not isinstance(answer, Mapping) or answer.get("outcome") not in {
+                "PASS",
+                "FAIL",
+                "NOT_APPLICABLE",
+            }:
+                issues.append(
+                    CompletionIssue(
+                        "ADMISSION_OUTCOME_MISSING",
+                        "conditions",
+                        "outcome",
+                        "Every rubric gate requires an assessment.",
+                        key,
+                        label,
+                    )
+                )
+                continue
+            if len(str(answer.get("rationale", "")).strip()) < 20:
+                issues.append(
+                    CompletionIssue(
+                        "ADMISSION_RATIONALE_MISSING",
+                        "conditions",
+                        "rationale",
+                        "Every rubric gate requires a clear rationale.",
+                        key,
+                        label,
+                    )
+                )
+
+        if any(issue.field in {"outcome", "section"} for issue in issues):
+            return issues
+        outcomes = {str(value.get("outcome")) for value in verdicts.values()}
         if not outcomes or outcomes == {"NOT_APPLICABLE"}:
-            raise ReviewValidationError("At least one rubric criterion must apply.")
-        gate_keys = {str(item["key"]) for item in gates if isinstance(item, Mapping)}
-        gate_answers = review.gate_answers or {}
-        if set(gate_answers) != gate_keys:
-            raise ReviewValidationError("All mandatory rubric gates are required.")
-        if any(
-            answer.get("outcome") not in {"PASS", "FAIL", "NOT_APPLICABLE"}
-            for answer in gate_answers.values()
-            if isinstance(answer, Mapping)
-        ):
-            raise ReviewValidationError("Every rubric gate requires an assessment.")
-        if any(
-            not isinstance(answer, Mapping)
-            or len(str(answer.get("rationale", "")).strip()) < 20
-            for answer in gate_answers.values()
-        ):
-            raise ReviewValidationError("Every rubric gate requires a clear rationale.")
+            issues.append(
+                CompletionIssue(
+                    "NO_APPLICABLE_CRITERION",
+                    "criteria",
+                    "section",
+                    "At least one rubric criterion must apply.",
+                )
+            )
+            return issues
         required_gate_failed = any(
-            isinstance(gate, Mapping)
-            and gate.get("required", True) is True
-            and gate_answers.get(str(gate["key"]), {}).get("outcome") != "PASS"
-            for gate in gates
+            gate.get("required", True) is True
+            and gate_answers[key].get("outcome") != "PASS"
+            for key, gate in gates.items()
         )
         expected = ReviewRecommendation.APPROVE
         if required_gate_failed or "DOES_NOT_MEET" in outcomes:
@@ -1595,19 +1788,33 @@ class ReviewService:
         elif outcomes & {"NEEDS_CLARIFICATION", "INSUFFICIENT_BASIS"}:
             expected = ReviewRecommendation.SUPPLEMENT
         if review.recommendation is not expected:
-            raise ReviewValidationError(
-                f"Criterion conclusions require recommendation {expected.value}."
+            issues.append(
+                CompletionIssue(
+                    "REPORT_RECOMMENDATION_MISMATCH",
+                    "report",
+                    "section",
+                    f"Criterion conclusions require recommendation {expected.value}.",
+                )
             )
-        if policy_enabled and expected is ReviewRecommendation.APPROVE:
-            for assessment in (review.evidence_assessments or {}).values():
+        if policy and expected is ReviewRecommendation.APPROVE:
+            for media_id, assessment in (review.evidence_assessments or {}).items():
                 verification = assessment.get("verification")
                 if (
                     assessment.get("status") != "NOT_RELEVANT"
                     and isinstance(verification, Mapping)
                     and verification.get("outcome") == "CONTRADICTED"
                 ):
-                    raise ReviewValidationError(
-                        "Resolve the relevant evidence contradiction before approval."
+                    issues.append(
+                        CompletionIssue(
+                            "DOCUMENT_CONTRADICTION",
+                            "documents",
+                            "verification",
+                            (
+                                "Resolve the relevant evidence contradiction "
+                                "before approval."
+                            ),
+                            media_id,
+                        )
                     )
         if expected in {
             ReviewRecommendation.SUPPLEMENT,
@@ -1616,9 +1823,15 @@ class ReviewService:
             review.applicant_feedback is None
             or len(review.applicant_feedback.strip()) < 20
         ):
-            raise ReviewValidationError(
-                "A clear applicant-facing explanation is required."
+            issues.append(
+                CompletionIssue(
+                    "APPLICANT_FEEDBACK_MISSING",
+                    "report",
+                    "feedback",
+                    "A clear applicant-facing explanation is required.",
+                )
             )
+        return issues
 
     @staticmethod
     def _apply_draft(review: Review, draft: ReviewDraft) -> None:
