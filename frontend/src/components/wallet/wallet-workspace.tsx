@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { RefreshCw, Wallet } from "lucide-react";
@@ -499,7 +499,7 @@ export function WalletWorkspace({
             {data.transactions.map((item) => (
               <li
                 key={item.id}
-                className="flex items-start justify-between gap-4 py-4"
+                className="grid gap-1.5 py-4 sm:flex sm:items-start sm:justify-between sm:gap-4"
               >
                 <div className="min-w-0">
                   <p className="break-words font-medium">{item.description}</p>
@@ -508,7 +508,7 @@ export function WalletWorkspace({
                     {formatVnd(item.balanceAfter)}
                   </p>
                 </div>
-                <p className="shrink-0 font-bold">
+                <p className="break-words font-bold max-sm:tabular-nums sm:shrink-0">
                   {item.walletDelta > 0 ? "+" : ""}
                   {formatVnd(item.walletDelta)}
                 </p>

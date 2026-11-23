@@ -2917,10 +2917,6 @@ summary {
   background: color-mix(in srgb, var(--theme-accent) 9%, var(--theme-surface));
 }
 
-.site-mobile-navigation {
-  display: none;
-}
-
 @media (max-width: 63.99rem) {
   .public-user-menu {
     display: none;
@@ -2928,80 +2924,6 @@ summary {
 
   .public-mobile-drawer {
     z-index: 50;
-  }
-
-  .site-mobile-navigation {
-    position: fixed;
-    z-index: 35;
-    right: 0;
-    bottom: 0;
-    left: 0;
-    display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-    gap: 0.125rem;
-    padding: 0.35rem 0.35rem max(0.35rem, env(safe-area-inset-bottom));
-    border-top: 1px solid var(--theme-border);
-    background: var(--theme-surface);
-    box-shadow: 0 -0.5rem 1.75rem
-      color-mix(in srgb, var(--theme-text) 12%, transparent);
-  }
-
-  .site-mobile-navigation__item {
-    display: flex;
-    min-width: 0;
-    min-height: 3.5rem;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 0.2rem;
-    padding: 0.25rem 0.125rem;
-    border: 0;
-    border-radius: 0.65rem;
-    background: transparent;
-    color: var(--theme-muted);
-    font: inherit;
-    font-size: 0.62rem;
-    font-weight: 650;
-    line-height: 1.1;
-    text-align: center;
-    text-decoration: none;
-    touch-action: manipulation;
-  }
-
-  .site-mobile-navigation__item[aria-current="page"] {
-    background: color-mix(
-      in srgb,
-      var(--theme-accent) 10%,
-      var(--theme-surface)
-    );
-    color: var(--theme-accent);
-  }
-
-  .site-mobile-navigation__item:focus-visible {
-    outline: 2px solid var(--theme-accent);
-    outline-offset: 1px;
-  }
-
-  .site-mobile-navigation__icon {
-    width: 1.2rem;
-    height: 1.2rem;
-    flex: 0 0 auto;
-    stroke-width: 1.8;
-  }
-
-  .site-mobile-navigation__item > span {
-    max-width: 100%;
-    overflow-wrap: anywhere;
-    white-space: normal;
-  }
-
-  .public-shell {
-    padding-bottom: calc(4.25rem + env(safe-area-inset-bottom));
-  }
-
-  .dashboard-shell--workspace .dashboard-main {
-    padding-bottom: calc(7.25rem + env(safe-area-inset-bottom));
-    scroll-padding-bottom: calc(7.25rem + env(safe-area-inset-bottom));
   }
 
   .dashboard-shell--admin .dashboard-main {
@@ -12314,14 +12236,6 @@ html[data-theme="dark"] .dashboard-main .hr-worksite-card {
     ):active {
     transform: scale(0.96);
   }
-
-  .site-mobile-navigation__item {
-    transition: transform 150ms ease-out;
-  }
-
-  .site-mobile-navigation__item:active {
-    transform: scale(0.96);
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -13880,9 +13794,6 @@ html[data-theme="dark"] .confirmation-dialog__surface {
   }
   .profile-name-reminder a {
     justify-self: start;
-  }
-  .site-mobile-navigation {
-    backdrop-filter: none;
   }
   .notification-panel {
     max-height: calc(100dvh - 11rem);

@@ -1,4 +1,4 @@
-import Image from "next/image";
+﻿import Image from "next/image";
 
 export function HeritageSymbols() {
   return (
@@ -9,7 +9,7 @@ export function HeritageSymbols() {
           className="registry-heritage__logo"
           height={512}
           loading="eager"
-          sizes="(max-width: 48rem) 280px, 440px"
+          sizes="(width < 48rem) 64px, 440px"
           src="/assets/brand/logo-tinh-hoa-viet.png"
           width={512}
         />

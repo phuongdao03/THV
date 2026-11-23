@@ -415,10 +415,10 @@ function ComparisonSection({
           <div className="mt-5 space-y-3 xl:hidden">
             {tiers.map((tier) => (
               <details
-                className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-surface)] p-4"
+                className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-surface)] px-4 py-1 open:pb-4"
                 key={tier.code}
               >
-                <summary className="cursor-pointer font-semibold text-[var(--theme-text)] focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-accent)]">
+                <summary className="min-h-11 cursor-pointer py-3 font-semibold text-[var(--theme-text)] focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-accent)]">
                   {tier.label}
                 </summary>
                 <ul className="mt-4 space-y-3">

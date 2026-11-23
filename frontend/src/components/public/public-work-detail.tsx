@@ -6,6 +6,7 @@ import {
   ArrowLeft,
   Blocks,
   CalendarDays,
+  ChevronDown,
   CircleHelp,
   ExternalLink,
   FileCheck2,
@@ -17,7 +18,7 @@ import {
 import Image from "next/image";
 import Link from "next/link";
 import { HistoricalCertificatePresentation } from "@/components/certificates/historical-certificate-presentation";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 
 import { AdaptiveVideo } from "@/components/public/adaptive-video";
 import { ImageLoadingStatus } from "@/components/media/image-loading-status";
@@ -602,6 +603,8 @@ function ProofPanel({
   verification?: Verification;
   verificationPending: boolean;
 }) {
+  const [expanded, setExpanded] = useState(false);
+  const fieldsId = useId();
   const state =
     isHistorical && !proof
       ? {
@@ -624,15 +627,33 @@ function ProofPanel({
         {state.description}
       </p>
       {proof ? (
-        <dl className="mt-5 space-y-3 text-sm">
-          <DataRow label="Nơi ghi nhận" value={proof.network} mono />
-          <DataRow
-            label="Mã đối chiếu"
-            value={proof.transactionHash || "Đang cập nhật"}
-            mono
-          />
-          <DataRow label="Xác nhận" value={String(proof.confirmations)} />
-        </dl>
+        <>
+          <button
+            aria-controls={fieldsId}
+            aria-expanded={expanded}
+            className="mt-4 flex min-h-11 w-full items-center justify-between gap-3 rounded-lg border border-[var(--theme-border)] px-3 text-left text-sm font-semibold text-[var(--theme-text)] focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] sm:hidden"
+            onClick={() => setExpanded((value) => !value)}
+            type="button"
+          >
+            Chi tiết đối chiếu
+            <ChevronDown
+              aria-hidden="true"
+              className={expanded ? "size-4 rotate-180" : "size-4"}
+            />
+          </button>
+          <dl
+            className={`mt-5 space-y-3 text-sm ${expanded ? "" : "max-sm:hidden"}`}
+            id={fieldsId}
+          >
+            <DataRow label="Nơi ghi nhận" value={proof.network} mono />
+            <DataRow
+              label="Mã đối chiếu"
+              value={proof.transactionHash || "Đang cập nhật"}
+              mono
+            />
+            <DataRow label="Xác nhận" value={String(proof.confirmations)} />
+          </dl>
+        </>
       ) : null}
       {verification?.explorerUrl ? (
         <a

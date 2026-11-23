@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -1035,9 +1035,9 @@ export function CommunityPostEditor({
 }
 
 const controlClass =
-  "mt-2 min-h-12 w-full rounded-xl border border-[var(--theme-border)] bg-[var(--theme-surface)] px-4 text-sm font-normal text-[var(--theme-text)] outline-none transition focus:border-[var(--theme-accent)] focus:ring-2 focus:ring-[var(--theme-accent)]/20 disabled:cursor-not-allowed disabled:opacity-60";
+  "mt-2 min-h-12 w-full rounded-xl border border-[var(--theme-border)] bg-[var(--theme-surface)] px-4 text-base font-normal sm:text-sm text-[var(--theme-text)] outline-none transition focus:border-[var(--theme-accent)] focus:ring-2 focus:ring-[var(--theme-accent)]/20 disabled:cursor-not-allowed disabled:opacity-60";
 const searchControlClass =
-  "min-h-12 w-full rounded-xl border border-[var(--theme-border)] bg-[var(--theme-surface)] px-4 text-sm font-normal text-[var(--theme-text)] outline-none transition focus:border-[var(--theme-accent)] focus:ring-2 focus:ring-[var(--theme-accent)]/20 disabled:cursor-not-allowed disabled:opacity-60";
+  "min-h-12 w-full rounded-xl border border-[var(--theme-border)] bg-[var(--theme-surface)] px-4 text-base font-normal sm:text-sm text-[var(--theme-text)] outline-none transition focus:border-[var(--theme-accent)] focus:ring-2 focus:ring-[var(--theme-accent)]/20 disabled:cursor-not-allowed disabled:opacity-60";
 const COMMUNITY_IMAGE_MAX_COUNT = communityPostImageLimits.maxCount;
 const COMMUNITY_IMAGE_MAX_BYTES = communityPostImageLimits.maxBytes;
 const COMMUNITY_AUTO_SAVE_DELAY_MS = 1_200;
@@ -1077,7 +1077,7 @@ function ToolbarButton({
   return (
     <button
       aria-label={label}
-      className="grid size-10 place-items-center rounded-lg text-[var(--theme-text)] hover:bg-[var(--theme-surface)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--theme-accent)] disabled:cursor-not-allowed disabled:opacity-40"
+      className="grid size-11 place-items-center rounded-lg text-[var(--theme-text)] sm:size-10 hover:bg-[var(--theme-surface)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--theme-accent)] disabled:cursor-not-allowed disabled:opacity-40"
       disabled={disabled}
       onClick={onClick}
       type="button"

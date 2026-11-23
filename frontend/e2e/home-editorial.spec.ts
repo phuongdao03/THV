@@ -37,6 +37,19 @@ test("home prioritizes evidence and fits every target width in both themes", asy
     for (const width of [320, 360, 375, 390, 414, 430, 768, 1024, 1440]) {
       await page.setViewportSize({ width, height: 900 });
       await expectDocumentToFit(page, `${theme} homepage at ${width}`);
+      const quickSearch = page.getByRole("search", {
+        name: "Tra cứu đề cử",
+        exact: true,
+      });
+      if (width < 768) {
+        await expect(quickSearch).toBeVisible();
+        await expect(quickSearch.getByRole("searchbox")).toHaveCSS(
+          "font-size",
+          "16px",
+        );
+      } else {
+        await expect(quickSearch).toBeHidden();
+      }
       if (width <= 430) {
         const box = await page
           .locator(".registry-hero__buttons .registry-button-primary")
@@ -263,4 +276,21 @@ test("gallery image failure can retry the real image", async ({ page }) => {
     )
     .toBe(true);
   await expect(page.locator(".heritage-gallery__error")).toHaveCount(0);
+});
+
+test("mobile hero search opens the catalog with the entered query", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 320, height: 844 });
+  await page.goto("/");
+  const search = page.getByRole("search", {
+    name: "Tra cứu đề cử",
+    exact: true,
+  });
+  await search.getByRole("searchbox").fill("di sản");
+  await search.getByRole("button", { name: "Tìm", exact: true }).click();
+  await expect(page).toHaveURL(
+    (url) =>
+      url.pathname === "/works" && url.searchParams.get("query") === "di sản",
+  );
 });

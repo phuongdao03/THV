@@ -419,7 +419,7 @@ export function DossierCreateForm() {
                 </label>
                 <input
                   autoComplete="off"
-                  className="mt-2 min-h-12 w-full rounded-xl border border-[var(--theme-border)] bg-[var(--theme-surface)] px-4 text-sm text-[var(--theme-text)] outline-none focus:border-[var(--theme-accent)] focus:ring-2 focus:ring-[var(--theme-accent)]"
+                  className="mt-2 min-h-12 w-full rounded-xl border border-[var(--theme-border)] bg-[var(--theme-surface)] px-4 text-base sm:text-sm text-[var(--theme-text)] outline-none focus:border-[var(--theme-accent)] focus:ring-2 focus:ring-[var(--theme-accent)]"
                   id="dossier-type-search"
                   onChange={(event) => setTypeQuery(event.target.value)}
                   placeholder="Ví dụ: di sản, tác phẩm…"
@@ -664,7 +664,7 @@ export function DossierCreateForm() {
                   </label>
                   <input
                     aria-describedby="dossier-title-error"
-                    className="mt-2 min-h-12 w-full rounded-xl border border-neutral-200 bg-white px-4 text-sm outline-none transition focus:border-primary-500 focus:ring-4 focus:ring-primary-100"
+                    className="mt-2 min-h-12 w-full rounded-xl border border-neutral-200 bg-white px-4 text-base sm:text-sm outline-none transition focus:border-primary-500 focus:ring-4 focus:ring-primary-100"
                     id="dossier-title"
                     placeholder="Ví dụ: Bộ sưu tập văn hóa Việt"
                     {...form.register("title")}
@@ -689,7 +689,7 @@ export function DossierCreateForm() {
                     Mô tả ngắn
                   </label>
                   <textarea
-                    className="mt-2 min-h-32 w-full resize-y rounded-xl border border-neutral-200 bg-white px-4 py-3 text-sm leading-6 outline-none transition focus:border-primary-500 focus:ring-4 focus:ring-primary-100"
+                    className="mt-2 min-h-32 w-full resize-y rounded-xl border border-neutral-200 bg-white px-4 py-3 text-base sm:text-sm leading-6 outline-none transition focus:border-primary-500 focus:ring-4 focus:ring-primary-100"
                     id="dossier-summary"
                     placeholder="Nêu mục đích, nguồn gốc và phạm vi tài sản cần xác lập."
                     {...form.register("summary")}
@@ -764,7 +764,7 @@ export function DossierCreateForm() {
                     ) : null}
                     {field.type === "textarea" ? (
                       <textarea
-                        className="mt-2 min-h-28 w-full resize-y rounded-xl border border-neutral-200 bg-white px-4 py-3 text-sm leading-6"
+                        className="mt-2 min-h-28 w-full resize-y rounded-xl border border-neutral-200 bg-white px-4 py-3 text-base sm:text-sm leading-6"
                         id={`field-${field.key}`}
                         onChange={(event) =>
                           setFormData((current) => ({
@@ -778,7 +778,7 @@ export function DossierCreateForm() {
                       />
                     ) : field.type === "select" ? (
                       <select
-                        className="mt-2 min-h-12 w-full rounded-xl border border-neutral-200 bg-white px-4 text-sm"
+                        className="mt-2 min-h-12 w-full rounded-xl border border-neutral-200 bg-white px-4 text-base sm:text-sm"
                         id={`field-${field.key}`}
                         onChange={(event) =>
                           setFormData((current) => ({
@@ -806,7 +806,7 @@ export function DossierCreateForm() {
                       </select>
                     ) : field.type === "multiselect" ? (
                       <select
-                        className="mt-2 min-h-28 w-full rounded-xl border border-neutral-200 bg-white px-4 py-3 text-sm"
+                        className="mt-2 min-h-28 w-full rounded-xl border border-neutral-200 bg-white px-4 py-3 text-base sm:text-sm"
                         id={`field-${field.key}`}
                         multiple
                         onChange={(event) =>
@@ -885,7 +885,7 @@ export function DossierCreateForm() {
                       />
                     ) : (
                       <input
-                        className="mt-2 min-h-12 w-full rounded-xl border border-neutral-200 bg-white px-4 text-sm"
+                        className="mt-2 min-h-12 w-full rounded-xl border border-neutral-200 bg-white px-4 text-base sm:text-sm"
                         aria-describedby={
                           displayFieldHelp(
                             field.key,

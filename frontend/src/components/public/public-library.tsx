@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -32,7 +32,7 @@ export interface CatalogParameters {
 }
 
 const controlClass =
-  "min-h-12 w-full rounded-xl border border-[var(--theme-border)] bg-[var(--theme-surface)] px-4 text-sm text-[var(--theme-text)] outline-none transition focus:border-[var(--theme-accent)] focus:ring-2 focus:ring-[var(--theme-accent)]/20";
+  "min-h-12 w-full rounded-xl border border-[var(--theme-border)] bg-[var(--theme-surface)] px-4 text-base text-[var(--theme-text)] outline-none lg:text-sm transition focus:border-[var(--theme-accent)] focus:ring-2 focus:ring-[var(--theme-accent)]/20";
 
 export function PublicLibrary({
   initialData,
@@ -171,7 +171,12 @@ export function PublicLibrary({
         </section>
       ) : null}
 
-      <section aria-labelledby="catalog-results-heading" id="catalog-search">
+      <section
+        aria-labelledby="catalog-results-heading"
+        className="max-sm:scroll-mt-24"
+        id="catalog-search"
+        tabIndex={-1}
+      >
         <div className="border-y border-white/10 py-5">
           <form
             className="grid grid-cols-2 gap-2 sm:gap-3 lg:flex"
@@ -346,10 +351,10 @@ export function PublicLibrary({
           role="dialog"
         >
           <div
-            className="catalog-filter-sheet absolute inset-x-0 bottom-0 max-h-[90dvh] overflow-y-auto rounded-t-3xl border-t border-white/10 bg-ink-900 p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]"
+            className="catalog-filter-sheet absolute inset-x-0 bottom-0 max-h-[85dvh] overflow-y-auto overscroll-contain rounded-t-2xl border-t border-white/10 bg-ink-900 p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]"
             ref={filterPanel}
           >
-            <div className="flex items-center justify-between">
+            <div className="sticky top-0 z-10 -mt-5 flex items-center justify-between bg-[var(--theme-surface)] py-3">
               <h2
                 className="text-xl font-bold text-white"
                 id="mobile-filter-title"

@@ -125,6 +125,19 @@ test("public portal is professional, responsive and verifiable", async ({
     ),
   ).toBeVisible();
   await expect(page.getByText("Thông tin đã được đối chiếu")).toBeVisible();
+  const proofToggle = page.getByRole("button", { name: "Chi tiết đối chiếu" });
+  const proofHashLabel = page.getByText("Mã đối chiếu", { exact: true });
+  if (page.viewportSize()!.width < 640) {
+    await expect(proofHashLabel).toBeHidden();
+    await proofToggle.click();
+    await expect(proofToggle).toHaveAttribute("aria-expanded", "true");
+    await expect(proofHashLabel).toBeVisible();
+    await proofToggle.click();
+    await expect(proofHashLabel).toBeHidden();
+  } else {
+    await expect(proofToggle).toBeHidden();
+    await expect(proofHashLabel).toBeVisible();
+  }
   await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
     "href",
     new URL("/works/video-chao-mung-tinh-hoa-viet", page.url()).toString(),

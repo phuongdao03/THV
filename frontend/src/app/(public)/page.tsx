@@ -118,6 +118,26 @@ export default function HomePage() {
             <HeritageSymbols />
           </div>
           <div className="registry-hero__actions relative z-10 max-w-[44rem] lg:pb-8">
+            <form
+              action="/works"
+              aria-label="Tra cứu đề cử"
+              className="home-quick-search"
+              role="search"
+            >
+              <label className="sr-only" htmlFor="home-quick-search">
+                Tìm theo tên, câu chuyện hoặc lĩnh vực
+              </label>
+              <input
+                id="home-quick-search"
+                name="query"
+                placeholder="Tìm kiếm đề cử"
+                type="search"
+              />
+              <button type="submit">
+                <Search aria-hidden="true" className="size-4" />
+                Tìm
+              </button>
+            </form>
             <div className="registry-hero__action-row">
               <HomeHeroAccountActions preview={preview} />
               <Link

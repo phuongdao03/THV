@@ -1,3 +1,4 @@
+import { SlidersHorizontal } from "lucide-react";
 import type { Metadata } from "next";
 import {
   type CatalogParameters,
@@ -83,6 +84,13 @@ export default async function LibraryPage({
               cộng đồng.
             </p>
           </div>
+          <a
+            className="inline-flex min-h-11 w-fit items-center gap-2 rounded-lg border border-[var(--theme-border)] px-3 text-sm font-semibold text-[var(--theme-accent)] focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] sm:hidden"
+            href="#catalog-search"
+          >
+            <SlidersHorizontal aria-hidden="true" className="size-4" />
+            Tìm và lọc đề cử
+          </a>
         </header>
         <div className={embedded ? "mt-5 sm:mt-8" : "mt-6 sm:mt-9"}>
           <PublicLibrary {...parameters} initialData={initialData} />

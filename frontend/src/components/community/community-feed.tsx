@@ -5,6 +5,7 @@ import {
   ArrowLeft,
   ArrowRight,
   LoaderCircle,
+  MessageCircle,
   Plus,
   RotateCcw,
   Search,
@@ -127,6 +128,14 @@ export function CommunityFeed({
           )}
         </header>
 
+        <Link
+          className="mt-3 inline-flex min-h-11 items-center gap-2 rounded-lg border border-[var(--theme-border)] px-3 text-sm font-semibold text-[var(--theme-accent)] focus-visible:outline-2 focus-visible:outline-[var(--theme-accent)] sm:hidden"
+          href="/community/chat"
+        >
+          <MessageCircle aria-hidden="true" className="size-4" />
+          Phòng trò chuyện
+        </Link>
+
         {authStatus === "error" ? (
           <p
             className="mt-4 rounded-xl border border-[var(--theme-border)] bg-[var(--theme-surface)] px-4 py-3 text-sm leading-6 text-[var(--theme-muted)]"
@@ -147,7 +156,7 @@ export function CommunityFeed({
           <label className="relative flex min-w-0 flex-1 items-center">
             <span className="sr-only">Tìm kiếm bài viết</span>
             <input
-              className="min-h-12 min-w-0 w-full rounded-full border border-[var(--theme-border)] bg-[var(--theme-surface)] py-2 pr-12 pl-5 text-sm text-[var(--theme-text)] outline-none placeholder:text-[var(--theme-muted)] focus-visible:border-[var(--theme-accent)] focus-visible:ring-2 focus-visible:ring-[var(--theme-accent)]/20"
+              className="min-h-12 min-w-0 w-full rounded-full border border-[var(--theme-border)] bg-[var(--theme-surface)] py-2 pr-12 pl-4 text-base text-[var(--theme-text)] sm:pl-5 sm:text-sm outline-none placeholder:text-[var(--theme-muted)] focus-visible:border-[var(--theme-accent)] focus-visible:ring-2 focus-visible:ring-[var(--theme-accent)]/20"
               defaultValue={q ?? ""}
               maxLength={120}
               name="q"
@@ -156,7 +165,7 @@ export function CommunityFeed({
             />
             <button
               aria-label="Tìm bài viết"
-              className="absolute right-1 inline-grid size-10 place-items-center rounded-full text-[var(--theme-muted)] transition-colors duration-150 hover:bg-[var(--theme-elevated)] hover:text-[var(--theme-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-accent)]"
+              className="absolute right-1 inline-grid size-11 sm:size-10 place-items-center rounded-full text-[var(--theme-muted)] transition-colors duration-150 hover:bg-[var(--theme-elevated)] hover:text-[var(--theme-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-accent)]"
               type="submit"
             >
               <Search aria-hidden="true" className="size-4" />

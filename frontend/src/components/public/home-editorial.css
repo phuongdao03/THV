@@ -75,7 +75,8 @@
 .home-editorial .registry-hero__summary,
 .home-editorial .registry-hero__provenance,
 .home-editorial .registry-hero__desktop-search,
-.home-editorial .registry-hero-glow {
+.home-editorial .registry-hero-glow,
+.home-quick-search {
   display: none;
 }
 .public-home.home-editorial .registry-visual--heritage {
@@ -752,22 +753,6 @@ html[data-theme="dark"] .public-media-dialog {
     padding: 1.5rem;
   }
 }
-@media (max-width: 47.999rem) {
-  .public-home.home-editorial .registry-hero__buttons .registry-button {
-    width: 100%;
-    max-width: none;
-    min-width: 0;
-    min-height: 3rem;
-    font-size: 1rem;
-    justify-content: center;
-  }
-  .public-home.home-editorial .registry-hero__document-link {
-    width: 100%;
-    max-width: none;
-    margin: 0;
-    justify-content: flex-start;
-  }
-}
 @media (prefers-reduced-motion: reduce) {
   .home-editorial *,
   .public-media-dialog * {
@@ -942,23 +927,33 @@ html[data-theme="dark"] .public-media-dialog {
   }
 }
 
-@media (max-width: 47.999rem) {
+@media (width < 48rem) {
+  html[data-theme="dark"] .home-editorial .home-intro__drum {
+    filter: brightness(0) invert(1) sepia(1);
+    opacity: 0.09;
+  }
+
   .public-home.home-editorial .registry-hero__layout {
-    grid-template-areas: "intro" "visual" "actions";
-    row-gap: 0.25rem;
-    padding: 1.25rem 1rem 1.75rem;
+    grid-template-areas: "visual" "intro" "actions";
+    row-gap: 1rem;
+    padding: 1.25rem 1rem 1.5rem;
+  }
+
+  .public-home.home-editorial .registry-hero h1 {
+    margin-block: 0;
+    font-size: clamp(2rem, 8.5vw, 3rem);
   }
 
   .public-home.home-editorial .registry-visual--heritage {
     display: grid;
     grid-area: visual;
     min-height: 0;
-    margin: 0.25rem 0 0;
-    place-items: center;
+    margin: 0;
+    justify-items: start;
   }
 
   .public-home.home-editorial .registry-heritage {
-    width: clamp(10rem, 38vw, 13rem);
+    width: 4rem;
     height: auto;
     min-height: 0;
     aspect-ratio: 1;
@@ -966,13 +961,72 @@ html[data-theme="dark"] .public-media-dialog {
 
   .public-home.home-editorial .registry-heritage__logo-frame {
     width: 100%;
+    box-shadow: none;
   }
 
-  .public-home.home-editorial .registry-hero__actions {
-    margin-top: 0.5rem;
+  .home-quick-search {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.25rem;
+    margin-bottom: 0.75rem;
+    padding: 0.25rem;
+    border: 1px solid var(--theme-border);
+    border-radius: 0.75rem;
+    background: var(--theme-surface);
   }
-}
-@media (max-width: 48rem) {
+
+  .home-quick-search:focus-within {
+    outline: 2px solid var(--theme-accent);
+    outline-offset: 2px;
+  }
+
+  .home-quick-search input {
+    min-width: 0;
+    padding-inline: 0.625rem;
+    color: var(--theme-text);
+    font-size: 1rem;
+  }
+
+  .home-quick-search input::placeholder {
+    color: var(--theme-muted);
+  }
+
+  .home-quick-search button {
+    display: flex;
+    min-height: 2.75rem;
+    align-items: center;
+    gap: 0.375rem;
+    padding-inline: 0.75rem;
+    border-radius: 0.5rem;
+    background: var(--theme-elevated);
+    color: var(--theme-accent);
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .public-home.home-editorial .institution-section {
+    padding-block: 2rem;
+  }
+
+  .institution-document__preview img {
+    height: clamp(11rem, 52vw, 16rem);
+  }
+
+  .public-home.home-editorial .registry-hero__buttons .registry-button {
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+    min-height: 3rem;
+    font-size: 1rem;
+    justify-content: center;
+  }
+  .public-home.home-editorial .registry-hero__document-link {
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    justify-content: flex-start;
+  }
+
   .home-editorial .heritage-gallery__stage {
     aspect-ratio: 16/10;
     min-height: 0;
@@ -1039,10 +1093,16 @@ html[data-theme="dark"] .public-media-dialog {
   }
   .home-editorial .heritage-gallery__thumbnails {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 6px;
+    grid-auto-columns: clamp(4.5rem, 23vw, 6rem);
+    grid-auto-flow: column;
+    grid-template-columns: none;
+    gap: 0.5rem;
+    overflow-x: auto;
+    padding: 4px;
+    scroll-snap-type: inline proximity;
   }
   .home-editorial .heritage-gallery__thumbnails button {
+    scroll-snap-align: start;
     height: 60px;
     min-width: 0;
     min-height: 48px;
