@@ -15,7 +15,7 @@ type QueueCard = {
 
 const queueCards: readonly QueueCard[] = [
   {
-    href: "/admin/employees",
+    href: "/admin/employees?view=employees&status=active",
     label: "Nhân viên đang hoạt động",
     value: (summary) => summary.activeEmployeeCount,
   },

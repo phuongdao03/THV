@@ -15,6 +15,8 @@ import {
   CircleHelp,
   House,
   History,
+  Inbox,
+  Network,
   LayoutDashboard,
   Settings,
   ShieldCheck,
@@ -166,6 +168,24 @@ const adminItems: NavigationItem[] = [
     allowedRoles: ["SUPER_ADMIN"],
   },
   {
+    href: "/admin/hr",
+    label: "Tổng quan nhân sự",
+    icon: LayoutDashboard,
+    allowedRoles: ["SUPER_ADMIN"],
+  },
+  {
+    href: "/admin/employees",
+    label: "Nhân sự",
+    icon: UsersRound,
+    permission: "hr.employees.read",
+  },
+  {
+    href: "/admin/departments",
+    label: "Phòng ban",
+    icon: Building2,
+    permission: "hr.departments.manage",
+  },
+  {
     href: "/admin/overtime",
     label: "Duyệt tăng ca",
     icon: Clock3,
@@ -194,18 +214,6 @@ const adminItems: NavigationItem[] = [
     label: "Bảng lương",
     icon: BadgeDollarSign,
     permission: "hr.payroll.read",
-  },
-  {
-    href: "/admin/employees",
-    label: "Nhân sự",
-    icon: UsersRound,
-    permission: "hr.employees.read",
-  },
-  {
-    href: "/admin/departments",
-    label: "Phòng ban",
-    icon: Building2,
-    permission: "hr.departments.manage",
   },
   {
     href: "/admin/payments",
@@ -342,15 +350,16 @@ const adminNavigationGroups = [
     ],
   },
   {
-    label: "Nhân sự",
+    label: "Quản trị nhân sự",
     hrefs: [
-      "/admin/overtime",
-      "/admin/leave",
-      "/admin/attendance",
-      "/admin/attendance/worksites",
-      "/admin/payroll",
+      "/admin/hr",
       "/admin/employees",
       "/admin/departments",
+      "/admin/attendance/worksites",
+      "/admin/attendance",
+      "/admin/leave",
+      "/admin/overtime",
+      "/admin/payroll",
     ],
   },
   {
@@ -363,6 +372,50 @@ const adminNavigationGroups = [
     ],
   },
 ] satisfies Array<{ label: string; hrefs: string[] }>;
+
+const hrRows = [
+  { label: "Tổng quan nhân sự", paths: ["/admin/hr"], icon: LayoutDashboard },
+  { label: "Nhân viên", paths: ["/admin/employees"], icon: UsersRound },
+  {
+    label: "Tổ chức",
+    paths: ["/admin/departments", "/admin/attendance/worksites"],
+    icon: Network,
+  },
+  { label: "Chấm công", paths: ["/admin/attendance"], icon: Clock3 },
+  {
+    label: "Phê duyệt",
+    paths: ["/admin/leave", "/admin/overtime"],
+    icon: Inbox,
+  },
+  { label: "Tiền lương", paths: ["/admin/payroll"], icon: Wallet },
+];
+
+function navigationRows(
+  section: NavigationSection,
+  activeHref?: string,
+): Array<
+  NavigationItem & { grouped?: boolean; expanded?: boolean; child?: boolean }
+> {
+  if (section.label !== "Quản trị nhân sự") return section.items;
+
+  return hrRows.flatMap(({ label, paths, icon }) => {
+    const destinations = paths.flatMap((path) =>
+      section.items.filter((item) => item.href === path),
+    );
+    const first = destinations[0];
+    if (!first) return [];
+
+    const grouped = destinations.length > 1;
+    const expanded =
+      grouped && destinations.some((item) => item.href === activeHref);
+    return [
+      { ...first, label, icon, grouped, expanded },
+      ...(expanded
+        ? destinations.map((item) => ({ ...item, child: true }))
+        : []),
+    ];
+  });
+}
 
 function canAccess(
   item: NavigationItem,
@@ -656,16 +709,24 @@ export function DashboardNavigation({
               >
                 <p className="dashboard-navigation__label">{section.label}</p>
                 <div className="dashboard-navigation__links">
-                  {section.items.map((item) => {
+                  {navigationRows(section, activeHref).map((item) => {
                     const Icon = item.icon;
-                    const active = item.href === activeHref;
+                    const active = !item.grouped && item.href === activeHref;
                     const content = (
                       <>
-                        <IconFrame
-                          icon={Icon}
-                          size="sm"
-                          tone={active ? "inverse" : "neutral"}
-                        />
+                        {section.label === "Quản trị nhân sự" ? (
+                          <Icon
+                            aria-hidden="true"
+                            className="size-4 shrink-0"
+                            strokeWidth={1.75}
+                          />
+                        ) : (
+                          <IconFrame
+                            icon={Icon}
+                            size="sm"
+                            tone={active ? "inverse" : "neutral"}
+                          />
+                        )}
                         <span>{item.label}</span>
                       </>
                     );
@@ -677,13 +738,15 @@ export function DashboardNavigation({
                         className={cn(
                           "dashboard-navigation__link",
                           active && "dashboard-navigation__link--active",
+                          item.expanded && "font-semibold",
+                          item.child && "dashboard-navigation__link--hr-child",
                         )}
                         href={
                           previewRole
                             ? `/ui-preview?role=${previewRole}&path=${encodeURIComponent(item.href)}`
                             : item.href
                         }
-                        key={item.href}
+                        key={item.child ? `child-${item.href}` : item.href}
                         onClick={onNavigate}
                       >
                         {content}

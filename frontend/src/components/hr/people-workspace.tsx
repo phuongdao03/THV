@@ -13,9 +13,11 @@ type LinkedAccount = { id: string; email: string };
 
 export function PeopleWorkspace({
   initialAccountSearch = "",
+  initialActiveOnly = false,
   initialView = "accounts",
 }: {
   initialAccountSearch?: string;
+  initialActiveOnly?: boolean;
   initialView?: PeopleView;
 } = {}) {
   const [view, setView] = useState<PeopleView>(initialView);
@@ -73,29 +75,6 @@ export function PeopleWorkspace({
         section="Quản trị nhân sự"
         title="Nhân sự"
       />
-      <ol
-        aria-label="Quy trình thiết lập nhân viên"
-        className="grid gap-0 border-y border-[var(--theme-border)] text-sm sm:grid-cols-3"
-      >
-        <li className="flex items-start gap-3 py-3 sm:pr-5">
-          <span className="font-mono text-xs font-bold text-[var(--theme-accent)]">
-            01
-          </span>
-          <span>Mời hoặc chọn tài khoản đã có</span>
-        </li>
-        <li className="flex items-start gap-3 border-t border-[var(--theme-border)] py-3 sm:border-t-0 sm:border-l sm:px-5">
-          <span className="font-mono text-xs font-bold text-[var(--theme-accent)]">
-            02
-          </span>
-          <span>Thiết lập phòng ban, vị trí và ngày vào làm</span>
-        </li>
-        <li className="flex items-start gap-3 border-t border-[var(--theme-border)] py-3 sm:border-t-0 sm:border-l sm:pl-5">
-          <span className="font-mono text-xs font-bold text-[var(--theme-accent)]">
-            03
-          </span>
-          <span>Gán địa điểm và giờ làm việc</span>
-        </li>
-      </ol>
       {checkingAccount ? (
         <p className="text-sm text-[var(--theme-muted)]" role="status">
           Đang kiểm tra hồ sơ nhân viên…
@@ -180,6 +159,7 @@ export function PeopleWorkspace({
           <EmployeeWorkspace
             embedded
             initialAccountSearch={employeeSearch}
+            initialActiveOnly={initialActiveOnly}
             initialSearch={employeeSearch}
             linkedAccount={linkedAccount}
             onClearLinkedAccount={() => setLinkedAccount(null)}

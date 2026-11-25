@@ -23,16 +23,54 @@ describe("DashboardNavigation work-allocation migration", () => {
       screen.getByRole("link", { name: "Khu vực quản trị" }),
     ).toBeDefined();
   });
-  it("keeps admin navigation groups and links visible", () => {
+  it("shows six HR destinations and expands the current approval group", () => {
     render(
       <DashboardNavigation
         roles={["SUPER_ADMIN"]}
         area="admin"
+        previewRole="SUPER_ADMIN"
+        previewPathname="/admin/overtime"
         showQuickNavigation={false}
       />,
     );
-    expect(screen.queryByRole("button", { name: "Nhân sự" })).toBeNull();
-    expect(screen.getByRole("link", { name: "Duyệt tăng ca" })).toBeDefined();
+    const hr = screen.getByText("Quản trị nhân sự").closest("section")!;
+    expect(
+      within(hr)
+        .getByRole("link", { name: "Tổng quan nhân sự" })
+        .getAttribute("href"),
+    ).toContain(encodeURIComponent("/admin/hr"));
+    expect(within(hr).getByRole("link", { name: "Phê duyệt" })).toBeDefined();
+    expect(within(hr).queryByRole("link", { name: "Phòng ban" })).toBeNull();
+    expect(
+      within(hr)
+        .getByRole("link", { name: "Duyệt tăng ca" })
+        .getAttribute("aria-current"),
+    ).toBe("page");
+  });
+
+  it("keeps payroll-only access out of the super-admin HR overview", () => {
+    render(
+      <AuthUserProvider
+        user={{
+          id: "payroll-reader",
+          email: "payroll@example.com",
+          roles: ["USER"],
+          permissions: ["hr.payroll.read"],
+          isEmployee: false,
+          accountType: "PUBLIC_USER",
+        }}
+      >
+        <DashboardNavigation
+          area="admin"
+          roles={["USER"]}
+          showQuickNavigation={false}
+        />
+      </AuthUserProvider>,
+    );
+    expect(screen.getByRole("link", { name: "Tiền lương" })).toBeDefined();
+    expect(
+      screen.queryByRole("link", { name: "Tổng quan nhân sự" }),
+    ).toBeNull();
   });
 
   it("adds archive access to data-manager navigation without admin operations", () => {
@@ -279,7 +317,7 @@ describe("DashboardNavigation work-allocation migration", () => {
     ).toBeNull();
     expect(screen.queryByRole("link", { name: "Công việc" })).toBeNull();
     expect(
-      screen.getByRole("link", { name: "Bảng lương" }).getAttribute("href"),
+      screen.getByRole("link", { name: "Tiền lương" }).getAttribute("href"),
     ).toBe("/admin/payroll");
   });
 

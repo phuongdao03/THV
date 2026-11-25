@@ -7,10 +7,11 @@ export default async function AdminEmployeesPage({
   searchParams: Promise<{
     view?: string | string[];
     account?: string | string[];
+    status?: string | string[];
   }>;
 }) {
   const params = await searchParams;
-  const initialView = params.view === "employees" ? "employees" : "accounts";
+  const initialView = params.view === "accounts" ? "accounts" : "employees";
   const initialAccountSearch =
     initialView === "employees" && typeof params.account === "string"
       ? params.account.trim()
@@ -20,6 +21,9 @@ export default async function AdminEmployeesPage({
     <RoleGate allowed={["SUPER_ADMIN"]} permissions={["hr.employees.read"]}>
       <PeopleWorkspace
         initialAccountSearch={initialAccountSearch}
+        initialActiveOnly={
+          initialView === "employees" && params.status === "active"
+        }
         initialView={initialView}
       />
     </RoleGate>

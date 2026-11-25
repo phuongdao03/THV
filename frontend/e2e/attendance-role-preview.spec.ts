@@ -53,6 +53,26 @@ async function expectNoHorizontalOverflow(page: Page) {
     .toBe(true);
 }
 
+test("HR overview shows role-scoped counts and links to the employee directory", async ({
+  context,
+  page,
+}) => {
+  await setRolePreviewCookie(context, "super-admin");
+  await page.goto("/admin/hr");
+
+  await expect(
+    page.getByRole("heading", { name: "Yêu cầu cần xử lý" }),
+  ).toBeVisible();
+  const employees = page.getByRole("link", {
+    name: "8 Nhân viên đang hoạt động",
+  });
+  await expect(employees).toHaveAttribute(
+    "href",
+    "/admin/employees?view=employees&status=active",
+  );
+  await expectNoHorizontalOverflow(page);
+});
+
 test("moderator attendance preview shows a populated current workday", async ({
   context,
   page,

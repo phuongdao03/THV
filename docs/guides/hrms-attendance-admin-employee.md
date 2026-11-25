@@ -53,3 +53,11 @@ Hệ thống lấy vị trí khi bạn chủ động bấm nút; bạn không c�
 ### Kiểm thử tự động không cần nhiều tài khoản thật
 
 Từ thư mục gốc repo, chạy `python -m pytest -q backend/app/tests/test_staff_invitations.py backend/app/tests/test_global_attendance_admin_api.py backend/app/tests/test_review_assignment_api.py` để kiểm tra hợp đồng lời mời, phân công chấm công và thẩm định qua API với dữ liệu test. Khi đã cài dependency frontend, chạy `npm --prefix frontend run test:e2e`: Playwright dùng mock API và cookie persona (`reviewer`, `super-admin`) để kiểm tra giao diện theo vai trò. Các bài test này không thay thế lần thử GPS thực tế trên thiết bị tại điểm làm việc.
+
+## Tổng quan HRM
+
+Super Admin có thể mở **Tổng quan nhân sự** tại `/admin/hr`. Trang dùng số liệu từ `/api/v1/admin/hr/dashboard-summary` để dẫn đến danh sách nhân viên, chấm công, nghỉ phép, tăng ca và bảng lương. Số nhân viên đang hoạt động mở danh sách với bộ lọc **Đang làm việc**. Các hàng đợi chấm công và phê duyệt phản ánh trạng thái hiện có trên toàn bộ dữ liệu.
+
+Menu quản trị tách **Quản trị nhân sự**, **Tổ chức** và **Phê duyệt nhân sự**. Phòng ban và điểm chấm công nằm trong **Tổ chức**. Nghỉ phép và tăng ca nằm trong **Phê duyệt nhân sự**. Từng mục tiếp tục áp dụng quyền truy cập của màn hình tương ứng.
+
+Sau khi tạo hồ sơ từ tài khoản đã đăng ký, Super Admin có thể chọn **Phân công điểm chấm công** trong thông báo xác nhận rồi tìm hồ sơ tại màn hình phân công.

@@ -3,12 +3,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   CalendarRange,
-  ClipboardPenLine,
+  MapPin,
   Clock3,
   Search,
   UsersRound,
   X,
 } from "lucide-react";
+import Link from "next/link";
 import { Fragment, type FormEvent, useState } from "react";
 
 import {
@@ -17,6 +18,7 @@ import {
   hrDepartmentApi,
 } from "@/lib/api/client";
 import type { AdminAttendance, AttendanceStatus } from "@/lib/api/types";
+import { useAuthUser } from "@/lib/auth/user-context";
 import { AttendanceLocationExceptionPanel } from "@/components/hr/attendance-location-exception-panel";
 import { AdminAttendanceLocationEvidence } from "@/components/hr/admin-attendance-location-evidence";
 import { HrReportDownload } from "@/components/hr/hr-report-download";
@@ -106,6 +108,7 @@ function apiMessage(error: unknown) {
 }
 
 export function AdminAttendanceWorkspace() {
+  const user = useAuthUser();
   const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
   const [searchDraft, setSearchDraft] = useState("");
@@ -229,22 +232,22 @@ export function AdminAttendanceWorkspace() {
     >
       <WorkspacePageHeader
         action={
-          <p className="inline-flex items-center gap-2 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-elevated)] px-3 py-2 text-sm font-semibold text-[var(--theme-text)]">
-            <ClipboardPenLine
-              aria-hidden="true"
-              className="size-4 text-[var(--theme-accent)]"
-            />{" "}
-            Mọi điều chỉnh đều có audit
-          </p>
+          user?.roles.includes("SUPER_ADMIN") ? (
+            <Link
+              className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-[var(--theme-border)] px-3 text-sm font-semibold text-[var(--theme-accent)] hover:underline"
+              href="/admin/attendance/worksites?setup=gps"
+            >
+              <MapPin aria-hidden="true" className="size-4" />
+              Thiết lập vị trí văn phòng
+            </Link>
+          ) : undefined
         }
-        description="Theo dõi dữ liệu thực tế, lọc nhanh theo phòng ban và điều chỉnh có kiểm soát. Không có quy tắc chấm công tự động nào được suy diễn ở đây."
+        description="Theo dõi giờ vào, giờ ra và xử lý các lượt chấm công cần xem xét."
         icon={UsersRound}
         id="admin-attendance-title"
         section="Điều hành nhân sự"
         title="Chấm công toàn đội"
       />
-
-      <AttendanceLocationExceptionPanel />
 
       <form
         className="grid gap-3 rounded-2xl border border-neutral-200 bg-white p-4 md:grid-cols-2 xl:grid-cols-[1.3fr_13rem_11rem_10rem_10rem_auto]"
@@ -559,6 +562,7 @@ export function AdminAttendanceWorkspace() {
           </nav>
         ) : null}
       </section>
+      <AttendanceLocationExceptionPanel />
     </section>
   );
 }

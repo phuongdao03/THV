@@ -110,6 +110,8 @@ describe("EmployeeWorkspace", () => {
     ).toBe(false);
     fireEvent.click(screen.getByRole("button", { name: "Tạo hồ sơ" }));
 
+    expect(await screen.findByText("Đã tạo hồ sơ nhân viên.")).toBeDefined();
+
     await waitFor(() =>
       expect(createEmployee).toHaveBeenCalledWith(
         expect.objectContaining({

@@ -10,14 +10,17 @@ vi.mock("@/components/auth/role-gate", () => ({
 vi.mock("@/components/hr/people-workspace", () => ({
   PeopleWorkspace: ({
     initialAccountSearch,
+    initialActiveOnly,
     initialView,
   }: {
     initialAccountSearch: string;
+    initialActiveOnly: boolean;
     initialView: string;
   }) => (
     <div>
       <span data-testid="view">{initialView}</span>
       <span data-testid="account">{initialAccountSearch}</span>
+      <span data-testid="status">{initialActiveOnly ? "active" : "all"}</span>
     </div>
   ),
 }));
@@ -37,5 +40,16 @@ describe("AdminEmployeesPage", () => {
     expect(screen.getByTestId("account").textContent).toBe(
       "reviewer@example.com",
     );
+  });
+
+  it("initializes the active employee filter from the overview link", async () => {
+    render(
+      await AdminEmployeesPage({
+        searchParams: Promise.resolve({ view: "employees", status: "active" }),
+      }),
+    );
+
+    expect(screen.getByTestId("view").textContent).toBe("employees");
+    expect(screen.getByTestId("status").textContent).toBe("active");
   });
 });

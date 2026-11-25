@@ -8,6 +8,7 @@ import {
   UserRoundPlus,
   X,
 } from "lucide-react";
+import Link from "next/link";
 import { type FormEvent, useState } from "react";
 
 import {
@@ -18,6 +19,7 @@ import {
   hrEmployeeApi,
 } from "@/lib/api/client";
 import type { Employee, EmploymentStatus } from "@/lib/api/types";
+import { useAuthUser } from "@/lib/auth/user-context";
 import { HrReportDownload } from "@/components/hr/hr-report-download";
 import { formatVndInput, parseVndInput } from "@/lib/format-vnd-input";
 
@@ -43,23 +45,27 @@ function salary(value: string | null) {
 export function EmployeeWorkspace({
   embedded = false,
   initialAccountSearch = "",
+  initialActiveOnly = false,
   initialSearch = "",
   linkedAccount,
   onClearLinkedAccount,
 }: {
   embedded?: boolean;
   initialAccountSearch?: string;
+  initialActiveOnly?: boolean;
   initialSearch?: string;
   linkedAccount?: { id: string; email: string } | null;
   onClearLinkedAccount?: () => void;
 } = {}) {
   const queryClient = useQueryClient();
+  const authUser = useAuthUser();
+  const [employeeCreated, setEmployeeCreated] = useState(false);
   const [searchDraft, setSearchDraft] = useState(initialSearch);
   const [search, setSearch] = useState(initialSearch);
   const [departmentId, setDepartmentId] = useState("");
   const [employmentStatus, setEmploymentStatus] = useState<
     EmploymentStatus | ""
-  >("");
+  >(initialActiveOnly ? "ACTIVE" : "");
   const [creating, setCreating] = useState(
     Boolean(linkedAccount || initialAccountSearch),
   );
@@ -142,7 +148,11 @@ export function EmployeeWorkspace({
       }),
     onSuccess: () => {
       closeCreateForm();
+      setEmployeeCreated(true);
       void queryClient.invalidateQueries({ queryKey: ["hr", "employees"] });
+      void queryClient.invalidateQueries({
+        queryKey: ["hr", "dashboard-summary"],
+      });
     },
   });
   const inviteEmployee = useMutation({
@@ -255,6 +265,25 @@ export function EmployeeWorkspace({
           </button>
         </div>
       </header>
+
+      {employeeCreated && !creating ? (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[var(--theme-border)] bg-[var(--theme-surface)] px-4 py-2">
+          <p
+            className="text-sm font-semibold text-[var(--theme-text)]"
+            role="status"
+          >
+            Đã tạo hồ sơ nhân viên.
+          </p>
+          {authUser?.roles.includes("SUPER_ADMIN") ? (
+            <Link
+              className="inline-flex min-h-11 items-center rounded-lg px-2 text-sm font-semibold text-[var(--theme-accent)] underline-offset-4 hover:underline"
+              href="/admin/attendance/worksites"
+            >
+              Phân công điểm chấm công
+            </Link>
+          ) : null}
+        </div>
+      ) : null}
 
       <form
         className="grid gap-3 rounded-2xl border border-neutral-200 bg-white p-4 md:grid-cols-[1fr_14rem_12rem_auto]"

@@ -39,7 +39,9 @@ async function loadAssignments(filters: {
   return { ...first, data };
 }
 
-export function AttendanceConfigurationWorkspace() {
+export function AttendanceConfigurationWorkspace({
+  showGpsSetup = false,
+}: { showGpsSetup?: boolean } = {}) {
   const queryClient = useQueryClient();
   const [selectedWorksiteId, setSelectedWorksiteId] = useState<string | null>(
     null,
@@ -256,6 +258,30 @@ export function AttendanceConfigurationWorkspace() {
       />
 
       <div className="flex flex-col gap-5">
+        <details
+          open={showGpsSetup || undefined}
+          className="rounded-2xl border border-neutral-200 bg-white p-4"
+        >
+          <summary className="cursor-pointer text-base font-bold">
+            GPS · Cấu hình vùng chấm công
+          </summary>
+          <AttendancePolicyPanel
+            isSaving={createPolicy.isPending || correctPolicy.isPending}
+            key={resolvedSelectedWorksiteId ?? "no-worksite"}
+            onRetry={() => void policies.refetch()}
+            onCorrect={(policyId, input) =>
+              correctPolicy.mutateAsync({ policyId, input })
+            }
+            onSave={(input) =>
+              createPolicy.mutateAsync({
+                worksiteId: resolvedSelectedWorksiteId!,
+                input,
+              })
+            }
+            policies={policies}
+            selectedWorksite={selectedWorksite}
+          />
+        </details>
         <AttendanceAssignmentPanel
           key={resolvedSelectedWorksiteId ?? "no-assignment-site"}
           assignments={assignments}
@@ -283,27 +309,6 @@ export function AttendanceConfigurationWorkspace() {
           onSave={(input) => createAssignment.mutateAsync(input)}
           selectedWorksite={selectedWorksite}
         />
-        <details className="rounded-2xl border border-neutral-200 bg-white p-4">
-          <summary className="cursor-pointer text-base font-bold">
-            GPS · Cấu hình vùng chấm công
-          </summary>
-          <AttendancePolicyPanel
-            isSaving={createPolicy.isPending || correctPolicy.isPending}
-            key={resolvedSelectedWorksiteId ?? "no-worksite"}
-            onRetry={() => void policies.refetch()}
-            onCorrect={(policyId, input) =>
-              correctPolicy.mutateAsync({ policyId, input })
-            }
-            onSave={(input) =>
-              createPolicy.mutateAsync({
-                worksiteId: resolvedSelectedWorksiteId!,
-                input,
-              })
-            }
-            policies={policies}
-            selectedWorksite={selectedWorksite}
-          />
-        </details>
       </div>
     </section>
   );

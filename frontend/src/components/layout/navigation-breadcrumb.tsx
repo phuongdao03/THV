@@ -30,6 +30,7 @@ const pageLabels: Record<string, string> = {
   memberships: "Gói thành viên",
   advertising: "Quảng cáo",
   dashboard: "Tổng quan vận hành",
+  hr: "Tổng quan nhân sự",
   content: "Nội dung",
   notifications: "Thông báo",
   audit: "Lịch sử hoạt động",
