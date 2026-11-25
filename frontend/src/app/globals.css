@@ -6180,7 +6180,8 @@ html[data-theme="dark"] .home-featured .text-neutral-950 {
   min-height: 2.5rem;
   font-size: 0.8125rem;
 }
-.dashboard-shell--collapsed .dashboard-navigation__link.dashboard-navigation__link--hr-child {
+.dashboard-shell--collapsed
+  .dashboard-navigation__link.dashboard-navigation__link--hr-child {
   margin-inline-start: 0;
 }
 .dashboard-navigation__link {

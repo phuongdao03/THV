@@ -261,7 +261,7 @@ test("workspaces preserve applicant reviewer and administrator entry points", as
       await expect(drawer).toBeVisible();
       if (persona === "super-admin") {
         const staffLink = drawer.getByRole("link", {
-          name: "Nhân sự",
+          name: "Nhân viên",
           exact: true,
         });
         await expect(staffLink).toBeVisible();
@@ -270,7 +270,7 @@ test("workspaces preserve applicant reviewer and administrator entry points", as
           .getByRole("button", { name: "Mở điều hướng quản trị" })
           .click();
         await expect(
-          drawer.getByRole("link", { name: "Nhân sự", exact: true }),
+          drawer.getByRole("link", { name: "Nhân viên", exact: true }),
         ).toBeVisible();
       }
       await page.screenshot({
