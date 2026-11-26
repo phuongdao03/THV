@@ -306,6 +306,9 @@ def test_content_draft_blocks_issuance_until_admin_confirms() -> None:
         )
         await editor.confirm(principal, dossier_id)
         assert enqueued == [dossier_id]
+        assert await service.process_issuance(dossier_id) is None
+        async with service._session.begin():  # noqa: SLF001
+            assert await service._certificates.get_by_dossier(dossier_id) is None  # noqa: SLF001
         certificate = await service._prepare_certificate(dossier_id)  # noqa: SLF001
         versions = await service._certificates.list_versions(certificate.id)  # noqa: SLF001
         asset = versions[0].metadata_json["asset"]

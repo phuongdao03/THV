@@ -33,6 +33,22 @@
 
 ## Operations
 
+### Post-approval certification recovery
+
+```text
+COUNCIL_REVIEW → APPROVED → PAID
+                           confirmed editorial draft → signing intent → broadcast
+                           canonical confirmed proof → ANCHORED → CERTIFICATE_ISSUED
+                           publication workflow → PUBLISHED
+```
+
+- A recorded submission waiver can advance council approval to the payment-ready state. Use the signing queue to find older approved, waived dossiers. Intent preparation rechecks the current council decision, confirmed draft if present, and signer authorization before recording the recovered transition.
+- From `backend/`, run `python -m app.scripts.repair_certificate_publication --diagnose-waivers` with an authorized read-only database connection to count approved waivers that still need the transition.
+- A fee exemption on a regular account is separate from the isolated TEST account marker. The registry queue and intent endpoint exclude isolated TEST dossiers.
+- Workers wait for a confirmed `recordProof` matching the current dossier version and configured registry before preparing a new certificate. Active signing and submitted transactions freeze the editorial draft. Existing prepared certificates continue through the existing recovery path.
+- For incident triage, read the fee obligation, current council case, draft, certificate, and proof transaction together. Validate any transaction independently against the configured registry and canonical receipt. If the proof is already confirmed, use the existing issuance recovery workflow after verifying the record. Retain historical records and transaction hashes.
+- Registry proof for this workflow currently commits the dossier snapshot. A cryptographic commitment to separately edited certificate fields requires a compatible versioning design before those fields can be described as on-chain verified.
+
 Apply migrations only through the normal release process after staging verification. Migration 0164 downgrades refuse to discard referral-code aliases or configured/issued level-2 commissions. Earlier downgrades refuse to remove used global policies, pending snapshots, or TEST-marked rows. Existing payment history is retained and classified as REAL by the migration default.
 
 ## P0 follow-up implementation status — 2026-11-13

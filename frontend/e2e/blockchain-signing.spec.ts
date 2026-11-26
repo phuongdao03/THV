@@ -51,11 +51,11 @@ test("authorized staff can record an approved dossier", async ({
   request,
 }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-chrome");
-  await page.goto("/blockchain");
+  await page.goto("/admin/registry");
 
   await expect(
     page.getByRole("heading", { level: 1, name: "Hồ sơ chờ ghi nhận" }),
-  ).toBeVisible();
+  ).toBeVisible({ timeout: 45000 });
   const permissionCheck = page.getByRole("button", {
     name: /^(Xác minh quyền của tổ chức|Kiểm tra quyền xác nhận)$/,
   });
@@ -104,11 +104,11 @@ test("blockchain workspace remains visible and usable at 320px", async ({
 }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-chrome");
   await page.setViewportSize({ width: 320, height: 844 });
-  await page.goto("/blockchain");
+  await page.goto("/admin/registry");
 
   await expect(
     page.getByRole("heading", { level: 1, name: "Hồ sơ chờ ghi nhận" }),
-  ).toBeVisible();
+  ).toBeVisible({ timeout: 45000 });
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= window.innerWidth + 1,

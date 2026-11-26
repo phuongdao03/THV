@@ -378,9 +378,19 @@ def test_council_case_requires_completed_review_gate() -> None:
     asyncio.run(exercise())
 
 
-def test_admin_final_decision_records_minutes_and_approves_completed_review() -> None:
+@pytest.mark.parametrize("waived", [False, True])
+def test_admin_final_decision_records_minutes_and_approves_completed_review(
+    waived: bool,
+) -> None:
     async def exercise() -> None:
         service, sessions, engine, users, dossier, _ = await _setup()
+        if waived:
+            async with sessions.begin() as session:
+                stored = await session.get(Dossier, dossier.id)
+                assert stored is not None
+                stored.submission_fee_required = False
+                stored.submission_fee_waived_at = NOW
+        expected = DossierStatus.PAID if waived else DossierStatus.APPROVED
         result = await service.record_admin_decision(
             _principal(users["secretary"], "SUPER_ADMIN"),
             dossier.id,
@@ -389,7 +399,7 @@ def test_admin_final_decision_records_minutes_and_approves_completed_review() ->
             confirm_no_conflict=True,
         )
 
-        assert result.status is DossierStatus.APPROVED
+        assert result.status is expected
         assert len(result.minutes_hash) == 64
         async with sessions() as session:
             stored_dossier = await session.get(Dossier, dossier.id)
@@ -397,7 +407,7 @@ def test_admin_final_decision_records_minutes_and_approves_completed_review() ->
                 CouncilSession, result.council_session_id
             )
             assert stored_dossier is not None
-            assert stored_dossier.status is DossierStatus.APPROVED
+            assert stored_dossier.status is expected
             assert stored_dossier.approved_at is not None
             assert stored_dossier.approved_at.replace(tzinfo=UTC) == NOW
             content_draft = await session.get(CertificateContentDraft, dossier.id)
@@ -422,10 +432,15 @@ def test_admin_final_decision_records_minutes_and_approves_completed_review() ->
             transitions = tuple(
                 (await session.scalars(select(DossierStatusHistory))).all()
             )
-            assert {(item.from_status, item.to_status) for item in transitions} == {
+            expected_transitions = {
                 (DossierStatus.UNDER_REVIEW, DossierStatus.COUNCIL_REVIEW),
                 (DossierStatus.COUNCIL_REVIEW, DossierStatus.APPROVED),
             }
+            if waived:
+                expected_transitions.add((DossierStatus.APPROVED, DossierStatus.PAID))
+            assert {(item.from_status, item.to_status) for item in transitions} == (
+                expected_transitions
+            )
 
         await service.close()
         await engine.dispose()

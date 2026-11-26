@@ -37,6 +37,7 @@ from app.modules.blockchain.models import (
     BlockchainWalletLink,
     BlockchainWalletLinkStatus,
     Certificate,
+    CertificateContentDraft,
     CertificateVersion,
     CertificateVersionStatus,
 )
@@ -48,6 +49,8 @@ from app.modules.blockchain.transport import BlockchainGatewayError, ChainTransa
 from app.modules.council.models import CouncilCase, CouncilCaseDecision
 from app.modules.dossiers.errors import DossierNotFoundError
 from app.modules.dossiers.models import Dossier, DossierStatus, DossierVersion
+from app.modules.dossiers.repository import DossierRepository
+from app.modules.dossiers.workflow import DossierWorkflowService
 
 _ASSET_ID_DOMAIN = b"THVProofRegistry:asset:v1:"
 _HEX_BYTES32 = re.compile(r"0x[0-9a-fA-F]{64}")
@@ -202,7 +205,13 @@ class THVProofRegistryService:
                         ),
                     )
                     .where(
-                        Dossier.status.in_(_PROOF_ELIGIBLE_DOSSIER_STATUSES),
+                        or_(
+                            Dossier.status.in_(_PROOF_ELIGIBLE_DOSSIER_STATUSES),
+                            and_(
+                                Dossier.status == DossierStatus.APPROVED,
+                                Dossier.submission_fee_waived_at.is_not(None),
+                            ),
+                        ),
                         select(CouncilCase.id)
                         .where(
                             CouncilCase.dossier_id == Dossier.id,
@@ -211,6 +220,7 @@ class THVProofRegistryService:
                         )
                         .exists(),
                         Dossier.deleted_at.is_(None),
+                        Dossier.is_test.is_(False),
                         or_(
                             BlockchainTransaction.id.is_(None),
                             BlockchainTransaction.status
@@ -255,7 +265,9 @@ class THVProofRegistryService:
         self._require_enabled()
         wallet = await self._require_active_wallet(principal, connected_wallet)
         await self._require_verifier_role(wallet.wallet_address)
-        context = await self._approved_version_context(dossier_id, version_no)
+        context = await self._approved_version_context(
+            dossier_id, version_no, principal.user_id
+        )
         asset_id = derive_thv_asset_id(context.dossier_id)
         proof_hash = bytes.fromhex(context.canonical_hash)
         existing = await self._read_proof(asset_id, context.version)
@@ -302,6 +314,18 @@ class THVProofRegistryService:
 
         now = self._clock()
         async with self._session.begin():
+            dossier = await self._session.get(Dossier, dossier_id, with_for_update=True)
+            if (
+                dossier is None
+                or dossier.deleted_at is not None
+                or dossier.is_test
+                or dossier.current_version_no != context.version
+                or dossier.status not in _PROOF_ELIGIBLE_DOSSIER_STATUSES
+            ):
+                raise BlockchainConflictError(
+                    "The signing context changed. Refresh and retry."
+                )
+            await self._require_confirmed_content(dossier_id)
             transaction = cast(
                 BlockchainTransaction | None,
                 await self._session.scalar(
@@ -1086,13 +1110,25 @@ class THVProofRegistryService:
         self,
         dossier_id: UUID,
         version_no: int,
+        actor_user_id: UUID,
     ) -> _ApprovedVersionContext:
         normalized_version = self._require_version(version_no)
         async with self._session.begin():
-            dossier = await self._session.get(Dossier, dossier_id)
-            if dossier is None:
+            dossier = await self._session.get(Dossier, dossier_id, with_for_update=True)
+            if dossier is None or dossier.deleted_at is not None:
                 raise DossierNotFoundError()
-            if dossier.status not in _PROOF_ELIGIBLE_DOSSIER_STATUSES:
+            if dossier.is_test:
+                raise BlockchainConflictError(
+                    "TEST dossiers cannot be recorded on the proof registry."
+                )
+            recover_waiver = (
+                dossier.status is DossierStatus.APPROVED
+                and dossier.submission_fee_waived_at is not None
+            )
+            if (
+                dossier.status not in _PROOF_ELIGIBLE_DOSSIER_STATUSES
+                and not recover_waiver
+            ):
                 raise BlockchainConflictError(
                     "A THV proof can be recorded only for a payment-ready dossier."
                 )
@@ -1119,10 +1155,19 @@ class THVProofRegistryService:
                 raise BlockchainConflictError(
                     "The current dossier version is not council-approved."
                 )
+            await self._require_confirmed_content(dossier_id)
             canonical_hash = version.canonical_hash
             if _CANONICAL_HASH.fullmatch(canonical_hash) is None:
                 raise BlockchainConflictError(
                     "Approved dossier proof hash is unavailable."
+                )
+            if recover_waiver:
+                DossierWorkflowService(DossierRepository(self._session)).transition(
+                    dossier,
+                    target=DossierStatus.PAID,
+                    actor_user_id=actor_user_id,
+                    allowed_sources={DossierStatus.APPROVED},
+                    reason_code="WAIVED_SUBMISSION_APPROVAL_RECOVERED",
                 )
             return _ApprovedVersionContext(
                 dossier_id=dossier.id,
@@ -1131,6 +1176,14 @@ class THVProofRegistryService:
                 version=version.version_no,
                 canonical_hash=canonical_hash.lower(),
                 version_id=version.id,
+            )
+
+    async def _require_confirmed_content(self, dossier_id: UUID) -> None:
+        draft = await self._session.get(CertificateContentDraft, dossier_id)
+        if draft is not None and draft.confirmed_at is None:
+            raise BlockchainConflictError(
+                "Confirm certificate content before signing its dossier proof.",
+                code="CERTIFICATE_CONTENT_UNCONFIRMED",
             )
 
     async def _required_transaction(

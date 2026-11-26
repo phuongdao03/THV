@@ -47,7 +47,7 @@ from app.modules.certificates.types import (
     CertificateDetailView,
     CertificateView,
 )
-from app.modules.dossiers.models import DossierStatus, DossierVersion
+from app.modules.dossiers.models import Dossier, DossierStatus, DossierVersion
 from app.modules.dossiers.repository import DossierRepository
 from app.modules.dossiers.workflow import DossierWorkflowService
 from app.modules.media.errors import MediaProviderUnavailableError
@@ -80,6 +80,7 @@ class CertificateService:
         environment: str,
         delivery_ttl_seconds: int,
         validity_days: int,
+        proof_registry: tuple[str, int, str] | None = None,
         enqueue_issue: Callable[[UUID], None] | None = None,
         clock: Callable[[], datetime] | None = None,
         uuid_factory: Callable[[], UUID] | None = None,
@@ -99,6 +100,7 @@ class CertificateService:
         self._environment = environment
         self._delivery_ttl_seconds = delivery_ttl_seconds
         self._validity_days = validity_days
+        self._proof_registry = proof_registry
         self._enqueue_issue = enqueue_issue
         self._clock = clock or (lambda: datetime.now(UTC))
         self._uuid_factory = uuid_factory or uuid4
@@ -314,37 +316,18 @@ class CertificateService:
                 draft = await self._session.get(CertificateContentDraft, dossier_id)
                 if draft is not None and draft.confirmed_at is None:
                     return None
+                if await self._confirmed_dossier_proof(dossier) is None:
+                    return None
             certificate = await self._prepare_certificate(dossier_id)
         if status is DossierStatus.PAID:
             if certificate is None:
-                raise CertificateConflictError(
-                    "Certificate issuance context is unavailable."
-                )
+                return None
             async with self._session.begin():
                 dossier = await self._dossiers.get_by_id(dossier_id, for_update=True)
                 if dossier is None:
                     raise CertificateNotFoundError()
-                version = await self._session.scalar(
-                    select(DossierVersion).where(
-                        DossierVersion.dossier_id == dossier.id,
-                        DossierVersion.version_no == dossier.current_version_no,
-                    )
-                )
-                proof_transaction = (
-                    await self._session.scalar(
-                        select(BlockchainTransaction)
-                        .where(
-                            BlockchainTransaction.dossier_version_id == version.id,
-                            BlockchainTransaction.method == "recordProof",
-                            BlockchainTransaction.status
-                            == BlockchainTransactionStatus.CONFIRMED,
-                        )
-                        .order_by(BlockchainTransaction.confirmed_at.desc())
-                    )
-                    if version is not None
-                    else None
-                )
-                if proof_transaction is None or proof_transaction.tx_hash is None:
+                proof_transaction = await self._confirmed_dossier_proof(dossier)
+                if proof_transaction is None:
                     return None
                 certificate_version = await self._session.scalar(
                     select(CertificateVersion).where(
@@ -383,6 +366,38 @@ class CertificateService:
                 "Dossier is not ready for certificate issuance."
             )
         return await self._render_and_finalize(certificate.id)
+
+    async def _confirmed_dossier_proof(
+        self, dossier: Dossier, *, transaction_id: UUID | None = None
+    ) -> BlockchainTransaction | None:
+        query = (
+            select(BlockchainTransaction)
+            .join(
+                DossierVersion,
+                DossierVersion.id == BlockchainTransaction.dossier_version_id,
+            )
+            .where(
+                BlockchainTransaction.dossier_id == dossier.id,
+                DossierVersion.dossier_id == dossier.id,
+                DossierVersion.version_no == dossier.current_version_no,
+                BlockchainTransaction.payload_hash == DossierVersion.canonical_hash,
+                BlockchainTransaction.method == "recordProof",
+                BlockchainTransaction.status == BlockchainTransactionStatus.CONFIRMED,
+                BlockchainTransaction.tx_hash.is_not(None),
+            )
+            .order_by(BlockchainTransaction.confirmed_at.desc())
+            .limit(1)
+        )
+        if self._proof_registry is not None:
+            network, chain_id, address = self._proof_registry
+            query = query.where(
+                BlockchainTransaction.network == network,
+                BlockchainTransaction.chain_id == chain_id,
+                BlockchainTransaction.contract_address == address.lower(),
+            )
+        if transaction_id is not None:
+            query = query.where(BlockchainTransaction.id == transaction_id)
+        return (await self._session.scalars(query)).first()
 
     async def render_version(self, certificate_version_id: UUID) -> None:
         """Render the confirmed current version without changing anchored metadata."""
@@ -664,6 +679,15 @@ class CertificateService:
             or transaction.tx_hash is None
         ):
             raise CertificateConflictError("Blockchain anchor is not confirmed.")
+        if transaction.method == "recordProof" and version.version_no == 1:
+            async with self._session.begin():
+                proof = await self._confirmed_dossier_proof(
+                    dossier, transaction_id=transaction.id
+                )
+            if proof is None:
+                raise CertificateConflictError(
+                    "Blockchain proof does not match the current dossier and registry."
+                )
         stored = None
         if certificate.pdf_media_id is None:
             display_metadata = {

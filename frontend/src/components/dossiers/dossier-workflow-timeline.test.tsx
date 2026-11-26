@@ -68,6 +68,19 @@ describe("DossierWorkflowTimeline", () => {
 });
 
 describe("evidence-based dossier progress", () => {
+  it("advances an approved, fee-waived dossier to certification", () => {
+    const progress = dossierProgress({
+      status: "APPROVED",
+      history: [],
+      submissionFeeWaivedAt: "2026-11-01T00:00:00Z",
+    });
+    expect(progress.stages.find((s) => s.key === "decision")?.state).toBe(
+      "complete",
+    );
+    expect(progress.stages.find((s) => s.key === "certificate")?.state).toBe(
+      "current",
+    );
+  });
   it("does not invent completed steps when history is absent", () => {
     const result = dossierProgress({
       status: "UNDER_REVIEW",

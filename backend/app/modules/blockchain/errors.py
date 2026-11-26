@@ -20,9 +20,11 @@ class BlockchainForbiddenError(DomainError):
 
 
 class BlockchainConflictError(DomainError):
-    def __init__(self, message: str) -> None:
+    def __init__(
+        self, message: str, *, code: str = "BLOCKCHAIN_STATE_CONFLICT"
+    ) -> None:
         super().__init__(
-            code="BLOCKCHAIN_STATE_CONFLICT",
+            code=code,
             message=message,
             status_code=409,
         )

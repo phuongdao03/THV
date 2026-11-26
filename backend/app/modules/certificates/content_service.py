@@ -2,13 +2,18 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.audit.service import AuditService
 from app.modules.auth.authorization import AuthorizationPolicy, PolicyRequirement
 from app.modules.auth.session_service import AuthPrincipal
-from app.modules.blockchain.models import Certificate, CertificateContentDraft
+from app.modules.blockchain.models import (
+    BlockchainTransaction,
+    BlockchainTransactionStatus,
+    Certificate,
+    CertificateContentDraft,
+)
 from app.modules.certificates.category import require_active_category
 from app.modules.certificates.errors import (
     CertificateConflictError,
@@ -20,7 +25,7 @@ from app.modules.certificates.schemas import (
     CertificateContentDraftData,
     CertificateContentRequest,
 )
-from app.modules.dossiers.models import Dossier, DossierStatus
+from app.modules.dossiers.models import Dossier, DossierStatus, DossierVersion
 
 
 async def reset_content_draft(
@@ -143,6 +148,33 @@ class CertificateContentService:
         )
         if certificate_id is not None:
             raise CertificateConflictError("Certificate content is already frozen.")
+        proof_id = await self._session.scalar(
+            select(BlockchainTransaction.id)
+            .join(
+                DossierVersion,
+                DossierVersion.id == BlockchainTransaction.dossier_version_id,
+            )
+            .where(
+                BlockchainTransaction.dossier_id == dossier_id,
+                DossierVersion.version_no == dossier.current_version_no,
+                BlockchainTransaction.method == "recordProof",
+                or_(
+                    BlockchainTransaction.tx_hash.is_not(None),
+                    BlockchainTransaction.status.in_(
+                        (
+                            BlockchainTransactionStatus.SIGNING,
+                            BlockchainTransactionStatus.BROADCAST,
+                            BlockchainTransactionStatus.CONFIRMED,
+                        )
+                    ),
+                ),
+            )
+            .limit(1)
+        )
+        if proof_id is not None:
+            raise CertificateConflictError(
+                "Certificate content is frozen for blockchain signing."
+            )
         return dossier, draft
 
     async def update(

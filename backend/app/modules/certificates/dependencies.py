@@ -60,6 +60,11 @@ async def get_certificate_service(
         environment=settings.app_env,
         delivery_ttl_seconds=settings.media_delivery_ttl_seconds,
         validity_days=settings.certificate_validity_days,
+        proof_registry=(
+            settings.blockchain_network,
+            settings.blockchain_chain_id,
+            settings.thv_proof_registry_contract_address.strip(),
+        ),
         enqueue_issue=lambda dossier_id: issue_certificate.delay(str(dossier_id)),
     )
     try:

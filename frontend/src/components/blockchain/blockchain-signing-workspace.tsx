@@ -74,6 +74,12 @@ function errorMessage(
   error: unknown,
   action: "connect" | "verify" | "transaction" = "transaction",
 ) {
+  if (
+    error instanceof ApiError &&
+    error.code === "CERTIFICATE_CONTENT_UNCONFIRMED"
+  ) {
+    return "Hãy xác nhận nội dung bằng xác lập trước khi ký ghi nhận Blockchain.";
+  }
   const walletError = error as { code?: number | string; message?: string };
   const providerCode = walletErrorCode(error);
   if (providerCode === "NO_WALLET") {

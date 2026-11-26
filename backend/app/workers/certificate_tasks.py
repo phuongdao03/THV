@@ -87,6 +87,11 @@ async def _process(
                 environment=settings.app_env,
                 delivery_ttl_seconds=settings.media_delivery_ttl_seconds,
                 validity_days=settings.certificate_validity_days,
+                proof_registry=(
+                    settings.blockchain_network,
+                    settings.blockchain_chain_id,
+                    settings.thv_proof_registry_contract_address.strip(),
+                ),
             )
             if dossier_id is not None:
                 await service.process_issuance(dossier_id)

@@ -91,8 +91,12 @@ export function dossierProgress(input: ProgressInput) {
   const pausedStatus =
     status === "NEEDS_SUPPLEMENT" ? last?.fromStatus : status;
   const current =
-    definitions.find((s) => s.statuses.includes(pausedStatus ?? status)) ??
-    intake;
+    status === "APPROVED"
+      ? feeTime
+        ? certificate
+        : fee
+      : (definitions.find((s) => s.statuses.includes(pausedStatus ?? status)) ??
+        intake);
   const stopped = ["REJECTED", "CANCELLED", "REVOKED"].includes(status);
   const stages = definitions.map((stage) => {
     // A transition out of a stage is evidence; the stage index is not.
@@ -117,12 +121,17 @@ export function dossierProgress(input: ProgressInput) {
       stage.key === "certificate"
         ? history.find((item) => item.toStatus === "CERTIFICATE_ISSUED")
         : null;
+    const approved =
+      stage.key === "decision" && status === "APPROVED"
+        ? history.find((item) => item.toStatus === "APPROVED")
+        : null;
     const complete = Boolean(
       exit ||
         settledAt ||
         legacyFeeComplete ||
         finalEvent ||
         issued ||
+        (stage.key === "decision" && status === "APPROVED") ||
         (stage.key === "publication" && status === "PUBLISHED"),
     );
     return {
@@ -145,6 +154,7 @@ export function dossierProgress(input: ProgressInput) {
             null)
           : null) ??
         issued?.createdAt ??
+        approved?.createdAt ??
         finalEvent?.createdAt ??
         exit?.createdAt ??
         null,

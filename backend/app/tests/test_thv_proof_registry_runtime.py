@@ -33,6 +33,7 @@ from app.modules.blockchain.models import (
     BlockchainTransactionIntentStatus,
     BlockchainTransactionStatus,
     BlockchainWalletLink,
+    CertificateContentDraft,
 )
 from app.modules.blockchain.proof_registry_dependencies import (
     get_thv_proof_registry_service,
@@ -662,7 +663,13 @@ def test_thv_proof_intent_requires_a_payment_ready_dossier_version(
         async with sessions() as session:
             stored = await session.get(Dossier, dossier.id)
             assert stored is not None
-            stored._set_status_from_workflow(DossierStatus.PAID)
+            stored.submission_fee_waived_at = NOW
+            session.add(
+                CertificateContentDraft(
+                    dossier_id=dossier.id,
+                    content_json={"title": "Approved dossier"},
+                )
+            )
             await session.commit()
 
         pending = await service.signing_queue(principal)
@@ -671,12 +678,30 @@ def test_thv_proof_intent_requires_a_payment_ready_dossier_version(
         assert pending[0].transaction_id is None
         assert pending[0].status is BlockchainTransactionStatus.CREATED
 
+        with pytest.raises(
+            BlockchainConflictError, match="Confirm certificate content"
+        ):
+            await service.prepare_record_proof_intent(
+                principal,
+                dossier_id=dossier.id,
+                version_no=1,
+                connected_wallet=WALLET,
+            )
+        async with sessions.begin() as session:
+            draft = await session.get(CertificateContentDraft, dossier.id)
+            assert draft is not None
+            draft.confirmed_at = NOW
+
         intent = await service.prepare_record_proof_intent(
             principal,
             dossier_id=dossier.id,
             version_no=1,
             connected_wallet=WALLET,
         )
+        async with sessions() as session:
+            stored = await session.get(Dossier, dossier.id)
+            assert stored is not None
+            assert stored.status is DossierStatus.PAID
         assert intent.transaction_request == {
             "from": WALLET,
             "to": CONTRACT,
